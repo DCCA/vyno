@@ -75,7 +75,9 @@ def run_digest(sources: SourceConfig, profile: ProfileConfig, store: SQLiteStore
             summary_errors.append(f"{scored.item.id}: {err}")
 
     sections = select_digest_sections(scored_items)
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    # Keep note naming aligned with run window timestamps (UTC) to avoid
+    # local-time drift where repeated runs overwrite the previous-day note.
+    date_str = now.date().isoformat()
 
     telegram_message = render_telegram_message(date_str, sections)
     note = render_obsidian_note(date_str, sections, source_count=len(unseen_items))
