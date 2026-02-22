@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
+import urllib.parse
 
 try:
     import yaml
@@ -19,6 +20,7 @@ class SourceConfig:
     github_repos: list[str] = field(default_factory=list)
     github_topics: list[str] = field(default_factory=list)
     github_search_queries: list[str] = field(default_factory=list)
+    github_orgs: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -41,6 +43,11 @@ class ProfileConfig:
     blocked_authors_x: list[str] = field(default_factory=list)
     trusted_orgs_github: list[str] = field(default_factory=list)
     blocked_orgs_github: list[str] = field(default_factory=list)
+    github_min_stars: int = 0
+    github_include_forks: bool = False
+    github_include_archived: bool = False
+    github_max_repos_per_org: int = 20
+    github_max_items_per_org: int = 40
     output: OutputSettings = field(default_factory=OutputSettings)
     llm_enabled: bool = False
     agent_scoring_enabled: bool = True
@@ -77,8 +84,19 @@ def load_sources(path: str | Path) -> SourceConfig:
     github_repos = _as_str_list(data, "github_repos")
     github_topics = _as_str_list(data, "github_topics")
     github_search_queries = _as_str_list(data, "github_search_queries")
+    github_orgs = [_normalize_github_org(v) for v in _as_str_list(data, "github_orgs")]
+    github_orgs = [v for v in github_orgs if v]
     x_inbox_path = str(data.get("x_inbox_path", "") or "").strip()
-    if not (rss_feeds or youtube_channels or youtube_queries or github_repos or github_topics or github_search_queries or x_inbox_path):
+    if not (
+        rss_feeds
+        or youtube_channels
+        or youtube_queries
+        or github_repos
+        or github_topics
+        or github_search_queries
+        or github_orgs
+        or x_inbox_path
+    ):
         raise ValueError("At least one source must be configured in sources.yaml")
     return SourceConfig(
         rss_feeds=rss_feeds,
@@ -88,6 +106,7 @@ def load_sources(path: str | Path) -> SourceConfig:
         github_repos=github_repos,
         github_topics=github_topics,
         github_search_queries=github_search_queries,
+        github_orgs=github_orgs,
     )
 
 
@@ -119,6 +138,11 @@ def load_profile(path: str | Path) -> ProfileConfig:
         blocked_authors_x=_as_str_list(data, "blocked_authors_x"),
         trusted_orgs_github=_as_str_list(data, "trusted_orgs_github"),
         blocked_orgs_github=_as_str_list(data, "blocked_orgs_github"),
+        github_min_stars=max(0, int(data.get("github_min_stars", 0) or 0)),
+        github_include_forks=bool(data.get("github_include_forks", False)),
+        github_include_archived=bool(data.get("github_include_archived", False)),
+        github_max_repos_per_org=max(1, int(data.get("github_max_repos_per_org", 20) or 20)),
+        github_max_items_per_org=max(1, int(data.get("github_max_items_per_org", 40) or 40)),
         output=output,
         llm_enabled=bool(data.get("llm_enabled", False)),
         agent_scoring_enabled=bool(data.get("agent_scoring_enabled", True)),
@@ -140,3 +164,20 @@ def _as_str_list(data: dict, key: str) -> list[str]:
         if stripped:
             values.append(stripped)
     return values
+
+
+def _normalize_github_org(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("http://") or raw.startswith("https://"):
+        parsed = urllib.parse.urlparse(raw)
+        if parsed.netloc.lower() not in {"github.com", "www.github.com"}:
+            return ""
+        path = parsed.path.strip("/")
+        if not path:
+            return ""
+        raw = path.split("/", 1)[0]
+    else:
+        raw = raw.split("/", 1)[0].lstrip("@")
+    return raw.lower()

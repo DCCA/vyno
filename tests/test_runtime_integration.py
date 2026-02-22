@@ -144,6 +144,7 @@ class TestRuntimeIntegration(unittest.TestCase):
                 github_repos=["openai/openai-cookbook"],
                 github_topics=["llm"],
                 github_search_queries=["repo:openai/openai-cookbook is:issue llm"],
+                github_orgs=["https://github.com/vercel-labs"],
             )
             profile = ProfileConfig(
                 output=OutputSettings(obsidian_vault_path=str(vault), obsidian_folder="AI Digest"),
@@ -189,10 +190,11 @@ class TestRuntimeIntegration(unittest.TestCase):
                 "digest.runtime.fetch_youtube_items", return_value=[]
             ), patch("digest.runtime.fetch_x_inbox_items", return_value=[x_item]), patch(
                 "digest.runtime.fetch_github_items", return_value=[gh_item]
-            ):
+            ) as gh_mock:
                 report = run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
 
             self.assertIn(report.status, {"success", "partial"})
+            self.assertEqual(gh_mock.call_args.kwargs.get("orgs"), ["vercel-labs"])
             conn = sqlite3.connect(db)
             count = conn.execute(
                 "select count(*) from scores where run_id=?",
@@ -200,6 +202,36 @@ class TestRuntimeIntegration(unittest.TestCase):
             ).fetchone()[0]
             conn.close()
             self.assertGreaterEqual(count, 3)
+
+    def test_runtime_passes_org_guardrails_to_github_fetch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            vault = Path(tmp) / "vault"
+            store = SQLiteStore(str(db))
+            sources = SourceConfig(
+                rss_feeds=[],
+                youtube_channels=[],
+                youtube_queries=[],
+                github_orgs=["vercel-labs"],
+            )
+            profile = ProfileConfig(
+                output=OutputSettings(obsidian_vault_path=str(vault), obsidian_folder="AI Digest"),
+                llm_enabled=False,
+                agent_scoring_enabled=False,
+                github_min_stars=123,
+                github_include_forks=True,
+                github_include_archived=True,
+                github_max_repos_per_org=4,
+                github_max_items_per_org=9,
+            )
+            with patch("digest.runtime.fetch_github_items", return_value=[]) as gh_mock:
+                run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
+            opts = gh_mock.call_args.kwargs.get("org_options") or {}
+            self.assertEqual(opts.get("min_stars"), 123)
+            self.assertTrue(opts.get("include_forks"))
+            self.assertTrue(opts.get("include_archived"))
+            self.assertEqual(opts.get("max_repos_per_org"), 4)
+            self.assertEqual(opts.get("max_items_per_org"), 9)
 
 
 if __name__ == "__main__":

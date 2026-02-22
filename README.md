@@ -7,7 +7,7 @@ AI Daily Digest ingests high-signal AI content, ranks and tags it, sends a Teleg
   - RSS feeds
   - YouTube channels
   - X links from a manual inbox file
-  - GitHub repos/topics/search queries
+  - GitHub repos/topics/search queries/orgs
 - Deduplication, scoring, and selection (`Must-read`, `Skim`, `Videos`)
 - Agent-based scoring and tagging via OpenAI Responses API with rules fallback
 - Optional LLM summarization via OpenAI Responses API with extractive fallback
@@ -60,12 +60,20 @@ make live
 ### `config/sources.yaml`
 - `rss_feeds`, `youtube_channels`, `youtube_queries`
 - `x_inbox_path`
-- `github_repos`, `github_topics`, `github_search_queries`
+- `github_repos`, `github_topics`, `github_search_queries`, `github_orgs`
+  - `github_orgs` accepts either `org-login` or `https://github.com/org-login`
+  - Org ingestion includes repo updates + releases (not issues/PRs)
 
 ### `config/profile.yaml`
 - Scoring:
   - `agent_scoring_enabled: true`
   - `openai_model: gpt-5.1-codex-mini`
+- GitHub org guardrails:
+  - `github_min_stars`
+  - `github_include_forks`
+  - `github_include_archived`
+  - `github_max_repos_per_org`
+  - `github_max_items_per_org`
 - Summarization:
   - `llm_enabled: false|true`
 - Output:

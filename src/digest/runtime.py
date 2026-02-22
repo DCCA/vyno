@@ -6,7 +6,7 @@ import logging
 import os
 
 from digest.config import ProfileConfig, SourceConfig
-from digest.connectors.github import fetch_github_items
+from digest.connectors.github import fetch_github_items, normalize_github_org
 from digest.connectors.rss import fetch_rss_items
 from digest.connectors.x_inbox import fetch_x_inbox_items
 from digest.connectors.youtube import fetch_youtube_items
@@ -135,14 +135,24 @@ def run_digest(
                 error=str(exc),
             )
 
-    if sources.github_repos or sources.github_topics or sources.github_search_queries:
+    if sources.github_repos or sources.github_topics or sources.github_search_queries or sources.github_orgs:
         try:
             gh_token = os.getenv("GITHUB_TOKEN", "").strip()
+            github_orgs = [normalize_github_org(v) for v in sources.github_orgs]
+            github_orgs = [v for v in github_orgs if v]
             fetched = fetch_github_items(
                 sources.github_repos,
                 sources.github_topics,
                 sources.github_search_queries,
+                orgs=github_orgs,
                 token=gh_token,
+                org_options={
+                    "min_stars": profile.github_min_stars,
+                    "include_forks": profile.github_include_forks,
+                    "include_archived": profile.github_include_archived,
+                    "max_repos_per_org": profile.github_max_repos_per_org,
+                    "max_items_per_org": profile.github_max_items_per_org,
+                },
             )
             raw_items.extend(fetched)
             log_event(
@@ -153,6 +163,7 @@ def run_digest(
                 repo_count=len(sources.github_repos),
                 topic_count=len(sources.github_topics),
                 query_count=len(sources.github_search_queries),
+                org_count=len(github_orgs),
                 item_count=len(fetched),
             )
         except Exception as exc:

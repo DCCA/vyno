@@ -18,6 +18,11 @@ blocked_authors_x: []
 trusted_orgs_github:
   - openai
 blocked_orgs_github: []
+github_min_stars: 50
+github_include_forks: false
+github_include_archived: false
+github_max_repos_per_org: 20
+github_max_items_per_org: 40
 llm_enabled: false
 agent_scoring_enabled: true
 openai_model: gpt-5.1-codex-mini

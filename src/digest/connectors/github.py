@@ -16,10 +16,13 @@ def fetch_github_items(
     repos: list[str],
     topics: list[str],
     queries: list[str],
+    orgs: list[str] | None = None,
     token: str = "",
     timeout: int = 20,
+    org_options: dict | None = None,
 ) -> list[Item]:
     items: list[Item] = []
+    org_opts = org_options or {}
 
     for repo in repos:
         items.extend(_fetch_repo_releases(repo, token, timeout))
@@ -31,7 +34,130 @@ def fetch_github_items(
     for query in queries:
         items.extend(_search_issues_and_prs(query, token, timeout))
 
+    for org_raw in (orgs or []):
+        org = normalize_github_org(org_raw)
+        if not org:
+            continue
+        items.extend(
+            _fetch_org_repo_updates_and_releases(
+                org=org,
+                token=token,
+                timeout=timeout,
+                min_stars=int(org_opts.get("min_stars", 0) or 0),
+                include_forks=bool(org_opts.get("include_forks", False)),
+                include_archived=bool(org_opts.get("include_archived", False)),
+                max_repos=int(org_opts.get("max_repos_per_org", 20) or 20),
+                max_items=int(org_opts.get("max_items_per_org", 40) or 40),
+            )
+        )
+
     return items
+
+
+def normalize_github_org(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    # Accept https://github.com/<org> and plain <org>.
+    if raw.startswith("http://") or raw.startswith("https://"):
+        parsed = urllib.parse.urlparse(raw)
+        if parsed.netloc.lower() not in {"github.com", "www.github.com"}:
+            return ""
+        path = parsed.path.strip("/")
+        if not path:
+            return ""
+        org = path.split("/", 1)[0]
+    else:
+        org = raw.split("/", 1)[0].strip().lstrip("@")
+    return org.lower()
+
+
+def _fetch_org_repo_updates_and_releases(
+    *,
+    org: str,
+    token: str,
+    timeout: int,
+    min_stars: int,
+    include_forks: bool,
+    include_archived: bool,
+    max_repos: int,
+    max_items: int,
+) -> list[Item]:
+    repos = _fetch_org_repos(org, token, timeout, max(1, min(100, max_repos * 2)))
+    selected = _filter_org_repos(
+        repos,
+        min_stars=max(0, min_stars),
+        include_forks=include_forks,
+        include_archived=include_archived,
+    )[: max(1, max_repos)]
+
+    out: list[Item] = []
+    for repo in selected:
+        full_name = str(repo.get("full_name") or "").strip()
+        if not full_name:
+            continue
+        repo_item = _map_repo_update_item(repo)
+        if repo_item is not None:
+            out.append(repo_item)
+            if len(out) >= max_items:
+                break
+        for rel in _fetch_repo_releases(full_name, token, timeout):
+            out.append(rel)
+            if len(out) >= max_items:
+                break
+        if len(out) >= max_items:
+            break
+    return out
+
+
+def _fetch_org_repos(org: str, token: str, timeout: int, per_page: int) -> list[dict]:
+    path = f"/orgs/{org}/repos?sort=updated&direction=desc&per_page={per_page}"
+    data = _request_json(path, token, timeout)
+    return data if isinstance(data, list) else []
+
+
+def _filter_org_repos(
+    repos: list[dict],
+    *,
+    min_stars: int,
+    include_forks: bool,
+    include_archived: bool,
+) -> list[dict]:
+    out: list[dict] = []
+    for repo in repos:
+        stars = int(repo.get("stargazers_count") or 0)
+        if stars < min_stars:
+            continue
+        if not include_forks and bool(repo.get("fork", False)):
+            continue
+        if not include_archived and bool(repo.get("archived", False)):
+            continue
+        out.append(repo)
+    return out
+
+
+def _map_repo_update_item(repo: dict) -> Item | None:
+    url = str(repo.get("html_url") or "").strip()
+    full_name = str(repo.get("full_name") or "").strip()
+    if not url or not full_name:
+        return None
+    desc = str(repo.get("description") or "")
+    stars = int(repo.get("stargazers_count") or 0)
+    lang = str(repo.get("language") or "").strip()
+    updated = _parse_iso(str(repo.get("updated_at") or ""))
+    owner = str(((repo.get("owner") or {}).get("login") or _extract_owner(full_name))).strip() or None
+    details = [desc.strip(), f"stars={stars}"]
+    if lang:
+        details.append(f"language={lang}")
+    return _make_item(
+        url=url,
+        title=full_name,
+        source=f"github:{full_name}",
+        author=owner,
+        published_at=updated,
+        item_type="github_repo",
+        raw_text=" | ".join([d for d in details if d]),
+    )
 
 
 def _fetch_repo_releases(repo: str, token: str, timeout: int) -> list[Item]:

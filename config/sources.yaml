@@ -53,3 +53,5 @@ github_topics:
   - llm
 github_search_queries:
   - "repo:openai/openai-cookbook is:issue llm"
+github_orgs:
+  - "https://github.com/vercel-labs"

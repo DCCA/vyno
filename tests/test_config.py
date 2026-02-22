@@ -11,7 +11,7 @@ class TestConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "sources.yaml"
             path.write_text(
-                "rss_feeds: []\nyoutube_channels: []\nyoutube_queries: []\ngithub_repos: []\ngithub_topics: []\ngithub_search_queries: []\nx_inbox_path: ''\n",
+                "rss_feeds: []\nyoutube_channels: []\nyoutube_queries: []\ngithub_repos: []\ngithub_topics: []\ngithub_search_queries: []\ngithub_orgs: []\nx_inbox_path: ''\n",
                 encoding="utf-8",
             )
             with self.assertRaises(ValueError):
@@ -27,6 +27,16 @@ class TestConfig(unittest.TestCase):
             cfg = load_sources(path)
             self.assertEqual(cfg.x_inbox_path, "data/x.txt")
             self.assertIn("openai/openai-cookbook", cfg.github_repos)
+
+    def test_sources_loads_github_orgs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sources.yaml"
+            path.write_text(
+                "github_orgs: ['https://github.com/vercel-labs', 'openai']\n",
+                encoding="utf-8",
+            )
+            cfg = load_sources(path)
+            self.assertEqual(cfg.github_orgs, ["vercel-labs", "openai"])
 
     def test_profile_rejects_invalid_obsidian_naming(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -53,6 +63,26 @@ class TestConfig(unittest.TestCase):
                 profile = load_profile(path)
             self.assertEqual(profile.output.telegram_bot_token, "token123")
             self.assertEqual(profile.output.telegram_chat_id, "chat123")
+
+    def test_profile_loads_github_guardrails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                (
+                    "github_min_stars: 100\n"
+                    "github_include_forks: true\n"
+                    "github_include_archived: true\n"
+                    "github_max_repos_per_org: 7\n"
+                    "github_max_items_per_org: 11\n"
+                ),
+                encoding="utf-8",
+            )
+            profile = load_profile(path)
+            self.assertEqual(profile.github_min_stars, 100)
+            self.assertTrue(profile.github_include_forks)
+            self.assertTrue(profile.github_include_archived)
+            self.assertEqual(profile.github_max_repos_per_org, 7)
+            self.assertEqual(profile.github_max_items_per_org, 11)
 
 
 if __name__ == "__main__":
