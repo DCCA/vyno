@@ -1,5 +1,6 @@
 rss_feeds:
-  - https://openai.com/news/rss.xml
+  - https://news.ycombinator.com/rss
 youtube_channels:
   - UCXZCJLdBC09xxGZ6gcdrc6A
+  - UCUyeluBRhGPCW4rPe_UvBZQ
 youtube_queries: []

@@ -18,5 +18,5 @@ openai_model: gpt-5.1-codex-mini
 output:
   telegram_chat_id: ""
   telegram_bot_token: ""
-  obsidian_vault_path: ""
+  obsidian_vault_path: "/home/dcca/projects/vyno/obsidian-vault"
   obsidian_folder: "AI Digest"
