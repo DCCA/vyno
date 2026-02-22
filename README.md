@@ -4,6 +4,9 @@ Daily AI digest pipeline that ingests RSS and YouTube feeds, ranks and summarize
 
 ## What It Does
 - Ingests from `config/sources.yaml` (RSS feeds, YouTube channels, YouTube queries)
+- Also supports:
+  - X manual inbox links (`x_inbox_path`)
+  - GitHub ingestion (`github_repos`, `github_topics`, `github_search_queries`)
 - Normalizes, deduplicates, scores, and selects digest items
 - Uses agent-based scoring + tagging (with rules fallback)
 - Summarizes with deterministic fallback, or OpenAI Responses API when enabled
@@ -43,6 +46,11 @@ Minimal scoring-related options in `config/profile.yaml`:
 ```yaml
 agent_scoring_enabled: true
 openai_model: gpt-5.1-codex-mini
+```
+
+Optional GitHub API token for higher limits/private access:
+```bash
+export GITHUB_TOKEN=your_github_token
 ```
 
 3. Run once:

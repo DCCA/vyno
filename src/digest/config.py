@@ -15,6 +15,10 @@ class SourceConfig:
     rss_feeds: list[str] = field(default_factory=list)
     youtube_channels: list[str] = field(default_factory=list)
     youtube_queries: list[str] = field(default_factory=list)
+    x_inbox_path: str = ""
+    github_repos: list[str] = field(default_factory=list)
+    github_topics: list[str] = field(default_factory=list)
+    github_search_queries: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -33,6 +37,10 @@ class ProfileConfig:
     exclusions: list[str] = field(default_factory=list)
     trusted_sources: list[str] = field(default_factory=list)
     blocked_sources: list[str] = field(default_factory=list)
+    trusted_authors_x: list[str] = field(default_factory=list)
+    blocked_authors_x: list[str] = field(default_factory=list)
+    trusted_orgs_github: list[str] = field(default_factory=list)
+    blocked_orgs_github: list[str] = field(default_factory=list)
     output: OutputSettings = field(default_factory=OutputSettings)
     llm_enabled: bool = False
     agent_scoring_enabled: bool = True
@@ -66,9 +74,21 @@ def load_sources(path: str | Path) -> SourceConfig:
     rss_feeds = _as_str_list(data, "rss_feeds")
     youtube_channels = _as_str_list(data, "youtube_channels")
     youtube_queries = _as_str_list(data, "youtube_queries")
-    if not (rss_feeds or youtube_channels or youtube_queries):
+    github_repos = _as_str_list(data, "github_repos")
+    github_topics = _as_str_list(data, "github_topics")
+    github_search_queries = _as_str_list(data, "github_search_queries")
+    x_inbox_path = str(data.get("x_inbox_path", "") or "").strip()
+    if not (rss_feeds or youtube_channels or youtube_queries or github_repos or github_topics or github_search_queries or x_inbox_path):
         raise ValueError("At least one source must be configured in sources.yaml")
-    return SourceConfig(rss_feeds=rss_feeds, youtube_channels=youtube_channels, youtube_queries=youtube_queries)
+    return SourceConfig(
+        rss_feeds=rss_feeds,
+        youtube_channels=youtube_channels,
+        youtube_queries=youtube_queries,
+        x_inbox_path=x_inbox_path,
+        github_repos=github_repos,
+        github_topics=github_topics,
+        github_search_queries=github_search_queries,
+    )
 
 
 def load_profile(path: str | Path) -> ProfileConfig:
@@ -95,6 +115,10 @@ def load_profile(path: str | Path) -> ProfileConfig:
         exclusions=_as_str_list(data, "exclusions"),
         trusted_sources=_as_str_list(data, "trusted_sources"),
         blocked_sources=_as_str_list(data, "blocked_sources"),
+        trusted_authors_x=_as_str_list(data, "trusted_authors_x"),
+        blocked_authors_x=_as_str_list(data, "blocked_authors_x"),
+        trusted_orgs_github=_as_str_list(data, "trusted_orgs_github"),
+        blocked_orgs_github=_as_str_list(data, "blocked_orgs_github"),
         output=output,
         llm_enabled=bool(data.get("llm_enabled", False)),
         agent_scoring_enabled=bool(data.get("agent_scoring_enabled", True)),

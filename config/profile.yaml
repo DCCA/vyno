@@ -13,6 +13,11 @@ trusted_sources:
   - arxiv.org
 blocked_sources:
   - example-blocked.com
+trusted_authors_x: []
+blocked_authors_x: []
+trusted_orgs_github:
+  - openai
+blocked_orgs_github: []
 llm_enabled: false
 agent_scoring_enabled: true
 openai_model: gpt-5.1-codex-mini

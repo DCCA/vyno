@@ -35,6 +35,11 @@ def score_item(item: Item, profile: ProfileConfig) -> Score:
     quality = 10
     if any(src.lower() in item.source.lower() for src in profile.trusted_sources):
         quality += 12
+    if item.source == "x.com" and item.author and item.author.lower() in {a.lower() for a in profile.trusted_authors_x}:
+        quality += 8
+    github_owner = _github_owner(item.source)
+    if github_owner and github_owner.lower() in {o.lower() for o in profile.trusted_orgs_github}:
+        quality += 8
     if len(item.raw_text) > 500:
         quality += 8
     quality -= _contains_any(text, CLICKBAIT) * 5
@@ -67,7 +72,24 @@ def score_items(items: list[Item], profile: ProfileConfig) -> list[Score]:
 
 
 def is_blocked(item: Item, profile: ProfileConfig) -> bool:
-    return any(src.lower() in item.source.lower() for src in profile.blocked_sources)
+    if any(src.lower() in item.source.lower() for src in profile.blocked_sources):
+        return True
+    if item.source == "x.com" and item.author and item.author.lower() in {a.lower() for a in profile.blocked_authors_x}:
+        return True
+    github_owner = _github_owner(item.source)
+    if github_owner and github_owner.lower() in {o.lower() for o in profile.blocked_orgs_github}:
+        return True
+    return False
+
+
+def _github_owner(source: str) -> str:
+    # source format: github:<owner>/<repo> or github:search
+    if not source.startswith("github:"):
+        return ""
+    tail = source.split(":", 1)[1]
+    if "/" in tail:
+        return tail.split("/", 1)[0]
+    return ""
 
 
 def _rule_tags(item: Item) -> tuple[list[str], list[str], list[str]]:

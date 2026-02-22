@@ -3,9 +3,12 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 import logging
+import os
 
 from digest.config import ProfileConfig, SourceConfig
+from digest.connectors.github import fetch_github_items
 from digest.connectors.rss import fetch_rss_items
+from digest.connectors.x_inbox import fetch_x_inbox_items
 from digest.connectors.youtube import fetch_youtube_items
 from digest.delivery.obsidian import render_obsidian_note, write_obsidian_note
 from digest.delivery.telegram import render_telegram_message, send_telegram_message
@@ -108,6 +111,53 @@ def run_digest(
                 query=query,
                 error=str(exc),
             )
+
+    if sources.x_inbox_path:
+        try:
+            fetched = fetch_x_inbox_items(sources.x_inbox_path)
+            raw_items.extend(fetched)
+            log_event(
+                run_logger,
+                "info",
+                "fetch_x_inbox",
+                "Fetched X inbox items",
+                inbox_path=sources.x_inbox_path,
+                item_count=len(fetched),
+            )
+        except Exception as exc:
+            source_errors.append(f"x_inbox:{sources.x_inbox_path}: {exc}")
+            log_event(
+                run_logger,
+                "error",
+                "fetch_x_inbox",
+                "X inbox fetch failed",
+                inbox_path=sources.x_inbox_path,
+                error=str(exc),
+            )
+
+    if sources.github_repos or sources.github_topics or sources.github_search_queries:
+        try:
+            gh_token = os.getenv("GITHUB_TOKEN", "").strip()
+            fetched = fetch_github_items(
+                sources.github_repos,
+                sources.github_topics,
+                sources.github_search_queries,
+                token=gh_token,
+            )
+            raw_items.extend(fetched)
+            log_event(
+                run_logger,
+                "info",
+                "fetch_github",
+                "Fetched GitHub items",
+                repo_count=len(sources.github_repos),
+                topic_count=len(sources.github_topics),
+                query_count=len(sources.github_search_queries),
+                item_count=len(fetched),
+            )
+        except Exception as exc:
+            source_errors.append(f"github: {exc}")
+            log_event(run_logger, "error", "fetch_github", "GitHub fetch failed", error=str(exc))
 
     normalized = normalize_items(raw_items)
     unique_items = dedupe_and_cluster(normalized)

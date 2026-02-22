@@ -131,6 +131,76 @@ class TestRuntimeIntegration(unittest.TestCase):
             files = sorted((vault / "AI Digest").glob("*/*.md"))
             self.assertEqual(len(files), 2)
 
+    def test_mixed_sources_include_x_and_github(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            vault = Path(tmp) / "vault"
+            store = SQLiteStore(str(db))
+            sources = SourceConfig(
+                rss_feeds=["fixture-rss"],
+                youtube_channels=["fixture-yt"],
+                youtube_queries=[],
+                x_inbox_path="data/x_inbox.txt",
+                github_repos=["openai/openai-cookbook"],
+                github_topics=["llm"],
+                github_search_queries=["repo:openai/openai-cookbook is:issue llm"],
+            )
+            profile = ProfileConfig(
+                output=OutputSettings(obsidian_vault_path=str(vault), obsidian_folder="AI Digest"),
+                llm_enabled=False,
+                agent_scoring_enabled=False,
+            )
+
+            rss_item = Item(
+                id="rss1",
+                url="https://example.com/rss1",
+                title="RSS item",
+                source="fixture-rss",
+                author=None,
+                published_at=datetime.now(),
+                type="article",
+                raw_text="rss body",
+                hash="rss1",
+            )
+            x_item = Item(
+                id="x1",
+                url="https://x.com/alice/status/1",
+                title="X post",
+                source="x.com",
+                author="alice",
+                published_at=datetime.now(),
+                type="x_post",
+                raw_text="x body",
+                hash="x1",
+            )
+            gh_item = Item(
+                id="gh1",
+                url="https://github.com/openai/openai-cookbook/issues/1",
+                title="GH issue",
+                source="github:openai/openai-cookbook",
+                author="openai",
+                published_at=datetime.now(),
+                type="github_issue",
+                raw_text="gh body",
+                hash="gh1",
+            )
+
+            with patch("digest.runtime.fetch_rss_items", return_value=[rss_item]), patch(
+                "digest.runtime.fetch_youtube_items", return_value=[]
+            ), patch("digest.runtime.fetch_x_inbox_items", return_value=[x_item]), patch(
+                "digest.runtime.fetch_github_items", return_value=[gh_item]
+            ):
+                report = run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
+
+            self.assertIn(report.status, {"success", "partial"})
+            conn = sqlite3.connect(db)
+            count = conn.execute(
+                "select count(*) from scores where run_id=?",
+                (report.run_id,),
+            ).fetchone()[0]
+            conn.close()
+            self.assertGreaterEqual(count, 3)
+
 
 if __name__ == "__main__":
     unittest.main()

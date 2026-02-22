@@ -4,7 +4,16 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
-ItemType = Literal["article", "video", "link"]
+ItemType = Literal[
+    "article",
+    "video",
+    "link",
+    "x_post",
+    "github_release",
+    "github_issue",
+    "github_pr",
+    "github_repo",
+]
 
 
 @dataclass(slots=True)
