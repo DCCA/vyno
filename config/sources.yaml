@@ -2,8 +2,8 @@ rss_feeds:
   # AI / Research
   - https://news.mit.edu/rss/topic/artificial-intelligence2
   - https://openai.com/news/rss.xml
-  - https://ai.googleblog.com/feeds/posts/default
-  - https://blogs.nvidia.com/blog/category/ai/feed/
+  - https://blog.google/technology/ai/rss/
+  - https://blogs.nvidia.com/feed/
   - https://arxiv.org/rss/cs.AI
   - https://arxiv.org/rss/cs.LG
   - https://arxiv.org/rss/cs.CL
