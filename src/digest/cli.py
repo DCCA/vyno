@@ -11,10 +11,20 @@ from digest.storage.sqlite_store import SQLiteStore
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
+    return _execute_run(args, use_last_completed_window=False, only_new=False)
+
+
+def _execute_run(args: argparse.Namespace, *, use_last_completed_window: bool, only_new: bool) -> int:
     sources = load_sources(args.sources)
     profile = load_profile(args.profile)
     store = SQLiteStore(args.db)
-    report = run_digest(sources, profile, store)
+    report = run_digest(
+        sources,
+        profile,
+        store,
+        use_last_completed_window=use_last_completed_window,
+        only_new=only_new,
+    )
     print(f"run_id={report.run_id} status={report.status}")
     for err in report.source_errors:
         print(f"source_error: {err}")
@@ -32,7 +42,7 @@ def _cmd_schedule(args: argparse.Namespace) -> int:
     while True:
         now = datetime.now(tz)
         if now.hour == hour and now.minute == minute:
-            _cmd_run(args)
+            _execute_run(args, use_last_completed_window=True, only_new=True)
             time.sleep(61)
         time.sleep(1)
 

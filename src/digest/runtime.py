@@ -19,10 +19,19 @@ from digest.summarizers.extractive import ExtractiveSummarizer
 from digest.summarizers.responses_api import ResponsesAPISummarizer
 
 
-def run_digest(sources: SourceConfig, profile: ProfileConfig, store: SQLiteStore) -> RunReport:
+def run_digest(
+    sources: SourceConfig,
+    profile: ProfileConfig,
+    store: SQLiteStore,
+    *,
+    use_last_completed_window: bool = True,
+    only_new: bool = True,
+) -> RunReport:
     run_id = uuid.uuid4().hex[:12]
     now = datetime.now(tz=timezone.utc)
-    window_start = store.last_completed_window_end() or (now - timedelta(hours=24)).isoformat()
+    window_start = (now - timedelta(hours=24)).isoformat()
+    if use_last_completed_window:
+        window_start = store.last_completed_window_end() or window_start
     window_end = now.isoformat()
     store.start_run(run_id, window_start, window_end)
 
@@ -53,11 +62,17 @@ def run_digest(sources: SourceConfig, profile: ProfileConfig, store: SQLiteStore
     unique_items = _filter_window(unique_items, window_start)
 
     seen = store.seen_keys()
-    unseen_items = [i for i in unique_items if (i.url or i.hash) not in seen]
+    candidate_items = unique_items
+    if only_new:
+        candidate_items = [i for i in unique_items if (i.url or i.hash) not in seen]
+        # Keep delivery non-empty for manual/interactive usage when window has content
+        # but all items were already seen in previous runs.
+        if not candidate_items and unique_items:
+            candidate_items = unique_items
 
-    scores = score_items(unseen_items, profile)
+    scores = score_items(candidate_items, profile)
     score_map = {s.item_id: s for s in scores}
-    scored_items = [ScoredItem(item=i, score=score_map[i.id]) for i in unseen_items if i.id in score_map]
+    scored_items = [ScoredItem(item=i, score=score_map[i.id]) for i in candidate_items if i.id in score_map]
 
     primary = ExtractiveSummarizer()
     if profile.llm_enabled:
@@ -80,7 +95,7 @@ def run_digest(sources: SourceConfig, profile: ProfileConfig, store: SQLiteStore
     date_str = now.date().isoformat()
 
     telegram_message = render_telegram_message(date_str, sections)
-    note = render_obsidian_note(date_str, sections, source_count=len(unseen_items))
+    note = render_obsidian_note(date_str, sections, source_count=len(candidate_items))
 
     status = "success"
     if source_errors or summary_errors:
@@ -102,9 +117,9 @@ def run_digest(sources: SourceConfig, profile: ProfileConfig, store: SQLiteStore
             source_errors.append(f"obsidian: {exc}")
             status = "partial"
 
-    store.upsert_items(unseen_items)
+    store.upsert_items(candidate_items)
     store.insert_scores(run_id, scores)
-    store.mark_seen([i.url or i.hash for i in unseen_items])
+    store.mark_seen([i.url or i.hash for i in candidate_items])
     store.finish_run(run_id, status, source_errors, summary_errors)
 
     return RunReport(run_id=run_id, status=status, source_errors=source_errors, summary_errors=summary_errors)
