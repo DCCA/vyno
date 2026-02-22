@@ -57,12 +57,6 @@ make live
 - Tail logs: `make logs`
 - Run Telegram command bot:
   - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db bot`
-- Run admin panel:
-  - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db admin --host 127.0.0.1 --port 8787`
-- Run Streamlit admin UI (preferred):
-  - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db admin-streamlit --host 127.0.0.1 --port 8788`
-- Run Streamlit UX prototype (review-only, no backend writes):
-  - `PYTHONPATH=src ./bin/digest admin-streamlit-prototype --host 127.0.0.1 --port 8790`
 
 ## Configuration
 ### `config/sources.yaml`
@@ -99,9 +93,6 @@ Most used:
 - Bot admin controls:
   - `TELEGRAM_ADMIN_CHAT_IDS` (comma-separated)
   - `TELEGRAM_ADMIN_USER_IDS` (comma-separated)
-- Admin panel auth:
-  - `ADMIN_PANEL_USER`
-  - `ADMIN_PANEL_PASSWORD`
 
 ## Telegram Ops Commands
 When bot mode is running, authorized admins can use:
@@ -122,10 +113,6 @@ Supported source types:
 - `github_org`
 
 Runtime-added sources are persisted in `data/sources.local.yaml` (overlay), merged with tracked `config/sources.yaml`.
-
-## Admin Panel Notes
-- Preferred UI: Streamlit (`admin-streamlit` / `make admin-ui`)
-- Legacy fallback: built-in HTTP panel (`admin` / `make admin`)
 
 ## Output Format
 - Telegram: compact digest sections (`Must-read`, `Skim`, `Videos`) with automatic chunking for long digests
