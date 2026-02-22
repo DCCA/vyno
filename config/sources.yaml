@@ -17,7 +17,7 @@ rss_feeds:
   - https://www.theverge.com/rss/tech/index.xml
   - https://www.wired.com/feed/tag/ai/latest/rss
   - https://news.ycombinator.com/rss
-  
+
 youtube_channels:
   - UCXZCJLdBC09xxGZ6gcdrc6A
   - UCUyeluBRhGPCW4rPe_UvBZQ   # Prime
@@ -38,4 +38,5 @@ youtube_channels:
   - UCfMJ2MchTSW2kWaT0kK94Yw   # The Verge
   - UCSJbGtTlrDami-tDGPUV9-w   # Bloomberg Technology
   - UCVYamHliCI9rw1tHR1xbkfw   # CNBC Technology
+  
 youtube_queries: []
