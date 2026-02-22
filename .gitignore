@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.db
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+.env
+.env.*
+
+# Keep .docs as source-of-truth; ignore only ephemeral paths.
+.docs/tmp/
+.docs/.cache/
+.docs/drafts/

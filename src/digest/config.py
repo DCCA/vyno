@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError as exc:  # pragma: no cover
+    raise RuntimeError("PyYAML is required. Install with: pip install PyYAML") from exc
+
+
+@dataclass(slots=True)
+class SourceConfig:
+    rss_feeds: list[str] = field(default_factory=list)
+    youtube_channels: list[str] = field(default_factory=list)
+    youtube_queries: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class OutputSettings:
+    telegram_chat_id: str = ""
+    telegram_bot_token: str = ""
+    obsidian_vault_path: str = ""
+    obsidian_folder: str = "AI Digest"
+
+
+@dataclass(slots=True)
+class ProfileConfig:
+    topics: list[str] = field(default_factory=list)
+    entities: list[str] = field(default_factory=list)
+    exclusions: list[str] = field(default_factory=list)
+    trusted_sources: list[str] = field(default_factory=list)
+    blocked_sources: list[str] = field(default_factory=list)
+    output: OutputSettings = field(default_factory=OutputSettings)
+    llm_enabled: bool = False
+    openai_model: str = "gpt-4.1-mini"
+
+
+def _read_yaml(path: str | Path) -> dict:
+    data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid YAML object at {path}")
+    return data
+
+
+def load_sources(path: str | Path) -> SourceConfig:
+    data = _read_yaml(path)
+    rss_feeds = _as_str_list(data, "rss_feeds")
+    youtube_channels = _as_str_list(data, "youtube_channels")
+    youtube_queries = _as_str_list(data, "youtube_queries")
+    if not (rss_feeds or youtube_channels or youtube_queries):
+        raise ValueError("At least one source must be configured in sources.yaml")
+    return SourceConfig(rss_feeds=rss_feeds, youtube_channels=youtube_channels, youtube_queries=youtube_queries)
+
+
+def load_profile(path: str | Path) -> ProfileConfig:
+    data = _read_yaml(path)
+    out = data.get("output", {})
+    output = OutputSettings(
+        telegram_chat_id=str(out.get("telegram_chat_id", "")),
+        telegram_bot_token=str(out.get("telegram_bot_token", "")),
+        obsidian_vault_path=str(out.get("obsidian_vault_path", "")),
+        obsidian_folder=str(out.get("obsidian_folder", "AI Digest")),
+    )
+    return ProfileConfig(
+        topics=_as_str_list(data, "topics"),
+        entities=_as_str_list(data, "entities"),
+        exclusions=_as_str_list(data, "exclusions"),
+        trusted_sources=_as_str_list(data, "trusted_sources"),
+        blocked_sources=_as_str_list(data, "blocked_sources"),
+        output=output,
+        llm_enabled=bool(data.get("llm_enabled", False)),
+        openai_model=str(data.get("openai_model", "gpt-4.1-mini")),
+    )
+
+
+def _as_str_list(data: dict, key: str) -> list[str]:
+    raw = data.get(key, [])
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(f"Expected list for '{key}'")
+    values = []
+    for idx, value in enumerate(raw):
+        if not isinstance(value, str):
+            raise ValueError(f"Expected string at '{key}[{idx}]'")
+        stripped = value.strip()
+        if stripped:
+            values.append(stripped)
+    return values

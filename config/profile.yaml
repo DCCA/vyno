@@ -1,0 +1,22 @@
+topics:
+  - llm
+  - agents
+  - evals
+entities:
+  - openai
+  - anthropic
+exclusions:
+  - crypto
+  - giveaway
+trusted_sources:
+  - openai.com
+  - arxiv.org
+blocked_sources:
+  - example-blocked.com
+llm_enabled: false
+openai_model: gpt-4.1-mini
+output:
+  telegram_chat_id: ""
+  telegram_bot_token: ""
+  obsidian_vault_path: ""
+  obsidian_folder: "AI Digest"
