@@ -19,7 +19,7 @@ venv/
 Thumbs.db
 .env
 .env.*
-excalidraw
+excalidraw.log
 !.env.example
 obsidian-vault/
 logs/
@@ -34,3 +34,8 @@ data/sources.local.yaml
 .docs/tmp/
 .docs/.cache/
 .docs/drafts/
+
+# Local skills/tooling artifacts
+.agents/
+.pi/
+skills-lock.json
