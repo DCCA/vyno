@@ -4,8 +4,11 @@ import argparse
 import time
 from datetime import datetime
 import os
+import subprocess
+import sys
 from zoneinfo import ZoneInfo
 
+from digest.admin.app import make_admin_service, run_admin_server
 from digest.config import load_dotenv, load_profile
 from digest.delivery.telegram import answer_telegram_callback, get_telegram_updates, send_telegram_message
 from digest.logging_utils import setup_logging
@@ -107,6 +110,73 @@ def _cmd_bot(args: argparse.Namespace) -> int:
             time.sleep(2)
 
 
+def _cmd_admin(args: argparse.Namespace) -> int:
+    admin_user = os.getenv("ADMIN_PANEL_USER", "").strip()
+    admin_password = os.getenv("ADMIN_PANEL_PASSWORD", "").strip()
+    if not admin_user or not admin_password:
+        raise RuntimeError("ADMIN_PANEL_USER and ADMIN_PANEL_PASSWORD are required for admin mode")
+    service = make_admin_service(
+        sources_path=args.sources,
+        profile_path=args.profile,
+        db_path=args.db,
+        overlay_path=args.sources_overlay,
+        run_lock_path=args.run_lock_path,
+        bot_pid_path=args.bot_pid_path,
+        bot_log_path=args.bot_log_path,
+    )
+    run_admin_server(
+        host=args.host,
+        port=args.port,
+        service=service,
+        admin_user=admin_user,
+        admin_password=admin_password,
+    )
+    return 0
+
+
+def _cmd_admin_streamlit(args: argparse.Namespace) -> int:
+    env = dict(os.environ)
+    env["ADMIN_STREAMLIT_SOURCES"] = args.sources
+    env["ADMIN_STREAMLIT_PROFILE"] = args.profile
+    env["ADMIN_STREAMLIT_DB"] = args.db
+    env["ADMIN_STREAMLIT_OVERLAY"] = args.sources_overlay
+    env["ADMIN_STREAMLIT_RUN_LOCK"] = args.run_lock_path
+    env["ADMIN_STREAMLIT_BOT_PID"] = args.bot_pid_path
+    env["ADMIN_STREAMLIT_BOT_LOG"] = args.bot_log_path
+
+    cmd = [
+        "streamlit",
+        "run",
+        "src/digest/admin_streamlit/app.py",
+        "--server.address",
+        args.host,
+        "--server.port",
+        str(args.port),
+    ]
+    try:
+        subprocess.run(cmd, check=True, env=env)
+    except FileNotFoundError as exc:
+        raise RuntimeError("streamlit binary not found. Install with: pip install streamlit") from exc
+    return 0
+
+
+def _cmd_admin_streamlit_prototype(args: argparse.Namespace) -> int:
+    cmd = [
+        "streamlit",
+        "run",
+        "src/digest/admin_streamlit/prototype.py",
+        "--server.address",
+        args.host,
+        "--server.port",
+        str(args.port),
+    ]
+    try:
+        subprocess.run(cmd, check=True, env=dict(os.environ))
+    except FileNotFoundError as exc:
+        raise RuntimeError("streamlit binary not found. Install with: pip install streamlit") from exc
+    return 0
+
+
 def main() -> int:
     load_dotenv(".env")
     setup_logging()
@@ -130,6 +200,27 @@ def main() -> int:
     bot.add_argument("--run-lock-stale-seconds", type=int, default=21600)
     bot.add_argument("--poll-timeout", type=int, default=30)
     bot.set_defaults(func=_cmd_bot)
+
+    admin = sub.add_parser("admin", help="Run admin web panel")
+    admin.add_argument("--host", default="127.0.0.1")
+    admin.add_argument("--port", type=int, default=8787)
+    admin.add_argument("--run-lock-path", default=".runtime/run.lock")
+    admin.add_argument("--bot-pid-path", default=".runtime/bot.pid")
+    admin.add_argument("--bot-log-path", default=".runtime/bot.out")
+    admin.set_defaults(func=_cmd_admin)
+
+    admin_st = sub.add_parser("admin-streamlit", help="Run Streamlit admin UI")
+    admin_st.add_argument("--host", default="127.0.0.1")
+    admin_st.add_argument("--port", type=int, default=8788)
+    admin_st.add_argument("--run-lock-path", default=".runtime/run.lock")
+    admin_st.add_argument("--bot-pid-path", default=".runtime/bot.pid")
+    admin_st.add_argument("--bot-log-path", default=".runtime/bot.out")
+    admin_st.set_defaults(func=_cmd_admin_streamlit)
+
+    admin_stp = sub.add_parser("admin-streamlit-prototype", help="Run Streamlit UX prototype (no backend writes)")
+    admin_stp.add_argument("--host", default="127.0.0.1")
+    admin_stp.add_argument("--port", type=int, default=8790)
+    admin_stp.set_defaults(func=_cmd_admin_streamlit_prototype)
 
     args = parser.parse_args()
     return args.func(args)
