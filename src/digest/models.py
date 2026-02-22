@@ -29,6 +29,10 @@ class Score:
     novelty: int
     total: int
     reason: str = ""
+    tags: list[str] = field(default_factory=list)
+    topic_tags: list[str] = field(default_factory=list)
+    format_tags: list[str] = field(default_factory=list)
+    provider: str = "rules"
 
 
 @dataclass(slots=True)

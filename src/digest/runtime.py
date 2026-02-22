@@ -12,13 +12,14 @@ from digest.delivery.telegram import render_telegram_message, send_telegram_mess
 from digest.models import Item, RunReport, ScoredItem
 from digest.pipeline.dedupe import dedupe_and_cluster
 from digest.pipeline.normalize import normalize_items
-from digest.pipeline.scoring import score_items
+from digest.pipeline.scoring import is_blocked, score_item
 from digest.pipeline.selection import select_digest_sections
 from digest.pipeline.summarize import FallbackSummarizer
 from digest.storage.sqlite_store import SQLiteStore
 from digest.logging_utils import get_run_logger, log_event
 from digest.summarizers.extractive import ExtractiveSummarizer
 from digest.summarizers.responses_api import ResponsesAPISummarizer
+from digest.scorers.agent import ResponsesAPIScorerTagger
 
 
 def run_digest(
@@ -137,7 +138,32 @@ def run_digest(
         candidate_count=len(candidate_items),
     )
 
-    scores = score_items(candidate_items, profile)
+    scores = []
+    agent_scorer = None
+    if profile.agent_scoring_enabled:
+        try:
+            agent_scorer = ResponsesAPIScorerTagger(model=profile.openai_model)
+            log_event(run_logger, "info", "score_init", "Agent scorer initialized", model=profile.openai_model)
+        except Exception as exc:
+            log_event(run_logger, "error", "score_init", "Agent scorer unavailable, using rules fallback", error=str(exc))
+
+    for item in candidate_items:
+        if is_blocked(item, profile):
+            continue
+        if agent_scorer is not None:
+            try:
+                scores.append(agent_scorer.score_and_tag(item))
+                continue
+            except Exception as exc:
+                log_event(
+                    run_logger,
+                    "error",
+                    "score_agent",
+                    "Agent scoring failed, using rules fallback",
+                    item_id=item.id,
+                    error=str(exc),
+                )
+        scores.append(score_item(item, profile))
     score_map = {s.item_id: s for s in scores}
     scored_items = [ScoredItem(item=i, score=score_map[i.id]) for i in candidate_items if i.id in score_map]
     log_event(run_logger, "info", "score", "Scored candidate items", score_count=len(scores), scored_item_count=len(scored_items))

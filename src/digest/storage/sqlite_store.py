@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -65,7 +66,11 @@ class SQLiteStore:
                     quality INTEGER,
                     novelty INTEGER,
                     total INTEGER,
-                    reason TEXT
+                    reason TEXT,
+                    tags_json TEXT,
+                    topic_tags_json TEXT,
+                    format_tags_json TEXT,
+                    provider TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS seen (
@@ -74,6 +79,16 @@ class SQLiteStore:
                 );
                 """
             )
+            self._ensure_column(conn, "scores", "tags_json", "TEXT")
+            self._ensure_column(conn, "scores", "topic_tags_json", "TEXT")
+            self._ensure_column(conn, "scores", "format_tags_json", "TEXT")
+            self._ensure_column(conn, "scores", "provider", "TEXT")
+
+    def _ensure_column(self, conn: sqlite3.Connection, table: str, column: str, col_type: str) -> None:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        columns = {r[1] for r in rows}
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
 
     def start_run(self, run_id: str, window_start: str, window_end: str) -> None:
         now = datetime.now(tz=timezone.utc).isoformat()
@@ -116,8 +131,27 @@ class SQLiteStore:
     def insert_scores(self, run_id: str, scores: list[Score]) -> None:
         with self._conn() as conn:
             conn.executemany(
-                "INSERT INTO scores (run_id, item_id, relevance, quality, novelty, total, reason) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [(run_id, s.item_id, s.relevance, s.quality, s.novelty, s.total, s.reason) for s in scores],
+                (
+                    "INSERT INTO scores "
+                    "(run_id, item_id, relevance, quality, novelty, total, reason, tags_json, topic_tags_json, format_tags_json, provider) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                ),
+                [
+                    (
+                        run_id,
+                        s.item_id,
+                        s.relevance,
+                        s.quality,
+                        s.novelty,
+                        s.total,
+                        s.reason,
+                        json.dumps(s.tags),
+                        json.dumps(s.topic_tags),
+                        json.dumps(s.format_tags),
+                        s.provider,
+                    )
+                    for s in scores
+                ],
             )
 
     def mark_seen(self, keys: list[str]) -> None:

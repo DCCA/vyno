@@ -8,7 +8,7 @@ from digest.models import DigestSections, Item, Score, ScoredItem, Summary
 
 def _scored(idx: int, kind: str = "article") -> ScoredItem:
     item = Item(str(idx), f"https://x/{idx}", f"Title {idx}", "src", None, datetime.now(), kind, "body")
-    score = Score(str(idx), 1, 1, 1, 3)
+    score = Score(str(idx), 1, 1, 1, 3, tags=["llm", "benchmark"])
     summary = Summary(tldr="TLDR", key_points=["kp"], why_it_matters="why")
     return ScoredItem(item=item, score=score, summary=summary)
 
@@ -27,6 +27,7 @@ class TestRenderers(unittest.TestCase):
         self.assertIn("Must-read", msg)
         self.assertIn("## Must-read", note)
         self.assertIn("run_id: abc123", note)
+        self.assertIn("Tags: llm, benchmark", note)
 
 
 if __name__ == "__main__":

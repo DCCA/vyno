@@ -30,17 +30,25 @@ def render_obsidian_note(
     for idx, item in enumerate(sections.must_read, start=1):
         lines.append(f"{idx}. **{item.item.title}**")
         lines.append(f"   - Link: {item.item.url}")
+        if item.score.tags:
+            lines.append(f"   - Tags: {', '.join(item.score.tags)}")
         if item.summary:
             lines.append(f"   - TL;DR: {item.summary.tldr}")
             lines.append(f"   - Why it matters: {item.summary.why_it_matters}")
 
     lines.extend(["", "## Skim"])
     for item in sections.skim:
-        lines.append(f"- [{item.item.title}]({item.item.url})")
+        line = f"- [{item.item.title}]({item.item.url})"
+        if item.score.tags:
+            line += f" — tags: {', '.join(item.score.tags)}"
+        lines.append(line)
 
     lines.extend(["", "## Videos"])
     for item in sections.videos:
-        lines.append(f"- [{item.item.title}]({item.item.url})")
+        line = f"- [{item.item.title}]({item.item.url})"
+        if item.score.tags:
+            line += f" — tags: {', '.join(item.score.tags)}"
+        lines.append(line)
 
     return "\n".join(lines).strip() + "\n"
 

@@ -35,6 +35,7 @@ class ProfileConfig:
     blocked_sources: list[str] = field(default_factory=list)
     output: OutputSettings = field(default_factory=OutputSettings)
     llm_enabled: bool = False
+    agent_scoring_enabled: bool = True
     openai_model: str = "gpt-5.1-codex-mini"
 
 
@@ -96,6 +97,7 @@ def load_profile(path: str | Path) -> ProfileConfig:
         blocked_sources=_as_str_list(data, "blocked_sources"),
         output=output,
         llm_enabled=bool(data.get("llm_enabled", False)),
+        agent_scoring_enabled=bool(data.get("agent_scoring_enabled", True)),
         openai_model=str(data.get("openai_model", env_model or "gpt-5.1-codex-mini")),
     )
 

@@ -5,6 +5,7 @@ Daily AI digest pipeline that ingests RSS and YouTube feeds, ranks and summarize
 ## What It Does
 - Ingests from `config/sources.yaml` (RSS feeds, YouTube channels, YouTube queries)
 - Normalizes, deduplicates, scores, and selects digest items
+- Uses agent-based scoring + tagging (with rules fallback)
 - Summarizes with deterministic fallback, or OpenAI Responses API when enabled
 - Delivers:
   - Telegram message (if token/chat configured)
@@ -38,6 +39,12 @@ pip install -r requirements.txt
 - `config/sources.yaml`
 - `config/profile.yaml`
 
+Minimal scoring-related options in `config/profile.yaml`:
+```yaml
+agent_scoring_enabled: true
+openai_model: gpt-5.1-codex-mini
+```
+
 3. Run once:
 ```bash
 make live
@@ -59,6 +66,8 @@ export OPENAI_MODEL=gpt-5.1-codex-mini
 ```
 
 The implementation uses `POST /v1/responses` with JSON-schema output (`tldr`, `key_points`, `why_it_matters`). If LLM fails, it falls back to extractive summaries.
+
+Scoring/tagging also uses `POST /v1/responses` when `agent_scoring_enabled: true`. On failure, rules scoring is used per item.
 
 ## Scheduling
 Run the built-in scheduler loop:

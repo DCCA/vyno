@@ -3,6 +3,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
+import sqlite3
 
 from digest.config import OutputSettings, ProfileConfig, SourceConfig
 from digest.models import Item
@@ -47,6 +48,14 @@ class TestRuntimeIntegration(unittest.TestCase):
             self.assertTrue(note.exists())
             files = list(note.glob("*/*.md"))
             self.assertEqual(len(files), 1)
+            conn = sqlite3.connect(db)
+            row = conn.execute(
+                "select provider, tags_json, topic_tags_json, format_tags_json from scores where run_id = ? limit 1",
+                (report.run_id,),
+            ).fetchone()
+            conn.close()
+            self.assertIsNotNone(row)
+            self.assertEqual(row[0], "rules")
 
     def test_manual_mode_keeps_value_when_items_seen(self):
         with tempfile.TemporaryDirectory() as tmp:
