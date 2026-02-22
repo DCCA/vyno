@@ -13,6 +13,7 @@ dist/
 venv/
 .env
 .env.*
+obsidian-vault/
 
 # Keep .docs as source-of-truth; ignore only ephemeral paths.
 .docs/tmp/
