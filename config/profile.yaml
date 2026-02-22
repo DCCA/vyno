@@ -20,3 +20,4 @@ output:
   telegram_bot_token: ""
   obsidian_vault_path: "/home/dcca/projects/vyno/obsidian-vault"
   obsidian_folder: "AI Digest"
+  obsidian_naming: "timestamped"

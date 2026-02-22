@@ -8,7 +8,9 @@ Daily AI digest pipeline that ingests RSS and YouTube feeds, ranks and summarize
 - Summarizes with deterministic fallback, or OpenAI Responses API when enabled
 - Delivers:
   - Telegram message (if token/chat configured)
-  - Obsidian note at `AI Digest/YYYY-MM-DD.md` (if vault path configured)
+  - Obsidian note at:
+    - `AI Digest/YYYY-MM-DD/HHmmss-<run_id>.md` (`timestamped`, default)
+    - `AI Digest/YYYY-MM-DD.md` (`daily`, legacy mode)
 - Persists audit data in SQLite (`items`, `runs`, `scores`, `seen`)
 
 ## Project Layout
@@ -58,6 +60,16 @@ PYTHONPATH=src ./bin/digest --sources config/sources.yaml --profile config/profi
 ```
 
 For production, prefer cron/systemd invoking the `run` command.
+
+## Obsidian Naming Modes
+Configure in `config/profile.yaml`:
+```yaml
+output:
+  obsidian_naming: "timestamped"  # or "daily"
+```
+
+- `timestamped` (default): unique file per run under daily folder.
+- `daily`: legacy single file per day (can overwrite on repeated runs).
 
 ## Testing
 Run all tests:

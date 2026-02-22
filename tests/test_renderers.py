@@ -17,9 +17,16 @@ class TestRenderers(unittest.TestCase):
     def test_telegram_and_obsidian_formats(self):
         sec = DigestSections(must_read=[_scored(1)], skim=[_scored(2)], videos=[_scored(3, "video")])
         msg = render_telegram_message("2026-02-21", sec)
-        note = render_obsidian_note("2026-02-21", sec, source_count=3)
+        note = render_obsidian_note(
+            "2026-02-21",
+            sec,
+            source_count=3,
+            run_id="abc123",
+            generated_at_utc="2026-02-21T10:00:00+00:00",
+        )
         self.assertIn("Must-read", msg)
         self.assertIn("## Must-read", note)
+        self.assertIn("run_id: abc123", note)
 
 
 if __name__ == "__main__":

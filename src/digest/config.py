@@ -23,6 +23,7 @@ class OutputSettings:
     telegram_bot_token: str = ""
     obsidian_vault_path: str = ""
     obsidian_folder: str = "AI Digest"
+    obsidian_naming: str = "timestamped"
 
 
 @dataclass(slots=True)
@@ -72,11 +73,15 @@ def load_sources(path: str | Path) -> SourceConfig:
 def load_profile(path: str | Path) -> ProfileConfig:
     data = _read_yaml(path)
     out = data.get("output", {})
+    naming = str(out.get("obsidian_naming", "timestamped")).strip().lower()
+    if naming not in {"timestamped", "daily"}:
+        raise ValueError("output.obsidian_naming must be 'timestamped' or 'daily'")
     output = OutputSettings(
         telegram_chat_id=str(out.get("telegram_chat_id", "")),
         telegram_bot_token=str(out.get("telegram_bot_token", "")),
         obsidian_vault_path=str(out.get("obsidian_vault_path", "")),
         obsidian_folder=str(out.get("obsidian_folder", "AI Digest")),
+        obsidian_naming=naming,
     )
     env_model = os.getenv("OPENAI_MODEL", "").strip()
     return ProfileConfig(

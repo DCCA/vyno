@@ -95,7 +95,13 @@ def run_digest(
     date_str = now.date().isoformat()
 
     telegram_message = render_telegram_message(date_str, sections)
-    note = render_obsidian_note(date_str, sections, source_count=len(candidate_items))
+    note = render_obsidian_note(
+        date_str,
+        sections,
+        source_count=len(candidate_items),
+        run_id=run_id,
+        generated_at_utc=now.isoformat(),
+    )
 
     status = "success"
     if source_errors or summary_errors:
@@ -112,7 +118,15 @@ def run_digest(
 
     if profile.output.obsidian_vault_path:
         try:
-            write_obsidian_note(profile.output.obsidian_vault_path, profile.output.obsidian_folder, date_str, note)
+            write_obsidian_note(
+                profile.output.obsidian_vault_path,
+                profile.output.obsidian_folder,
+                date_str,
+                note,
+                naming=profile.output.obsidian_naming,
+                run_id=run_id,
+                run_dt_utc=now,
+            )
         except Exception as exc:
             source_errors.append(f"obsidian: {exc}")
             status = "partial"

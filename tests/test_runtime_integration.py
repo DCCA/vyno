@@ -45,7 +45,7 @@ class TestRuntimeIntegration(unittest.TestCase):
             self.assertIn(report.status, {"success", "partial"})
             note = vault / "AI Digest"
             self.assertTrue(note.exists())
-            files = list(note.glob("*.md"))
+            files = list(note.glob("*/*.md"))
             self.assertEqual(len(files), 1)
 
     def test_manual_mode_keeps_value_when_items_seen(self):
@@ -84,6 +84,43 @@ class TestRuntimeIntegration(unittest.TestCase):
 
             self.assertIn(first.status, {"success", "partial"})
             self.assertIn(second.status, {"success", "partial"})
+
+    def test_timestamped_mode_creates_distinct_files_same_day(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            vault = Path(tmp) / "vault"
+            store = SQLiteStore(str(db))
+
+            sources = SourceConfig(rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[])
+            profile = ProfileConfig(
+                output=OutputSettings(
+                    obsidian_vault_path=str(vault),
+                    obsidian_folder="AI Digest",
+                    obsidian_naming="timestamped",
+                ),
+                llm_enabled=False,
+            )
+
+            fixture_item = Item(
+                id="fixture1",
+                url="https://example.com/fixture1",
+                title="OpenAI evals update",
+                source="fixture-source",
+                author=None,
+                published_at=datetime.now(),
+                type="article",
+                raw_text="Detailed ai evals coverage.",
+                hash="fixturehash1",
+            )
+
+            with patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]), patch(
+                "digest.runtime.fetch_youtube_items", return_value=[]
+            ):
+                run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
+                run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
+
+            files = sorted((vault / "AI Digest").glob("*/*.md"))
+            self.assertEqual(len(files), 2)
 
 
 if __name__ == "__main__":
