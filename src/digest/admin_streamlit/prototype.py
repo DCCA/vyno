@@ -217,7 +217,7 @@ def main() -> None:
         tabs = st.tabs(list(sources.keys()))
         for tab, key in zip(tabs, sources.keys()):
             with tab:
-                st.dataframe({"value": sources[key]}, use_container_width=True)
+                st.dataframe({"value": sources[key]}, width="stretch")
 
     elif page == "Runs":
         st.markdown("### Runs")
@@ -227,7 +227,7 @@ def main() -> None:
         f3.text_input("run_id contains", value="")
 
         filtered = [r for r in runs if r["status"] in status_filter]
-        st.dataframe(filtered, use_container_width=True, hide_index=True)
+        st.dataframe(filtered, width="stretch", hide_index=True)
         with st.expander("Run details preview"):
             st.code("""run_id: run9002\nstage: score\nsource_errors: 1\nsummary_errors: 1""")
 
@@ -271,7 +271,7 @@ def main() -> None:
             st.text_area("Comment", value="Could be shorter in Telegram")
             st.form_submit_button("Save Feedback")
 
-        st.dataframe(feedback, use_container_width=True, hide_index=True)
+        st.dataframe(feedback, width="stretch", hide_index=True)
 
     elif page == "Bot":
         st.markdown("### Bot Lifecycle")
