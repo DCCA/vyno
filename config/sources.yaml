@@ -1,42 +1,8 @@
 rss_feeds:
-  # AI / Research
-  - https://news.mit.edu/rss/topic/artificial-intelligence2
   - https://openai.com/news/rss.xml
-  - https://ai.googleblog.com/feeds/posts/default
-  - https://blogs.nvidia.com/blog/category/ai/feed/
-  - https://arxiv.org/rss/cs.AI
-  - https://arxiv.org/rss/cs.LG
-  - https://arxiv.org/rss/cs.CL
-
-  # AI Industry / Startups
-  - https://techcrunch.com/category/artificial-intelligence/feed/
-  - https://venturebeat.com/category/ai/feed/
-
-  # Broader Tech (high signal)
-  - https://feeds.arstechnica.com/arstechnica/index
-  - https://www.theverge.com/rss/tech/index.xml
-  - https://www.wired.com/feed/tag/ai/latest/rss
   - https://news.ycombinator.com/rss
 
 youtube_channels:
   - UCXZCJLdBC09xxGZ6gcdrc6A
-  - UCUyeluBRhGPCW4rPe_UvBZQ   # Prime
-  # AI / Research
-  - UCMLtBahI5DMrt0NPvDSoIRQ   # Yannic Kilcher
-  - UCXUPKJO5MZQN11PqgIvyuvQ   # Two Minute Papers
-  - UCbfYPyITQ-7l4upoX8nvctg   # 3Blue1Brown
-  - UCv83tO5cePwHMt1952IVVHw   # DeepMind
-  - UCbmNph6atAoGfqLoCL_duAg   # Stanford Online
 
-  # AI Engineering / Builders
-  - UCmOwsoHty5PrmE-3QhUBfPQ   # Fireship
-  - UCsBjURrPoezykLs9EqgamOA   # Tech With Tim
-  - UCFbNIlppjAuEX4znoulh0Cw   # AssemblyAI
-  - UCW8Ews7tdKKkBT6GdtQaXvQ   # freeCodeCamp.org
-
-  # Tech / Industry Analysis
-  - UCfMJ2MchTSW2kWaT0kK94Yw   # The Verge
-  - UCSJbGtTlrDami-tDGPUV9-w   # Bloomberg Technology
-  - UCVYamHliCI9rw1tHR1xbkfw   # CNBC Technology
-  
 youtube_queries: []
