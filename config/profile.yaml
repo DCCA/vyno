@@ -14,7 +14,7 @@ trusted_sources:
 blocked_sources:
   - example-blocked.com
 llm_enabled: false
-openai_model: gpt-4o
+openai_model: gpt-5.1-codex-mini
 output:
   telegram_chat_id: ""
   telegram_bot_token: ""
