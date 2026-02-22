@@ -48,6 +48,16 @@ class TestConfig(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_profile(path)
 
+    def test_profile_rejects_invalid_render_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                "output:\n  render_mode: invalid\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError):
+                load_profile(path)
+
     def test_profile_uses_env_fallback_for_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "profile.yaml"
@@ -83,6 +93,16 @@ class TestConfig(unittest.TestCase):
             self.assertTrue(profile.github_include_archived)
             self.assertEqual(profile.github_max_repos_per_org, 7)
             self.assertEqual(profile.github_max_items_per_org, 11)
+
+    def test_profile_loads_render_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                "output:\n  render_mode: source_segmented\n",
+                encoding="utf-8",
+            )
+            profile = load_profile(path)
+            self.assertEqual(profile.output.render_mode, "source_segmented")
 
 
 if __name__ == "__main__":

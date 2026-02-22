@@ -30,6 +30,7 @@ class OutputSettings:
     obsidian_vault_path: str = ""
     obsidian_folder: str = "AI Digest"
     obsidian_naming: str = "timestamped"
+    render_mode: str = "sectioned"
 
 
 @dataclass(slots=True)
@@ -116,6 +117,9 @@ def load_profile(path: str | Path) -> ProfileConfig:
     naming = str(out.get("obsidian_naming", "timestamped")).strip().lower()
     if naming not in {"timestamped", "daily"}:
         raise ValueError("output.obsidian_naming must be 'timestamped' or 'daily'")
+    render_mode = str(out.get("render_mode", "sectioned")).strip().lower()
+    if render_mode not in {"sectioned", "source_segmented"}:
+        raise ValueError("output.render_mode must be 'sectioned' or 'source_segmented'")
     env_telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     env_telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     env_obsidian_vault = os.getenv("OBSIDIAN_VAULT_PATH", "").strip()
@@ -126,6 +130,7 @@ def load_profile(path: str | Path) -> ProfileConfig:
         obsidian_vault_path=str(out.get("obsidian_vault_path", "")).strip() or env_obsidian_vault,
         obsidian_folder=str(out.get("obsidian_folder", "AI Digest")).strip() or env_obsidian_folder or "AI Digest",
         obsidian_naming=naming,
+        render_mode=render_mode,
     )
     env_model = os.getenv("OPENAI_MODEL", "").strip()
     return ProfileConfig(

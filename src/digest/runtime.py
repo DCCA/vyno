@@ -257,13 +257,18 @@ def run_digest(
     # local-time drift where repeated runs overwrite the previous-day note.
     date_str = now.date().isoformat()
 
-    telegram_messages = render_telegram_messages(date_str, sections)
+    telegram_messages = render_telegram_messages(
+        date_str,
+        sections,
+        render_mode=profile.output.render_mode,
+    )
     note = render_obsidian_note(
         date_str,
         sections,
         source_count=len(candidate_items),
         run_id=run_id,
         generated_at_utc=now.isoformat(),
+        render_mode=profile.output.render_mode,
     )
 
     status = "success"

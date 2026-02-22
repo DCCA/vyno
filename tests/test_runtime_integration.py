@@ -203,6 +203,44 @@ class TestRuntimeIntegration(unittest.TestCase):
             conn.close()
             self.assertGreaterEqual(count, 3)
 
+    def test_source_segmented_render_mode_writes_segmented_note(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            vault = Path(tmp) / "vault"
+            store = SQLiteStore(str(db))
+            sources = SourceConfig(rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[])
+            profile = ProfileConfig(
+                output=OutputSettings(
+                    obsidian_vault_path=str(vault),
+                    obsidian_folder="AI Digest",
+                    obsidian_naming="timestamped",
+                    render_mode="source_segmented",
+                ),
+                llm_enabled=False,
+                agent_scoring_enabled=False,
+            )
+            fixture_item = Item(
+                id="fixture1",
+                url="https://github.com/openai/openai-cookbook/releases/tag/v1",
+                title="OpenAI cookbook release",
+                source="github:openai/openai-cookbook",
+                author=None,
+                published_at=datetime.now(),
+                type="github_release",
+                raw_text="release note",
+                hash="fixturehash1",
+            )
+            with patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]), patch(
+                "digest.runtime.fetch_youtube_items", return_value=[]
+            ):
+                run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
+
+            files = sorted((vault / "AI Digest").glob("*/*.md"))
+            self.assertEqual(len(files), 1)
+            content = files[0].read_text(encoding="utf-8")
+            self.assertIn("## Top Highlights", content)
+            self.assertIn("## GitHub", content)
+
     def test_runtime_passes_org_guardrails_to_github_fetch(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "digest.db"

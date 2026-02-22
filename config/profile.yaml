@@ -32,3 +32,4 @@ output:
   obsidian_vault_path: "/home/dcca/projects/vyno/obsidian-vault"
   obsidian_folder: "AI Digest"
   obsidian_naming: "timestamped"
+  render_mode: "sectioned"

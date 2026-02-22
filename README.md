@@ -82,6 +82,7 @@ make live
   - Telegram token/chat id
   - Obsidian vault/folder
   - `obsidian_naming: timestamped|daily`
+  - `render_mode: sectioned|source_segmented`
 
 ### Environment Variables
 See `.env.example` for full list.
@@ -120,6 +121,9 @@ Runtime-added sources are persisted in `data/sources.local.yaml` (overlay), merg
   - Legacy mode: `AI Digest/YYYY-MM-DD.md`
   - Stable frontmatter keys (`date`, `generated_at_utc`, `run_id`, `source_count`, `tags`)
   - Must-read rendered as summary callouts for better scanability
+- YouTube noise guardrails:
+  - promotional/source-link dump cleanup before summarization
+  - summary quality fallback on low-signal outputs
 
 ## Logging and Debugging
 - Default log path: `logs/digest.log`

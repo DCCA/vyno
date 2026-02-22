@@ -47,6 +47,51 @@ class TestRenderers(unittest.TestCase):
             self.assertLessEqual(len(chunk), 800)
         self.assertIn("Must-read", chunks[0])
 
+    def test_telegram_caps_overlong_fields(self):
+        long_title = "T" * 400
+        long_tldr = "S" * 900
+        item = Item("1", "https://x/1", long_title, "src", None, datetime.now(), "article", "body")
+        score = Score("1", 1, 1, 1, 3, tags=["llm"])
+        summary = Summary(tldr=long_tldr, key_points=["kp"], why_it_matters="why")
+        sec = DigestSections(must_read=[ScoredItem(item=item, score=score, summary=summary)], skim=[], videos=[])
+        msg = render_telegram_message("2026-02-21", sec)
+        self.assertLess(len(msg), 1200)
+
+    def test_obsidian_caps_overlong_fields(self):
+        long_title = "A" * 400
+        long_tldr = "B" * 900
+        long_why = "C" * 900
+        item = Item("1", "https://x/1", long_title, "src", None, datetime.now(), "article", "body")
+        score = Score("1", 1, 1, 1, 3, tags=["llm"])
+        summary = Summary(tldr=long_tldr, key_points=["kp"], why_it_matters=long_why)
+        sec = DigestSections(must_read=[ScoredItem(item=item, score=score, summary=summary)], skim=[], videos=[])
+        note = render_obsidian_note("2026-02-21", sec, source_count=1, run_id="r1", generated_at_utc="2026-02-21T00:00:00+00:00")
+        self.assertLess(len(note), 1800)
+
+    def test_renderer_cleans_sponsor_terms(self):
+        item = Item("1", "https://x/1", "Demo", "src", None, datetime.now(), "article", "body")
+        score = Score("1", 1, 1, 1, 3, tags=["llm"])
+        summary = Summary(
+            tldr="Check out our Patreon sponsor for details",
+            key_points=["kp"],
+            why_it_matters="Sponsor-driven",
+        )
+        sec = DigestSections(must_read=[ScoredItem(item=item, score=score, summary=summary)], skim=[], videos=[])
+        note = render_obsidian_note("2026-02-21", sec, source_count=1, run_id="r1", generated_at_utc="2026-02-21T00:00:00+00:00")
+        msg = render_telegram_message("2026-02-21", sec)
+        self.assertNotIn("patreon", note.lower())
+        self.assertNotIn("sponsor", msg.lower())
+
+    def test_renderer_keeps_single_item_link(self):
+        item = Item("1", "https://x/1", "Demo", "src", None, datetime.now(), "article", "body")
+        score = Score("1", 1, 1, 1, 3, tags=["llm"])
+        summary = Summary(tldr="TLDR", key_points=["kp"], why_it_matters="why")
+        sec = DigestSections(must_read=[ScoredItem(item=item, score=score, summary=summary)], skim=[], videos=[])
+        note = render_obsidian_note("2026-02-21", sec, source_count=1, run_id="r1", generated_at_utc="2026-02-21T00:00:00+00:00")
+        msg = render_telegram_message("2026-02-21", sec)
+        self.assertEqual(note.count("https://x/1"), 1)
+        self.assertEqual(msg.count("https://x/1"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

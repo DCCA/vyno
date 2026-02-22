@@ -4,10 +4,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 import re
 
+from digest.delivery.source_buckets import build_source_buckets, top_highlights
 from digest.models import DigestSections
 
 
 TAG_CLEAN_RE = re.compile(r"[^a-z0-9-]+")
+NOISE_PHRASE_RE = re.compile(r"\b(check out|patreon|sponsor|support us|sign up)\b", re.IGNORECASE)
 
 
 def _normalize_tag(value: str) -> str:
@@ -23,6 +25,15 @@ def _render_tags(tags: list[str]) -> str:
     return ", ".join(dict.fromkeys(normalized))
 
 
+def _clean_text(value: str, *, max_len: int) -> str:
+    text = (value or "").strip()
+    text = NOISE_PHRASE_RE.sub("", text)
+    text = re.sub(r"\s{2,}", " ", text).strip(" -")
+    if len(text) > max_len:
+        return text[: max_len - 1].rstrip() + "…"
+    return text
+
+
 def render_obsidian_note(
     date_str: str,
     sections: DigestSections,
@@ -30,6 +41,7 @@ def render_obsidian_note(
     *,
     run_id: str = "",
     generated_at_utc: str = "",
+    render_mode: str = "sectioned",
 ) -> str:
     doc_tags = ["ai", "digest"]
     lines = [
@@ -43,32 +55,61 @@ def render_obsidian_note(
         "",
         f"# AI Digest - {date_str}",
         "",
-        "## Must-read",
     ]
+    if render_mode == "source_segmented":
+        lines.extend(_render_source_segmented_sections(sections))
+        return "\n".join(lines).strip() + "\n"
+
+    lines.append("## Must-read")
     for idx, item in enumerate(sections.must_read, start=1):
-        lines.append(f"> [!summary] {idx}. [{item.item.title}]({item.item.url})")
+        safe_title = _clean_text(item.item.title, max_len=140)
+        lines.append(f"> [!summary] {idx}. [{safe_title}]({item.item.url})")
         if item.score.tags:
             lines.append(f"> Tags: {_render_tags(item.score.tags)}")
         if item.summary:
-            lines.append(f"> TL;DR: {item.summary.tldr}")
-            lines.append(f"> Why it matters: {item.summary.why_it_matters}")
+            lines.append(f"> TL;DR: {_clean_text(item.summary.tldr, max_len=240)}")
+            lines.append(f"> Why it matters: {_clean_text(item.summary.why_it_matters, max_len=240)}")
         lines.append(">")
 
     lines.extend(["", "## Skim"])
     for item in sections.skim:
-        line = f"- [{item.item.title}]({item.item.url})"
+        safe_title = _clean_text(item.item.title, max_len=140)
+        line = f"- [{safe_title}]({item.item.url})"
         if item.score.tags:
             line += f" — tags: {_render_tags(item.score.tags)}"
         lines.append(line)
 
     lines.extend(["", "## Videos"])
     for item in sections.videos:
-        line = f"- [{item.item.title}]({item.item.url})"
+        safe_title = _clean_text(item.item.title, max_len=140)
+        line = f"- [{safe_title}]({item.item.url})"
         if item.score.tags:
             line += f" — tags: {_render_tags(item.score.tags)}"
         lines.append(line)
 
     return "\n".join(lines).strip() + "\n"
+
+
+def _render_source_segmented_sections(sections: DigestSections) -> list[str]:
+    lines = ["## Top Highlights"]
+    for idx, item in enumerate(top_highlights(sections, limit=3), start=1):
+        safe_title = _clean_text(item.item.title, max_len=140)
+        lines.append(f"{idx}. [{safe_title}]({item.item.url})")
+        if item.summary:
+            lines.append(f"   - TL;DR: {_clean_text(item.summary.tldr, max_len=240)}")
+        if item.score.tags:
+            lines.append(f"   - Tags: {_render_tags(item.score.tags)}")
+
+    buckets = build_source_buckets(sections, per_bucket_limit=8)
+    for bucket, rows in buckets.items():
+        lines.extend(["", f"## {bucket}"])
+        for item in rows:
+            safe_title = _clean_text(item.item.title, max_len=140)
+            line = f"- [{safe_title}]({item.item.url})"
+            if item.score.tags:
+                line += f" — tags: {_render_tags(item.score.tags)}"
+            lines.append(line)
+    return lines
 
 
 def build_obsidian_note_path(
