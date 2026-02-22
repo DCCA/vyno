@@ -37,7 +37,7 @@ PYTHONPATH=src ./bin/digest --sources config/sources.yaml --profile config/profi
 ## Enable OpenAI Responses API Summaries
 1. Set in `config/profile.yaml`:
 - `llm_enabled: true`
-- `openai_model: gpt-4.1-mini`
+- `openai_model: gpt-4o-mini`
 
 2. Export API key:
 ```bash

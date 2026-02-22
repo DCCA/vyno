@@ -33,7 +33,7 @@ class ProfileConfig:
     blocked_sources: list[str] = field(default_factory=list)
     output: OutputSettings = field(default_factory=OutputSettings)
     llm_enabled: bool = False
-    openai_model: str = "gpt-4.1-mini"
+    openai_model: str = "gpt-4o-mini"
 
 
 def _read_yaml(path: str | Path) -> dict:
@@ -70,7 +70,7 @@ def load_profile(path: str | Path) -> ProfileConfig:
         blocked_sources=_as_str_list(data, "blocked_sources"),
         output=output,
         llm_enabled=bool(data.get("llm_enabled", False)),
-        openai_model=str(data.get("openai_model", "gpt-4.1-mini")),
+        openai_model=str(data.get("openai_model", "gpt-4o-mini")),
     )
 
 
