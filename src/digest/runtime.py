@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 import logging
 import os
+from pathlib import Path
 
 from digest.config import ProfileConfig, SourceConfig
 from digest.connectors.github import fetch_github_items, normalize_github_org
@@ -262,6 +264,7 @@ def run_digest(
         sections,
         render_mode=profile.output.render_mode,
     )
+    _write_latest_telegram_artifact(run_id, telegram_messages)
     note = render_obsidian_note(
         date_str,
         sections,
@@ -341,3 +344,15 @@ def _filter_window(items: list[Item], window_start_iso: str) -> list[Item]:
         if published is None or published >= start:
             filtered.append(item)
     return filtered
+
+
+def _write_latest_telegram_artifact(run_id: str, messages: list[str]) -> None:
+    path = Path(".runtime/last_telegram_messages.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "run_id": run_id,
+        "chunk_count": len(messages),
+        "messages": messages,
+        "updated_at_utc": datetime.now(timezone.utc).isoformat(),
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
