@@ -104,6 +104,31 @@ class TestConfig(unittest.TestCase):
             profile = load_profile(path)
             self.assertEqual(profile.output.render_mode, "source_segmented")
 
+    def test_profile_loads_llm_coverage_controls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                (
+                    "min_llm_coverage: 0.85\n"
+                    "max_fallback_share: 0.15\n"
+                    "agent_scoring_retry_attempts: 2\n"
+                    "agent_scoring_text_max_chars: 6000\n"
+                ),
+                encoding="utf-8",
+            )
+            profile = load_profile(path)
+            self.assertEqual(profile.min_llm_coverage, 0.85)
+            self.assertEqual(profile.max_fallback_share, 0.15)
+            self.assertEqual(profile.agent_scoring_retry_attempts, 2)
+            self.assertEqual(profile.agent_scoring_text_max_chars, 6000)
+
+    def test_profile_rejects_invalid_llm_coverage_controls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text("min_llm_coverage: 1.2\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_profile(path)
+
 
 if __name__ == "__main__":
     unittest.main()

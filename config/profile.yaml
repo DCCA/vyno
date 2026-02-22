@@ -25,6 +25,10 @@ github_max_repos_per_org: 20
 github_max_items_per_org: 40
 llm_enabled: false
 agent_scoring_enabled: true
+min_llm_coverage: 0.9
+max_fallback_share: 0.1
+agent_scoring_retry_attempts: 1
+agent_scoring_text_max_chars: 8000
 openai_model: gpt-5.1-codex-mini
 output:
   telegram_chat_id: ""

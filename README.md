@@ -69,6 +69,10 @@ make live
 ### `config/profile.yaml`
 - Scoring:
   - `agent_scoring_enabled: true`
+  - `min_llm_coverage` (default `0.9`)
+  - `max_fallback_share` (default `0.1`)
+  - `agent_scoring_retry_attempts` (default `1`)
+  - `agent_scoring_text_max_chars` (default `8000`)
   - `openai_model: gpt-5.1-codex-mini`
 - GitHub org guardrails:
   - `github_min_stars`
@@ -128,6 +132,7 @@ Runtime-added sources are persisted in `data/sources.local.yaml` (overlay), merg
 ## Logging and Debugging
 - Default log path: `logs/digest.log`
 - Log format: JSON lines with `run_id`, `stage`, `level`, and context fields
+- Includes LLM scoring coverage telemetry (`llm_coverage`, `fallback_share`, `fallback_reasons`)
 - Useful overrides:
   - `DIGEST_LOG_PATH`
   - `DIGEST_LOG_LEVEL`

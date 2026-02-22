@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 import logging
 import os
@@ -203,6 +204,10 @@ def run_digest(
 
     scores = []
     agent_scorer = None
+    llm_scored_count = 0
+    fallback_scored_count = 0
+    fallback_reasons: Counter[str] = Counter()
+    eligible_count = 0
     if profile.agent_scoring_enabled:
         try:
             agent_scorer = ResponsesAPIScorerTagger(model=profile.openai_model)
@@ -213,19 +218,26 @@ def run_digest(
     for item in candidate_items:
         if is_blocked(item, profile):
             continue
+        eligible_count += 1
         if agent_scorer is not None:
-            try:
-                scores.append(agent_scorer.score_and_tag(item))
+            score, err = _score_with_retries(item, agent_scorer, profile.agent_scoring_retry_attempts, profile.agent_scoring_text_max_chars)
+            if score is not None:
+                llm_scored_count += 1
+                scores.append(score)
                 continue
-            except Exception as exc:
+            if err is not None:
+                reason = _classify_fallback_reason(str(err))
+                fallback_reasons[reason] += 1
                 log_event(
                     run_logger,
                     "error",
                     "score_agent",
                     "Agent scoring failed, using rules fallback",
                     item_id=item.id,
-                    error=str(exc),
+                    error=str(err),
+                    fallback_reason=reason,
                 )
+        fallback_scored_count += 1
         scores.append(score_item(item, profile))
     score_map = {s.item_id: s for s in scores}
     scored_items = [ScoredItem(item=i, score=score_map[i.id]) for i in candidate_items if i.id in score_map]
@@ -274,8 +286,40 @@ def run_digest(
         render_mode=profile.output.render_mode,
     )
 
+    llm_coverage = (llm_scored_count / eligible_count) if eligible_count else 1.0
+    fallback_share = (fallback_scored_count / eligible_count) if eligible_count else 0.0
+    if profile.agent_scoring_enabled:
+        log_event(
+            run_logger,
+            "info",
+            "score_coverage",
+            "LLM classification coverage",
+            eligible_count=eligible_count,
+            llm_scored_count=llm_scored_count,
+            fallback_scored_count=fallback_scored_count,
+            llm_coverage=round(llm_coverage, 4),
+            fallback_share=round(fallback_share, 4),
+            fallback_reasons=dict(fallback_reasons),
+            min_llm_coverage=profile.min_llm_coverage,
+            max_fallback_share=profile.max_fallback_share,
+        )
+
     status = "success"
     if source_errors or summary_errors:
+        status = "partial"
+    if (
+        profile.agent_scoring_enabled
+        and eligible_count > 0
+        and (llm_coverage < profile.min_llm_coverage or fallback_share > profile.max_fallback_share)
+    ):
+        summary_errors.append(
+            (
+                "scoring_coverage_below_threshold:"
+                f" llm_coverage={llm_coverage:.3f} (min={profile.min_llm_coverage:.3f}),"
+                f" fallback_share={fallback_share:.3f} (max={profile.max_fallback_share:.3f}),"
+                f" reasons={json.dumps(dict(fallback_reasons), ensure_ascii=True)}"
+            )
+        )
         status = "partial"
     if not raw_items and source_errors:
         status = "failed"
@@ -324,6 +368,8 @@ def run_digest(
         "run_finish",
         "Digest run finished",
         status=status,
+        llm_coverage=round(llm_coverage, 4),
+        fallback_share=round(fallback_share, 4),
         source_error_count=len(source_errors),
         summary_error_count=len(summary_errors),
         final_item_count=len(scored_items),
@@ -356,3 +402,34 @@ def _write_latest_telegram_artifact(run_id: str, messages: list[str]) -> None:
         "updated_at_utc": datetime.now(timezone.utc).isoformat(),
     }
     path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
+
+
+def _score_with_retries(
+    item: Item,
+    agent_scorer: ResponsesAPIScorerTagger,
+    retry_attempts: int,
+    max_text_chars: int,
+):
+    total_attempts = max(1, 1 + int(retry_attempts))
+    last_exc: Exception | None = None
+    for attempt in range(total_attempts):
+        text_limit = max(400, int(max_text_chars / (2**attempt)))
+        try:
+            return agent_scorer.score_and_tag(item, max_text_chars=text_limit), None
+        except Exception as exc:  # pragma: no cover - behavior validated through runtime tests
+            last_exc = exc
+            continue
+    return None, last_exc
+
+
+def _classify_fallback_reason(error_text: str) -> str:
+    text = (error_text or "").lower()
+    if "timeout" in text or "timed out" in text:
+        return "timeout"
+    if "429" in text or "rate" in text:
+        return "rate_limit"
+    if "invalid schema" in text or "non-json" in text or "missing structured json" in text:
+        return "invalid_schema"
+    if "empty response" in text:
+        return "empty_response"
+    return "api_error"

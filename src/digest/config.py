@@ -52,6 +52,10 @@ class ProfileConfig:
     output: OutputSettings = field(default_factory=OutputSettings)
     llm_enabled: bool = False
     agent_scoring_enabled: bool = True
+    min_llm_coverage: float = 0.9
+    max_fallback_share: float = 0.1
+    agent_scoring_retry_attempts: int = 1
+    agent_scoring_text_max_chars: int = 8000
     openai_model: str = "gpt-5.1-codex-mini"
 
 
@@ -133,6 +137,12 @@ def load_profile(path: str | Path) -> ProfileConfig:
         render_mode=render_mode,
     )
     env_model = os.getenv("OPENAI_MODEL", "").strip()
+    min_llm_coverage = float(data.get("min_llm_coverage", 0.9) or 0.9)
+    max_fallback_share = float(data.get("max_fallback_share", 0.1) or 0.1)
+    if not (0 <= min_llm_coverage <= 1):
+        raise ValueError("min_llm_coverage must be between 0 and 1")
+    if not (0 <= max_fallback_share <= 1):
+        raise ValueError("max_fallback_share must be between 0 and 1")
     return ProfileConfig(
         topics=_as_str_list(data, "topics"),
         entities=_as_str_list(data, "entities"),
@@ -151,6 +161,10 @@ def load_profile(path: str | Path) -> ProfileConfig:
         output=output,
         llm_enabled=bool(data.get("llm_enabled", False)),
         agent_scoring_enabled=bool(data.get("agent_scoring_enabled", True)),
+        min_llm_coverage=min_llm_coverage,
+        max_fallback_share=max_fallback_share,
+        agent_scoring_retry_attempts=max(0, int(data.get("agent_scoring_retry_attempts", 1) or 1)),
+        agent_scoring_text_max_chars=max(400, int(data.get("agent_scoring_text_max_chars", 8000) or 8000)),
         openai_model=str(data.get("openai_model", env_model or "gpt-5.1-codex-mini")),
     )
 

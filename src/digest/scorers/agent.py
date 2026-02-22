@@ -41,7 +41,8 @@ class ResponsesAPIScorerTagger:
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY is required for agent scoring")
 
-    def score_and_tag(self, item: Item) -> Score:
+    def score_and_tag(self, item: Item, *, max_text_chars: int = 8000) -> Score:
+        text_limit = max(400, int(max_text_chars))
         payload = {
             "model": self.model,
             "input": [
@@ -68,7 +69,7 @@ class ResponsesAPIScorerTagger:
                                 f"ALLOWED_TOPIC_TAGS: {', '.join(TOPIC_VOCAB)}\n"
                                 f"ALLOWED_FORMAT_TAGS: {', '.join(FORMAT_VOCAB)}\n"
                                 f"TITLE: {item.title}\nURL: {item.url}\nSOURCE: {item.source}\n"
-                                f"TYPE: {item.type}\nTEXT: {item.raw_text[:8000]}"
+                                f"TYPE: {item.type}\nTEXT: {item.raw_text[:text_limit]}"
                             ),
                         }
                     ],
@@ -119,10 +120,15 @@ class ResponsesAPIScorerTagger:
                 raw = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             raise RuntimeError(f"Agent scoring HTTPError: {exc.code}") from exc
+        except TimeoutError as exc:
+            raise RuntimeError("Agent scoring timeout") from exc
         except urllib.error.URLError as exc:
+            if "timed out" in str(exc).lower():
+                raise RuntimeError("Agent scoring timeout") from exc
             raise RuntimeError("Agent scoring connection error") from exc
 
         parsed = _extract_json_output(raw)
+        _validate_agent_payload(parsed)
         rel10 = _clamp_num(parsed.get("relevance", 0), 0, 10)
         qual10 = _clamp_num(parsed.get("quality", 0), 0, 10)
         nov10 = _clamp_num(parsed.get("novelty", 0), 0, 10)
@@ -158,17 +164,38 @@ def _extract_json_output(raw: dict) -> dict:
         for content in out.get("content", []):
             if content.get("type") == "output_text":
                 text = content.get("text", "{}")
+                if not isinstance(text, str) or not text.strip():
+                    raise RuntimeError("Agent scoring returned empty response")
                 try:
                     return json.loads(text)
                 except json.JSONDecodeError:
                     continue
     text = raw.get("output_text", "{}")
     if isinstance(text, str):
+        if not text.strip():
+            raise RuntimeError("Agent scoring returned empty response")
         try:
             return json.loads(text)
         except json.JSONDecodeError as exc:
             raise RuntimeError("Agent scoring returned non-JSON output") from exc
     raise RuntimeError("Agent scoring output missing structured JSON")
+
+
+def _validate_agent_payload(payload: dict) -> None:
+    required = {
+        "relevance": (int, float),
+        "quality": (int, float),
+        "novelty": (int, float),
+        "topic_tags": list,
+        "format_tags": list,
+        "tags": list,
+        "reason": str,
+    }
+    for key, expected in required.items():
+        if key not in payload:
+            raise RuntimeError(f"Agent scoring invalid schema: missing {key}")
+        if not isinstance(payload[key], expected):
+            raise RuntimeError(f"Agent scoring invalid schema: bad {key}")
 
 
 def _clamp_num(value: object, lo: int, hi: int) -> int:
