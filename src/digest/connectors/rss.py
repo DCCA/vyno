@@ -20,7 +20,14 @@ def _strip_html(text: str) -> str:
 def fetch_rss_items(feed_urls: list[str], timeout: int = 15) -> list[Item]:
     items: list[Item] = []
     for feed_url in feed_urls:
-        with urllib.request.urlopen(feed_url, timeout=timeout) as resp:
+        req = urllib.request.Request(
+            feed_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; ai-digest/1.0; +https://example.local)",
+                "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.8",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             content = resp.read()
         items.extend(parse_feed_items(feed_url, content))
     return items

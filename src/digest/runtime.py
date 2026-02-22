@@ -83,7 +83,7 @@ def run_digest(sources: SourceConfig, profile: ProfileConfig, store: SQLiteStore
     status = "success"
     if source_errors or summary_errors:
         status = "partial"
-    if not unseen_items and source_errors:
+    if not raw_items and source_errors:
         status = "failed"
 
     if profile.output.telegram_bot_token and profile.output.telegram_chat_id:
