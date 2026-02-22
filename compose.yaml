@@ -1,0 +1,39 @@
+services:
+  digest-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: digest-bot
+    env_file:
+      - .env
+    command:
+      [
+        "--sources",
+        "config/sources.yaml",
+        "--sources-overlay",
+        "data/sources.local.yaml",
+        "--profile",
+        "config/profile.yaml",
+        "--db",
+        "digest-live.db",
+        "bot",
+      ]
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./.runtime:/app/.runtime
+      - ./obsidian-vault:/app/obsidian-vault
+      - ./digest-live.db:/app/digest-live.db
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "tr '\\000' ' ' </proc/1/cmdline | grep -q 'digest.cli' && tr '\\000' ' ' </proc/1/cmdline | grep -q ' bot'",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+

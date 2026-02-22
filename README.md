@@ -57,6 +57,62 @@ make live
 - Tail logs: `make logs`
 - Run Telegram command bot:
   - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db bot`
+- Docker operations:
+  - Build image: `make docker-build`
+  - Start bot service: `make docker-up`
+  - View bot logs: `make docker-logs`
+  - Service status: `make docker-ps`
+  - Restart bot: `make docker-restart`
+  - Stop services: `make docker-down`
+
+## Docker Bot Runbook
+Use Docker Compose when you want `digest bot` to stay up after shell exits and host restarts.
+
+1. Prepare runtime files:
+```bash
+cp .env.example .env
+mkdir -p logs .runtime obsidian-vault
+touch digest-live.db
+```
+
+2. Set required bot env vars in `.env`:
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_ADMIN_CHAT_IDS`
+- `TELEGRAM_ADMIN_USER_IDS`
+
+3. If writing Obsidian notes in-container, set:
+- `OBSIDIAN_VAULT_PATH=/app/obsidian-vault`
+- `OBSIDIAN_FOLDER=AI Digest`
+
+4. Build and start:
+```bash
+make docker-build
+make docker-up
+```
+
+5. Validate health and logs:
+```bash
+make docker-ps
+make docker-logs
+```
+
+Expected state:
+- `digest-bot` is `Up`.
+- Logs do not repeatedly show auth/env errors.
+- Telegram `/status` command responds from an authorized admin account.
+
+### Persistence Model
+Container runtime state is persisted on host mounts:
+- `config/` (read-only in container)
+- `data/` (includes `sources.local.yaml` and inbox file)
+- `logs/`
+- `.runtime/` (run lock, runtime artifacts)
+- `digest-live.db`
+- `obsidian-vault/`
+
+### Healthcheck
+`compose.yaml` defines a healthcheck for the bot container process command line.
+Use `docker compose ps` to inspect health status.
 
 ## Configuration
 ### `config/sources.yaml`

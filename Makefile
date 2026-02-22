@@ -1,4 +1,4 @@
-.PHONY: test live schedule logs bot
+.PHONY: test live schedule logs bot docker-build docker-up docker-down docker-logs docker-ps docker-restart
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && echo 1 || echo 0)
 
@@ -24,3 +24,23 @@ logs:
 
 bot:
 	$(DIGEST_CMD) --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db bot
+
+docker-build:
+	docker compose build digest-bot
+
+docker-up:
+	mkdir -p logs .runtime obsidian-vault
+	touch digest-live.db
+	docker compose up -d digest-bot
+
+docker-down:
+	docker compose down
+
+docker-logs:
+	docker compose logs -f digest-bot
+
+docker-ps:
+	docker compose ps
+
+docker-restart:
+	docker compose restart digest-bot
