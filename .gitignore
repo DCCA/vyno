@@ -13,8 +13,13 @@ dist/
 venv/
 .env
 .env.*
+!.env.example
 obsidian-vault/
 logs/
+
+# Runtime inbox data (can contain private links). Keep template tracked.
+data/x_inbox.txt
+!data/x_inbox.example.txt
 
 # Keep .docs as source-of-truth; ignore only ephemeral paths.
 .docs/tmp/
