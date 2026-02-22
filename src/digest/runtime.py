@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
+import logging
 
 from digest.config import ProfileConfig, SourceConfig
 from digest.connectors.rss import fetch_rss_items
@@ -15,6 +16,7 @@ from digest.pipeline.scoring import score_items
 from digest.pipeline.selection import select_digest_sections
 from digest.pipeline.summarize import FallbackSummarizer
 from digest.storage.sqlite_store import SQLiteStore
+from digest.logging_utils import get_run_logger, log_event
 from digest.summarizers.extractive import ExtractiveSummarizer
 from digest.summarizers.responses_api import ResponsesAPISummarizer
 
@@ -26,13 +28,25 @@ def run_digest(
     *,
     use_last_completed_window: bool = True,
     only_new: bool = True,
+    logger: logging.Logger | logging.LoggerAdapter | None = None,
 ) -> RunReport:
     run_id = uuid.uuid4().hex[:12]
+    run_logger = logger or get_run_logger(run_id)
     now = datetime.now(tz=timezone.utc)
     window_start = (now - timedelta(hours=24)).isoformat()
     if use_last_completed_window:
         window_start = store.last_completed_window_end() or window_start
     window_end = now.isoformat()
+    log_event(
+        run_logger,
+        "info",
+        "run_start",
+        "Digest run started",
+        window_start=window_start,
+        window_end=window_end,
+        use_last_completed_window=use_last_completed_window,
+        only_new=only_new,
+    )
     store.start_run(run_id, window_start, window_end)
 
     source_errors: list[str] = []
@@ -41,25 +55,70 @@ def run_digest(
     raw_items = []
     for feed_url in sources.rss_feeds:
         try:
-            raw_items.extend(fetch_rss_items([feed_url]))
+            fetched = fetch_rss_items([feed_url])
+            raw_items.extend(fetched)
+            log_event(run_logger, "info", "fetch_rss", "Fetched RSS source", source=feed_url, item_count=len(fetched))
         except Exception as exc:
             source_errors.append(f"rss:{feed_url}: {exc}")
+            log_event(run_logger, "error", "fetch_rss", "RSS source fetch failed", source=feed_url, error=str(exc))
 
     for channel_id in sources.youtube_channels:
         try:
-            raw_items.extend(fetch_youtube_items([channel_id], []))
+            fetched = fetch_youtube_items([channel_id], [])
+            raw_items.extend(fetched)
+            log_event(
+                run_logger,
+                "info",
+                "fetch_youtube_channel",
+                "Fetched YouTube channel source",
+                channel_id=channel_id,
+                item_count=len(fetched),
+            )
         except Exception as exc:
             source_errors.append(f"youtube:channel:{channel_id}: {exc}")
+            log_event(
+                run_logger,
+                "error",
+                "fetch_youtube_channel",
+                "YouTube channel fetch failed",
+                channel_id=channel_id,
+                error=str(exc),
+            )
 
     for query in sources.youtube_queries:
         try:
-            raw_items.extend(fetch_youtube_items([], [query]))
+            fetched = fetch_youtube_items([], [query])
+            raw_items.extend(fetched)
+            log_event(
+                run_logger,
+                "info",
+                "fetch_youtube_query",
+                "Fetched YouTube query source",
+                query=query,
+                item_count=len(fetched),
+            )
         except Exception as exc:
             source_errors.append(f"youtube:query:{query}: {exc}")
+            log_event(
+                run_logger,
+                "error",
+                "fetch_youtube_query",
+                "YouTube query fetch failed",
+                query=query,
+                error=str(exc),
+            )
 
     normalized = normalize_items(raw_items)
     unique_items = dedupe_and_cluster(normalized)
     unique_items = _filter_window(unique_items, window_start)
+    log_event(
+        run_logger,
+        "info",
+        "normalize_filter",
+        "Normalized and filtered candidates",
+        raw_count=len(raw_items),
+        unique_count=len(unique_items),
+    )
 
     seen = store.seen_keys()
     candidate_items = unique_items
@@ -69,10 +128,19 @@ def run_digest(
         # but all items were already seen in previous runs.
         if not candidate_items and unique_items:
             candidate_items = unique_items
+    log_event(
+        run_logger,
+        "info",
+        "candidate_select",
+        "Selected candidate items",
+        seen_count=len(seen),
+        candidate_count=len(candidate_items),
+    )
 
     scores = score_items(candidate_items, profile)
     score_map = {s.item_id: s for s in scores}
     scored_items = [ScoredItem(item=i, score=score_map[i.id]) for i in candidate_items if i.id in score_map]
+    log_event(run_logger, "info", "score", "Scored candidate items", score_count=len(scores), scored_item_count=len(scored_items))
 
     primary = ExtractiveSummarizer()
     if profile.llm_enabled:
@@ -88,6 +156,14 @@ def run_digest(
         scored.summary = summary
         if err:
             summary_errors.append(f"{scored.item.id}: {err}")
+            log_event(
+                run_logger,
+                "error",
+                "summarize",
+                "Summary fallback used",
+                item_id=scored.item.id,
+                error=err,
+            )
 
     sections = select_digest_sections(scored_items)
     # Keep note naming aligned with run window timestamps (UTC) to avoid
@@ -112,13 +188,15 @@ def run_digest(
     if profile.output.telegram_bot_token and profile.output.telegram_chat_id:
         try:
             send_telegram_message(profile.output.telegram_bot_token, profile.output.telegram_chat_id, telegram_message)
+            log_event(run_logger, "info", "deliver_telegram", "Telegram message sent")
         except Exception as exc:
             source_errors.append(f"telegram: {exc}")
             status = "partial"
+            log_event(run_logger, "error", "deliver_telegram", "Telegram delivery failed", error=str(exc))
 
     if profile.output.obsidian_vault_path:
         try:
-            write_obsidian_note(
+            out_path = write_obsidian_note(
                 profile.output.obsidian_vault_path,
                 profile.output.obsidian_folder,
                 date_str,
@@ -127,14 +205,26 @@ def run_digest(
                 run_id=run_id,
                 run_dt_utc=now,
             )
+            log_event(run_logger, "info", "deliver_obsidian", "Obsidian note written", path=str(out_path))
         except Exception as exc:
             source_errors.append(f"obsidian: {exc}")
             status = "partial"
+            log_event(run_logger, "error", "deliver_obsidian", "Obsidian write failed", error=str(exc))
 
     store.upsert_items(candidate_items)
     store.insert_scores(run_id, scores)
     store.mark_seen([i.url or i.hash for i in candidate_items])
     store.finish_run(run_id, status, source_errors, summary_errors)
+    log_event(
+        run_logger,
+        "info",
+        "run_finish",
+        "Digest run finished",
+        status=status,
+        source_error_count=len(source_errors),
+        summary_error_count=len(summary_errors),
+        final_item_count=len(scored_items),
+    )
 
     return RunReport(run_id=run_id, status=status, source_errors=source_errors, summary_errors=summary_errors)
 

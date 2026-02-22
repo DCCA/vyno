@@ -20,7 +20,14 @@ Daily AI digest pipeline that ingests RSS and YouTube feeds, ranks and summarize
 - `.docs/` Firehose planning/spec artifacts
 
 ## Quick Start
-1. Create a virtualenv and install dependencies:
+1. Preferred: use `uv`:
+```bash
+uv sync
+```
+
+`make` commands automatically use `uv run ...` when `uv` is installed.
+
+Fallback (if `uv` is not installed):
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
@@ -33,7 +40,7 @@ pip install -r requirements.txt
 
 3. Run once:
 ```bash
-PYTHONPATH=src ./bin/digest --sources config/sources.yaml --profile config/profile.yaml --db digest.db run
+make live
 ```
 
 ## Enable OpenAI Responses API Summaries
@@ -56,10 +63,10 @@ The implementation uses `POST /v1/responses` with JSON-schema output (`tldr`, `k
 ## Scheduling
 Run the built-in scheduler loop:
 ```bash
-PYTHONPATH=src ./bin/digest --sources config/sources.yaml --profile config/profile.yaml --db digest.db schedule --time 07:00 --timezone America/Sao_Paulo
+make schedule
 ```
 
-For production, prefer cron/systemd invoking the `run` command.
+For production, prefer cron/systemd invoking `make live` (or `uv run digest ... run`).
 
 ## Obsidian Naming Modes
 Configure in `config/profile.yaml`:
@@ -74,8 +81,22 @@ output:
 ## Testing
 Run all tests:
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -p 'test_*.py' -v
+make test
 ```
+
+## Logs
+The app writes structured JSON logs to `logs/digest.log` by default.
+
+Tail logs:
+```bash
+make logs
+```
+
+Optional environment overrides:
+- `DIGEST_LOG_PATH` (default: `logs/digest.log`)
+- `DIGEST_LOG_LEVEL` (default: `INFO`)
+- `DIGEST_LOG_MAX_BYTES` (default: `5000000`)
+- `DIGEST_LOG_BACKUP_COUNT` (default: `5`)
 
 ## Notes
 - In offline/sandbox environments, remote source fetches fail and runs can return `failed` or `partial`.

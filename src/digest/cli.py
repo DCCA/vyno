@@ -6,6 +6,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from digest.config import load_dotenv, load_profile, load_sources
+from digest.logging_utils import setup_logging
 from digest.runtime import run_digest
 from digest.storage.sqlite_store import SQLiteStore
 
@@ -49,6 +50,7 @@ def _cmd_schedule(args: argparse.Namespace) -> int:
 
 def main() -> int:
     load_dotenv(".env")
+    setup_logging()
     parser = argparse.ArgumentParser(prog="digest")
     parser.add_argument("--sources", default="config/sources.yaml")
     parser.add_argument("--profile", default="config/profile.yaml")
