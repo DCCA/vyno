@@ -7,7 +7,18 @@ import urllib.request
 from digest.models import DigestSections
 
 
+def render_telegram_messages(date_str: str, sections: DigestSections, *, max_len: int = 4000) -> list[str]:
+    if max_len < 256:
+        raise ValueError("max_len must be >= 256")
+    lines = _build_digest_lines(date_str, sections)
+    return _chunk_lines(lines, max_len=max_len)
+
+
 def render_telegram_message(date_str: str, sections: DigestSections) -> str:
+    return "\n\n".join(render_telegram_messages(date_str, sections))
+
+
+def _build_digest_lines(date_str: str, sections: DigestSections) -> list[str]:
     lines = [f"AI Digest - {date_str}", "", "Must-read"]
     for idx, item in enumerate(sections.must_read, start=1):
         summary = item.summary.tldr if item.summary else item.item.title
@@ -26,14 +37,36 @@ def render_telegram_message(date_str: str, sections: DigestSections) -> str:
         lines.extend(["", "Themes"])
         for theme in sections.themes:
             lines.append(f"- {theme}")
+    return lines
 
-    return "\n".join(lines).strip()
+
+def _chunk_lines(lines: list[str], *, max_len: int) -> list[str]:
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for line in lines:
+        if len(line) > max_len:
+            # Keep behavior deterministic even for pathological titles.
+            line = line[: max_len - 1] + "…"
+        delta = len(line) + (1 if current else 0)
+        if current and current_len + delta > max_len:
+            chunks.append("\n".join(current).strip())
+            current = [line]
+            current_len = len(line)
+            continue
+        current.append(line)
+        current_len += delta
+
+    if current:
+        chunks.append("\n".join(current).strip())
+    return [c for c in chunks if c]
 
 
 def send_telegram_message(bot_token: str, chat_id: str, message: str, reply_markup: dict | None = None) -> None:
     if not bot_token or not chat_id:
         raise ValueError("Telegram bot token and chat id are required")
-    payload = {"chat_id": chat_id, "text": message}
+    payload = {"chat_id": chat_id, "text": message, "disable_web_page_preview": "true"}
     if reply_markup is not None:
         payload["reply_markup"] = json.dumps(reply_markup, separators=(",", ":"))
     body = urllib.parse.urlencode(payload).encode("utf-8")

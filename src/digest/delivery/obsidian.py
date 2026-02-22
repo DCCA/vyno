@@ -2,8 +2,25 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 
 from digest.models import DigestSections
+
+
+TAG_CLEAN_RE = re.compile(r"[^a-z0-9-]+")
+
+
+def _normalize_tag(value: str) -> str:
+    raw = (value or "").strip().lower().replace(" ", "-").replace("_", "-")
+    raw = TAG_CLEAN_RE.sub("-", raw)
+    raw = re.sub(r"-{2,}", "-", raw).strip("-")
+    return raw
+
+
+def _render_tags(tags: list[str]) -> str:
+    normalized = [_normalize_tag(t) for t in tags]
+    normalized = [t for t in normalized if t]
+    return ", ".join(dict.fromkeys(normalized))
 
 
 def render_obsidian_note(
@@ -14,13 +31,14 @@ def render_obsidian_note(
     run_id: str = "",
     generated_at_utc: str = "",
 ) -> str:
+    doc_tags = ["ai", "digest"]
     lines = [
         "---",
         f"date: {date_str}",
-        "tags: [ai, digest]",
-        f"run_id: {run_id}",
         f"generated_at_utc: {generated_at_utc}",
+        f"run_id: {run_id}",
         f"source_count: {source_count}",
+        f"tags: [{', '.join(doc_tags)}]",
         "---",
         "",
         f"# AI Digest - {date_str}",
@@ -28,26 +46,26 @@ def render_obsidian_note(
         "## Must-read",
     ]
     for idx, item in enumerate(sections.must_read, start=1):
-        lines.append(f"{idx}. **{item.item.title}**")
-        lines.append(f"   - Link: {item.item.url}")
+        lines.append(f"> [!summary] {idx}. [{item.item.title}]({item.item.url})")
         if item.score.tags:
-            lines.append(f"   - Tags: {', '.join(item.score.tags)}")
+            lines.append(f"> Tags: {_render_tags(item.score.tags)}")
         if item.summary:
-            lines.append(f"   - TL;DR: {item.summary.tldr}")
-            lines.append(f"   - Why it matters: {item.summary.why_it_matters}")
+            lines.append(f"> TL;DR: {item.summary.tldr}")
+            lines.append(f"> Why it matters: {item.summary.why_it_matters}")
+        lines.append(">")
 
     lines.extend(["", "## Skim"])
     for item in sections.skim:
         line = f"- [{item.item.title}]({item.item.url})"
         if item.score.tags:
-            line += f" — tags: {', '.join(item.score.tags)}"
+            line += f" — tags: {_render_tags(item.score.tags)}"
         lines.append(line)
 
     lines.extend(["", "## Videos"])
     for item in sections.videos:
         line = f"- [{item.item.title}]({item.item.url})"
         if item.score.tags:
-            line += f" — tags: {', '.join(item.score.tags)}"
+            line += f" — tags: {_render_tags(item.score.tags)}"
         lines.append(line)
 
     return "\n".join(lines).strip() + "\n"

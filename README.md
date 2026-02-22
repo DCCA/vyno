@@ -114,10 +114,12 @@ Supported source types:
 Runtime-added sources are persisted in `data/sources.local.yaml` (overlay), merged with tracked `config/sources.yaml`.
 
 ## Output Format
-- Telegram: compact digest sections (`Must-read`, `Skim`, `Videos`)
+- Telegram: compact digest sections (`Must-read`, `Skim`, `Videos`) with automatic chunking for long digests
 - Obsidian:
   - Default: `AI Digest/YYYY-MM-DD/HHmmss-<run_id>.md`
   - Legacy mode: `AI Digest/YYYY-MM-DD.md`
+  - Stable frontmatter keys (`date`, `generated_at_utc`, `run_id`, `source_count`, `tags`)
+  - Must-read rendered as summary callouts for better scanability
 
 ## Logging and Debugging
 - Default log path: `logs/digest.log`

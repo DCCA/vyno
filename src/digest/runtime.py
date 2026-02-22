@@ -11,7 +11,7 @@ from digest.connectors.rss import fetch_rss_items
 from digest.connectors.x_inbox import fetch_x_inbox_items
 from digest.connectors.youtube import fetch_youtube_items
 from digest.delivery.obsidian import render_obsidian_note, write_obsidian_note
-from digest.delivery.telegram import render_telegram_message, send_telegram_message
+from digest.delivery.telegram import render_telegram_messages, send_telegram_message
 from digest.models import Item, RunReport, ScoredItem
 from digest.pipeline.dedupe import dedupe_and_cluster
 from digest.pipeline.normalize import normalize_items
@@ -257,7 +257,7 @@ def run_digest(
     # local-time drift where repeated runs overwrite the previous-day note.
     date_str = now.date().isoformat()
 
-    telegram_message = render_telegram_message(date_str, sections)
+    telegram_messages = render_telegram_messages(date_str, sections)
     note = render_obsidian_note(
         date_str,
         sections,
@@ -274,8 +274,16 @@ def run_digest(
 
     if profile.output.telegram_bot_token and profile.output.telegram_chat_id:
         try:
-            send_telegram_message(profile.output.telegram_bot_token, profile.output.telegram_chat_id, telegram_message)
-            log_event(run_logger, "info", "deliver_telegram", "Telegram message sent")
+            for idx, chunk in enumerate(telegram_messages, start=1):
+                send_telegram_message(profile.output.telegram_bot_token, profile.output.telegram_chat_id, chunk)
+                log_event(
+                    run_logger,
+                    "info",
+                    "deliver_telegram",
+                    "Telegram message sent",
+                    chunk_index=idx,
+                    chunk_count=len(telegram_messages),
+                )
         except Exception as exc:
             source_errors.append(f"telegram: {exc}")
             status = "partial"

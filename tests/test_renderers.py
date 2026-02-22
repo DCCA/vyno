@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime
 
 from digest.delivery.obsidian import render_obsidian_note
-from digest.delivery.telegram import render_telegram_message
+from digest.delivery.telegram import render_telegram_message, render_telegram_messages
 from digest.models import DigestSections, Item, Score, ScoredItem, Summary
 
 
@@ -27,7 +27,25 @@ class TestRenderers(unittest.TestCase):
         self.assertIn("Must-read", msg)
         self.assertIn("## Must-read", note)
         self.assertIn("run_id: abc123", note)
+        self.assertIn("generated_at_utc:", note)
+        self.assertIn("source_count:", note)
+        self.assertIn("[!summary]", note)
         self.assertIn("Tags: llm, benchmark", note)
+
+    def test_telegram_messages_chunk_under_limit(self):
+        long_summary = "x" * 500
+        items = []
+        for i in range(1, 35):
+            item = Item(str(i), f"https://x/{i}", f"Title {i}", "src", None, datetime.now(), "article", "body")
+            score = Score(str(i), 1, 1, 1, 3, tags=["llm"])
+            summary = Summary(tldr=long_summary, key_points=["kp"], why_it_matters="why")
+            items.append(ScoredItem(item=item, score=score, summary=summary))
+        sec = DigestSections(must_read=items[:10], skim=items[10:25], videos=items[25:30])
+        chunks = render_telegram_messages("2026-02-21", sec, max_len=800)
+        self.assertGreater(len(chunks), 1)
+        for chunk in chunks:
+            self.assertLessEqual(len(chunk), 800)
+        self.assertIn("Must-read", chunks[0])
 
 
 if __name__ == "__main__":
