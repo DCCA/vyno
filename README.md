@@ -37,11 +37,16 @@ PYTHONPATH=src ./bin/digest --sources config/sources.yaml --profile config/profi
 ## Enable OpenAI Responses API Summaries
 1. Set in `config/profile.yaml`:
 - `llm_enabled: true`
-- `openai_model: gpt-4o-mini`
+- `openai_model: gpt-4o`
 
 2. Export API key:
 ```bash
 export OPENAI_API_KEY=your_key_here
+```
+
+Optional model override via env:
+```bash
+export OPENAI_MODEL=gpt-4o
 ```
 
 The implementation uses `POST /v1/responses` with JSON-schema output (`tldr`, `key_points`, `why_it_matters`). If LLM fails, it falls back to extractive summaries.

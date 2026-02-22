@@ -11,7 +11,7 @@ from digest.models import Item, Summary
 class ResponsesAPISummarizer:
     provider = "openai_responses"
 
-    def __init__(self, model: str = "gpt-4o-mini", timeout: int = 30) -> None:
+    def __init__(self, model: str = "gpt-4o", timeout: int = 30) -> None:
         self.model = model
         self.timeout = timeout
         self.api_key = os.getenv("OPENAI_API_KEY", "")

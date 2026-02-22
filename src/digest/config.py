@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 
 try:
@@ -33,7 +34,7 @@ class ProfileConfig:
     blocked_sources: list[str] = field(default_factory=list)
     output: OutputSettings = field(default_factory=OutputSettings)
     llm_enabled: bool = False
-    openai_model: str = "gpt-4o-mini"
+    openai_model: str = "gpt-4o"
 
 
 def _read_yaml(path: str | Path) -> dict:
@@ -41,6 +42,21 @@ def _read_yaml(path: str | Path) -> dict:
     if not isinstance(data, dict):
         raise ValueError(f"Invalid YAML object at {path}")
     return data
+
+
+def load_dotenv(path: str | Path = ".env") -> None:
+    env_path = Path(path)
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        raw = line.strip()
+        if not raw or raw.startswith("#") or "=" not in raw:
+            continue
+        key, value = raw.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            os.environ.setdefault(key, value)
 
 
 def load_sources(path: str | Path) -> SourceConfig:
@@ -62,6 +78,7 @@ def load_profile(path: str | Path) -> ProfileConfig:
         obsidian_vault_path=str(out.get("obsidian_vault_path", "")),
         obsidian_folder=str(out.get("obsidian_folder", "AI Digest")),
     )
+    env_model = os.getenv("OPENAI_MODEL", "").strip()
     return ProfileConfig(
         topics=_as_str_list(data, "topics"),
         entities=_as_str_list(data, "entities"),
@@ -70,7 +87,7 @@ def load_profile(path: str | Path) -> ProfileConfig:
         blocked_sources=_as_str_list(data, "blocked_sources"),
         output=output,
         llm_enabled=bool(data.get("llm_enabled", False)),
-        openai_model=str(data.get("openai_model", "gpt-4o-mini")),
+        openai_model=str(data.get("openai_model", env_model or "gpt-4o")),
     )
 
 
