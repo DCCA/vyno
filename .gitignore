@@ -27,6 +27,8 @@ logs/
 # Runtime inbox data (can contain private links). Keep template tracked.
 data/x_inbox.txt
 !data/x_inbox.example.txt
+data/sources.local.yaml
+.runtime/
 
 # Keep .docs as source-of-truth; ignore only ephemeral paths.
 .docs/tmp/

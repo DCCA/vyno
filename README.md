@@ -1,119 +1,65 @@
-# 📰 AI Daily Digest
+# AI Daily Digest
 
 AI Daily Digest ingests high-signal AI content, ranks and tags it, sends a Telegram digest, and archives Markdown notes to Obsidian.
 
----
-
-## Table of Contents
-
-- [Features](#-features)
-- [Repository Structure](#-repository-structure)
-- [Quick Start](#-quick-start)
-- [Common Commands](#-common-commands)
-- [Configuration](#%EF%B8%8F-configuration)
-- [Output Format](#-output-format)
-- [Logging and Debugging](#-logging-and-debugging)
-- [Security Notes](#-security-notes)
-- [Known Limitations](#-known-limitations)
-
----
-
-## ✨ Features
-
-- **Source ingestion:**
+## Features
+- Source ingestion:
   - RSS feeds
   - YouTube channels
   - X links from a manual inbox file
-<<<<<<< HEAD
   - GitHub repos/topics/search queries/orgs
 - Deduplication, scoring, and selection (`Must-read`, `Skim`, `Videos`)
 - Agent-based scoring and tagging via OpenAI Responses API with rules fallback
 - Optional LLM summarization via OpenAI Responses API with extractive fallback
 - Delivery to Telegram and Obsidian
 - Structured JSON logs with run-level traceability
-=======
-  - GitHub repos/topics/search queries
-- **Deduplication, scoring, and selection** (`Must-read`, `Skim`, `Videos`)
-- **Agent-based scoring and tagging** via OpenAI Responses API with rules fallback
-- **Optional LLM summarization** via OpenAI Responses API with extractive fallback
-- **Delivery** to Telegram and Obsidian
-- **Structured JSON logs** with run-level traceability
->>>>>>> 33e48d7a8b2b22a8b254968e64dda3c62501a131
 
----
+## Repository Structure
+- `src/digest/`: application code
+- `config/`: runtime configuration (`sources.yaml`, `profile.yaml`)
+- `data/`: local runtime data templates (for example `x_inbox.example.txt`)
+- `tests/`: unit and integration tests
+- `.docs/`: Firehose planning/spec history
 
-## 📁 Repository Structure
-
-| Path | Description |
-|------|-------------|
-| `src/digest/` | Application code |
-| `config/` | Runtime configuration (`sources.yaml`, `profile.yaml`) |
-| `data/` | Local runtime data templates (for example `x_inbox.example.txt`) |
-| `tests/` | Unit and integration tests |
-| `.docs/` | Firehose planning/spec history |
-
----
-
-## 🚀 Quick Start
-
-**1. Copy env template and fill values:**
-
+## Quick Start
+1. Copy env template and fill values:
 ```bash
 cp .env.example .env
 ```
 
-**2. Install dependencies:**
-
-<details>
-<summary>Preferred (<code>uv</code>)</summary>
-
+2. Install dependencies:
+- Preferred (`uv`):
 ```bash
 uv sync
 ```
-
-</details>
-
-<details>
-<summary>Fallback (<code>venv</code> + <code>pip</code>)</summary>
-
+- Fallback (`venv` + `pip`):
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-</details>
-
-**3. Review/edit:**
-
+3. Review/edit:
 - `config/sources.yaml`
 - `config/profile.yaml`
 - `data/x_inbox.txt` (copy from template if needed)
 
-**4. Run once:**
-
+4. Run once:
 ```bash
 make live
 ```
 
----
+## Common Commands
+- Run tests: `make test`
+- Run once (live): `make live`
+- Run scheduler: `make schedule`
+- Scheduler with overrides: `make schedule TIME=08:30 TZ=America/New_York`
+- Tail logs: `make logs`
+- Run Telegram command bot:
+  - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db bot`
 
-## 🛠 Common Commands
-
-| Command | Description |
-|---------|-------------|
-| `make test` | Run tests |
-| `make live` | Run once (live) |
-| `make schedule` | Run scheduler |
-| `make schedule TIME=08:30 TZ=America/New_York` | Scheduler with overrides |
-| `make logs` | Tail logs |
-
----
-
-## ⚙️ Configuration
-
+## Configuration
 ### `config/sources.yaml`
-
 - `rss_feeds`, `youtube_channels`, `youtube_queries`
 - `x_inbox_path`
 - `github_repos`, `github_topics`, `github_search_queries`, `github_orgs`
@@ -121,11 +67,9 @@ make live
   - Org ingestion includes repo updates + releases (not issues/PRs)
 
 ### `config/profile.yaml`
-
-- **Scoring:**
+- Scoring:
   - `agent_scoring_enabled: true`
   - `openai_model: gpt-5.1-codex-mini`
-<<<<<<< HEAD
 - GitHub org guardrails:
   - `github_min_stars`
   - `github_include_forks`
@@ -133,63 +77,62 @@ make live
   - `github_max_repos_per_org`
   - `github_max_items_per_org`
 - Summarization:
-=======
-- **Summarization:**
->>>>>>> 33e48d7a8b2b22a8b254968e64dda3c62501a131
   - `llm_enabled: false|true`
-- **Output:**
+- Output:
   - Telegram token/chat id
   - Obsidian vault/folder
   - `obsidian_naming: timestamped|daily`
 
 ### Environment Variables
-
 See `.env.example` for full list.
-
 Most used:
+- `OPENAI_API_KEY`
+- `GITHUB_TOKEN` (recommended for GitHub API rate limits)
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+- Bot admin controls:
+  - `TELEGRAM_ADMIN_CHAT_IDS` (comma-separated)
+  - `TELEGRAM_ADMIN_USER_IDS` (comma-separated)
 
-| Variable | Notes |
-|----------|-------|
-| `OPENAI_API_KEY` | |
-| `GITHUB_TOKEN` | Recommended for GitHub API rate limits |
-| `TELEGRAM_BOT_TOKEN` | |
-| `TELEGRAM_CHAT_ID` | |
+## Telegram Ops Commands
+When bot mode is running, authorized admins can use:
+- `/status`
+- `/digest run`
+- `/source wizard`
+- `/source list [type]`
+- `/source add <type> <value>`
+- `/source remove <type> <value>`
 
----
+Supported source types:
+- `rss`
+- `youtube_channel`
+- `youtube_query`
+- `github_repo`
+- `github_topic`
+- `github_query`
+- `github_org`
 
-## 📤 Output Format
+Runtime-added sources are persisted in `data/sources.local.yaml` (overlay), merged with tracked `config/sources.yaml`.
 
-- **Telegram:** compact digest sections (`Must-read`, `Skim`, `Videos`)
-- **Obsidian:**
+## Output Format
+- Telegram: compact digest sections (`Must-read`, `Skim`, `Videos`)
+- Obsidian:
   - Default: `AI Digest/YYYY-MM-DD/HHmmss-<run_id>.md`
   - Legacy mode: `AI Digest/YYYY-MM-DD.md`
 
----
-
-## 🔍 Logging and Debugging
-
+## Logging and Debugging
 - Default log path: `logs/digest.log`
 - Log format: JSON lines with `run_id`, `stage`, `level`, and context fields
 - Useful overrides:
+  - `DIGEST_LOG_PATH`
+  - `DIGEST_LOG_LEVEL`
+  - `DIGEST_LOG_MAX_BYTES`
+  - `DIGEST_LOG_BACKUP_COUNT`
 
-| Variable | Purpose |
-|----------|---------|
-| `DIGEST_LOG_PATH` | Custom log file path |
-| `DIGEST_LOG_LEVEL` | Log verbosity level |
-| `DIGEST_LOG_MAX_BYTES` | Max log file size |
-| `DIGEST_LOG_BACKUP_COUNT` | Number of log backups |
-
----
-
-## 🔒 Security Notes
-
+## Security Notes
 - Never commit real secrets to git.
 - Use `.env` locally (ignored by `.gitignore`).
 - Keep inbox/runtime files private; use tracked templates (`.env.example`, `data/x_inbox.example.txt`) for sharing.
 
----
-
-## ⚠️ Known Limitations
-
+## Known Limitations
 - In restricted network environments, source fetches may fail and runs can be `partial` or `failed`.
 - X ingestion is manual-link based in MVP (no direct X API automation yet).

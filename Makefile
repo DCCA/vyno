@@ -1,4 +1,4 @@
-.PHONY: test live schedule logs
+.PHONY: test live schedule logs bot
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && echo 1 || echo 0)
 
@@ -21,3 +21,6 @@ schedule:
 
 logs:
 	tail -f logs/digest.log
+
+bot:
+	$(DIGEST_CMD) --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db bot

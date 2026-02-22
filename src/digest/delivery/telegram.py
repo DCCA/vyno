@@ -30,10 +30,12 @@ def render_telegram_message(date_str: str, sections: DigestSections) -> str:
     return "\n".join(lines).strip()
 
 
-def send_telegram_message(bot_token: str, chat_id: str, message: str) -> None:
+def send_telegram_message(bot_token: str, chat_id: str, message: str, reply_markup: dict | None = None) -> None:
     if not bot_token or not chat_id:
         raise ValueError("Telegram bot token and chat id are required")
     payload = {"chat_id": chat_id, "text": message}
+    if reply_markup is not None:
+        payload["reply_markup"] = json.dumps(reply_markup, separators=(",", ":"))
     body = urllib.parse.urlencode(payload).encode("utf-8")
     req = urllib.request.Request(
         f"https://api.telegram.org/bot{bot_token}/sendMessage",
@@ -45,3 +47,38 @@ def send_telegram_message(bot_token: str, chat_id: str, message: str) -> None:
         result = json.loads(resp.read().decode("utf-8"))
     if not result.get("ok"):
         raise RuntimeError("Telegram send failed")
+
+
+def get_telegram_updates(bot_token: str, *, offset: int | None = None, timeout: int = 30) -> list[dict]:
+    if not bot_token:
+        raise ValueError("Telegram bot token is required")
+    query = {"timeout": str(max(1, timeout))}
+    if offset is not None:
+        query["offset"] = str(offset)
+    url = f"https://api.telegram.org/bot{bot_token}/getUpdates?{urllib.parse.urlencode(query)}"
+    req = urllib.request.Request(url, method="GET")
+    with urllib.request.urlopen(req, timeout=timeout + 10) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
+    if not result.get("ok"):
+        raise RuntimeError("Telegram getUpdates failed")
+    rows = result.get("result", [])
+    return rows if isinstance(rows, list) else []
+
+
+def answer_telegram_callback(bot_token: str, callback_query_id: str, text: str = "") -> None:
+    if not bot_token or not callback_query_id:
+        raise ValueError("Telegram bot token and callback_query_id are required")
+    payload = {"callback_query_id": callback_query_id}
+    if text:
+        payload["text"] = text[:180]
+    body = urllib.parse.urlencode(payload).encode("utf-8")
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery",
+        data=body,
+        method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
+    if not result.get("ok"):
+        raise RuntimeError("Telegram answerCallbackQuery failed")

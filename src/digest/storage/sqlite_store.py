@@ -173,3 +173,14 @@ class SQLiteStore:
                 "SELECT window_end FROM runs WHERE status IN ('success', 'partial') ORDER BY started_at DESC LIMIT 1"
             ).fetchone()
         return row[0] if row else None
+
+    def latest_run_summary(self) -> tuple[str, str, str, int, int] | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT run_id, status, started_at, source_errors, summary_errors FROM runs ORDER BY started_at DESC LIMIT 1"
+            ).fetchone()
+        if not row:
+            return None
+        src_errs = len((row[3] or "").splitlines()) if row[3] else 0
+        sum_errs = len((row[4] or "").splitlines()) if row[4] else 0
+        return str(row[0]), str(row[1]), str(row[2]), src_errs, sum_errs
