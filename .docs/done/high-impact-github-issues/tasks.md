@@ -6,13 +6,13 @@
   - [x] 1.3 Apply issue gate in runtime candidate filtering
   - [x] 1.4 Emit issue filter counters in runtime telemetry
 
-- [ ] 2.0 Test and verify
+- [x] 2.0 Test and verify
   - [x] 2.1 Add unit tests for issue impact helper
   - [x] 2.2 Update connector tests for issue metadata enrichment
   - [x] 2.3 Add runtime integration test for gate behavior
   - [x] 2.4 Run full test suite
   - [x] 2.5 Run web build
 
-- [ ] 3.0 Archive change
-  - [ ] 3.1 Move change to `.docs/done/`
-  - [ ] 3.2 Add completion summary
+- [x] 3.0 Archive change
+  - [x] 3.1 Move change to `.docs/done/`
+  - [x] 3.2 Add completion summary
