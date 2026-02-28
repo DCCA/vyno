@@ -1,7 +1,7 @@
 # Spec: Must-read Source Diversity Cap
 
 ### Requirement: Must-read Selection SHALL Limit Per-source Dominance
-The system SHALL cap Must-read items from the same source using `must_read_max_per_source`.
+The system SHALL cap Must-read items from the same source family/domain using `must_read_max_per_source`.
 
 #### Scenario: One source dominates ranked candidates
 - GIVEN top-ranked non-video items are mostly from one source

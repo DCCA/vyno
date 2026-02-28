@@ -61,6 +61,27 @@ class TestSelection(unittest.TestCase):
         self.assertLessEqual(must_sources.count("https://arxiv.org/rss/cs.AI"), 2)
         self.assertIn("https://news.ycombinator.com/rss", must_sources)
 
+    def test_source_cap_uses_domain_bucket_not_feed_url(self):
+        rows = [
+            _mk(1, source="https://arxiv.org/rss/cs.AI"),
+            _mk(2, source="https://arxiv.org/rss/cs.CL"),
+            _mk(3, source="https://arxiv.org/rss/cs.LG"),
+            _mk(4, source="https://news.ycombinator.com/rss"),
+            _mk(
+                5,
+                source="https://techcrunch.com/category/artificial-intelligence/feed/",
+            ),
+            _mk(6, source="https://www.theverge.com/rss/tech/index.xml"),
+        ]
+        for idx, row in enumerate(rows):
+            row.score.total = 100 - idx
+
+        sections = select_digest_sections(rows, must_read_max_per_source=2)
+        arxiv_count = sum(
+            1 for si in sections.must_read if "arxiv.org" in si.item.source
+        )
+        self.assertLessEqual(arxiv_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

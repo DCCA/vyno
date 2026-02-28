@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import urllib.parse
+
 from digest.models import DigestSections, ScoredItem
 
 
@@ -52,7 +54,7 @@ def _select_must_read(
     source_counts: dict[str, int] = {}
 
     for scored in non_videos:
-        source = scored.item.source.strip().lower()
+        source = _source_bucket(scored.item.source)
         if source_counts.get(source, 0) >= max_per_source:
             continue
         selected.append(scored)
@@ -69,3 +71,18 @@ def _select_must_read(
             break
 
     return selected
+
+
+def _source_bucket(raw: str) -> str:
+    value = (raw or "").strip().lower()
+    if not value:
+        return "unknown"
+    if value.startswith("github:"):
+        return "github"
+    if value.startswith("http://") or value.startswith("https://"):
+        parsed = urllib.parse.urlparse(value)
+        host = (parsed.netloc or "").strip().lower()
+        if host.startswith("www."):
+            host = host[4:]
+        return host or value
+    return value
