@@ -638,6 +638,79 @@ class TestRuntimeIntegration(unittest.TestCase):
             self.assertEqual(second.skim_count, 0)
             self.assertEqual(second.video_count, 0)
 
+    def test_incremental_mode_supplements_seen_videos_when_none_new(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            store = SQLiteStore(str(db))
+            sources = SourceConfig(
+                rss_feeds=["fixture-rss"],
+                youtube_channels=["fixture-yt"],
+                youtube_queries=[],
+            )
+            profile = ProfileConfig(llm_enabled=False, agent_scoring_enabled=False)
+
+            seen_article = Item(
+                id="seen-article",
+                url="https://example.com/seen-article",
+                title="Seen article",
+                source="fixture-rss",
+                author=None,
+                published_at=datetime.now(),
+                type="article",
+                raw_text="seen article",
+                hash="seen-article-hash",
+            )
+            seen_video = Item(
+                id="seen-video",
+                url="https://youtube.com/watch?v=seen",
+                title="Seen video",
+                source="youtube.com",
+                author=None,
+                published_at=datetime.now(),
+                type="video",
+                raw_text="seen video",
+                hash="seen-video-hash",
+            )
+            new_article = Item(
+                id="new-article",
+                url="https://example.com/new-article",
+                title="New article",
+                source="fixture-rss",
+                author=None,
+                published_at=datetime.now(),
+                type="article",
+                raw_text="new article",
+                hash="new-article-hash",
+            )
+
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[seen_article]),
+                patch("digest.runtime.fetch_youtube_items", return_value=[seen_video]),
+            ):
+                run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
+
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[new_article]),
+                patch("digest.runtime.fetch_youtube_items", return_value=[seen_video]),
+            ):
+                second = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=True,
+                    allow_seen_fallback=False,
+                )
+
+            self.assertEqual(second.source_count, 2)
+            self.assertGreaterEqual(second.video_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

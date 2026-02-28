@@ -320,12 +320,34 @@ def run_digest(
 
     seen = store.seen_keys()
     candidate_items = unique_items
+    supplemental_seen_videos = 0
     if only_new:
         candidate_items = [i for i in unique_items if (i.url or i.hash) not in seen]
         # Keep delivery non-empty for manual/interactive usage when window has content
         # but all items were already seen in previous runs.
         if allow_seen_fallback and not candidate_items and unique_items:
             candidate_items = unique_items
+        elif not allow_seen_fallback and candidate_items:
+            has_video = any(i.type == "video" for i in candidate_items)
+            if not has_video:
+                existing_ids = {i.id for i in candidate_items}
+                seen_videos = [
+                    i
+                    for i in unique_items
+                    if i.type == "video"
+                    and (i.url or i.hash) in seen
+                    and i.id not in existing_ids
+                ]
+                seen_videos.sort(
+                    key=lambda i: (
+                        i.published_at or datetime.min.replace(tzinfo=timezone.utc)
+                    ),
+                    reverse=True,
+                )
+                supplements = seen_videos[:2]
+                if supplements:
+                    candidate_items.extend(supplements)
+                    supplemental_seen_videos = len(supplements)
     log_event(
         run_logger,
         "info",
@@ -333,12 +355,14 @@ def run_digest(
         "Selected candidate items",
         seen_count=len(seen),
         candidate_count=len(candidate_items),
+        supplemental_seen_videos=supplemental_seen_videos,
     )
     emit_progress(
         "candidate_select",
         "Selected candidate items",
         candidate_count=len(candidate_items),
         seen_count=len(seen),
+        supplemental_seen_videos=supplemental_seen_videos,
     )
 
     scores = []
