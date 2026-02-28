@@ -27,7 +27,9 @@ github_repo_max_age_days: 30
 github_activity_max_age_days: 14
 llm_enabled: true
 agent_scoring_enabled: true
-max_agent_items_per_run: 40
+max_agent_items_per_run: 20
+max_llm_summaries_per_run: 20
+max_llm_requests_per_run: 45
 min_llm_coverage: 0.9
 max_fallback_share: 0.1
 agent_scoring_retry_attempts: 1

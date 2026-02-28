@@ -46,6 +46,8 @@ def run_digest(
     *,
     use_last_completed_window: bool = True,
     only_new: bool = True,
+    allow_seen_fallback: bool = True,
+    preview_mode: bool = False,
     logger: logging.Logger | logging.LoggerAdapter | None = None,
     progress_cb: ProgressCallback | None = None,
 ) -> RunReport:
@@ -85,6 +87,7 @@ def run_digest(
         window_end=window_end,
         use_last_completed_window=use_last_completed_window,
         only_new=only_new,
+        preview_mode=preview_mode,
     )
     store.start_run(run_id, window_start, window_end)
     emit_progress(
@@ -92,6 +95,7 @@ def run_digest(
         "Digest run started",
         window_start=window_start,
         window_end=window_end,
+        preview_mode=preview_mode,
     )
 
     source_errors: list[str] = []
@@ -320,7 +324,7 @@ def run_digest(
         candidate_items = [i for i in unique_items if (i.url or i.hash) not in seen]
         # Keep delivery non-empty for manual/interactive usage when window has content
         # but all items were already seen in previous runs.
-        if not candidate_items and unique_items:
+        if allow_seen_fallback and not candidate_items and unique_items:
             candidate_items = unique_items
     log_event(
         run_logger,
@@ -345,6 +349,34 @@ def run_digest(
     cache_hits = 0
     cache_misses = 0
     fallback_reasons: Counter[str] = Counter()
+    max_llm_requests_per_run = max(0, int(profile.max_llm_requests_per_run))
+    llm_requests_used = 0
+    llm_budget_reported_ops: set[str] = set()
+
+    def reserve_llm_request(operation: str) -> bool:
+        nonlocal llm_requests_used
+        if llm_requests_used < max_llm_requests_per_run:
+            llm_requests_used += 1
+            return True
+        if operation not in llm_budget_reported_ops:
+            llm_budget_reported_ops.add(operation)
+            log_event(
+                run_logger,
+                "info",
+                "llm_budget",
+                "LLM request budget exhausted",
+                operation=operation,
+                max_llm_requests_per_run=max_llm_requests_per_run,
+                llm_requests_used=llm_requests_used,
+            )
+            emit_progress(
+                "llm_budget",
+                "LLM request budget exhausted",
+                operation=operation,
+                max_llm_requests_per_run=max_llm_requests_per_run,
+                llm_requests_used=llm_requests_used,
+            )
+        return False
 
     eligible_items = [item for item in candidate_items if not is_blocked(item, profile)]
     rules_scores = {item.id: score_item(item, profile) for item in eligible_items}
@@ -391,9 +423,31 @@ def run_digest(
             )
 
     agent_scope_count = len(agent_scope_ids)
-    for item in candidate_items:
+    total_candidates = len(candidate_items)
+
+    def emit_score_progress(processed_count: int) -> None:
+        if processed_count <= 0 or total_candidates <= 0:
+            return
+        if (
+            processed_count == 1
+            or processed_count == total_candidates
+            or processed_count % 25 == 0
+        ):
+            emit_progress(
+                "score_progress",
+                "Scoring candidate items",
+                processed_count=processed_count,
+                total_count=total_candidates,
+                llm_scored_count=llm_scored_count,
+                fallback_scored_count=fallback_scored_count,
+                cache_hits=cache_hits,
+                cache_misses=cache_misses,
+            )
+
+    for idx, item in enumerate(candidate_items, start=1):
         rules_score = rules_scores.get(item.id)
         if rules_score is None:
+            emit_score_progress(idx)
             continue
         in_agent_scope = item.id in agent_scope_ids
 
@@ -401,6 +455,7 @@ def run_digest(
             if profile.agent_scoring_enabled:
                 policy_fallback_count += 1
             scores.append(rules_score)
+            emit_score_progress(idx)
             continue
 
         cached_score = store.get_cached_score(
@@ -413,10 +468,17 @@ def run_digest(
             cache_hits += 1
             llm_scored_count += 1
             scores.append(cached_score)
+            emit_score_progress(idx)
             continue
         cache_misses += 1
 
         if agent_scorer is not None:
+            if not reserve_llm_request("score"):
+                fallback_reasons["budget_exhausted"] += 1
+                fallback_scored_count += 1
+                scores.append(rules_score)
+                emit_score_progress(idx)
+                continue
             score, err = _score_with_retries(
                 item,
                 agent_scorer,
@@ -427,6 +489,7 @@ def run_digest(
                 llm_scored_count += 1
                 scores.append(score)
                 store.upsert_cached_score(item.hash, profile.openai_model, score)
+                emit_score_progress(idx)
                 continue
             if err is not None:
                 reason = _classify_fallback_reason(str(err))
@@ -443,6 +506,7 @@ def run_digest(
 
         fallback_scored_count += 1
         scores.append(rules_score)
+        emit_score_progress(idx)
     score_map = {s.item_id: s for s in scores}
     scored_items = [
         ScoredItem(item=i, score=score_map[i.id])
@@ -464,36 +528,10 @@ def run_digest(
         scored_item_count=len(scored_items),
     )
 
-    primary = ExtractiveSummarizer()
-    if profile.llm_enabled:
-        try:
-            primary = ResponsesAPISummarizer(model=profile.openai_model)
-        except Exception as exc:
-            summary_errors.append(f"llm_init: {exc}")
-            primary = ExtractiveSummarizer()
-
-    summarizer = FallbackSummarizer(primary=primary, fallback=ExtractiveSummarizer())
     summary_fallback_count = 0
-    for scored in scored_items:
-        summary, err = summarizer.summarize(scored.item)
-        scored.summary = summary
-        if err:
-            summary_fallback_count += 1
-            summary_errors.append(f"{scored.item.id}: {err}")
-            log_event(
-                run_logger,
-                "error",
-                "summarize",
-                "Summary fallback used",
-                item_id=scored.item.id,
-                error=err,
-            )
-    emit_progress(
-        "summarize",
-        "Summarized scored items",
-        item_count=len(scored_items),
-        fallback_count=summary_fallback_count,
-    )
+    llm_summary_count = 0
+    extractive_summary_count = 0
+    llm_summary_budget_skips = 0
 
     quality_score: float | None = None
     quality_confidence: float | None = None
@@ -563,112 +601,128 @@ def run_digest(
                     candidate_pool_size=len(candidate_pool),
                     model=quality_model,
                 )
-                quality_judge = ResponsesAPIQualityRepair(model=quality_model)
-                repair_result = quality_judge.evaluate_and_repair(
-                    current_must_read=sections.must_read,
-                    candidate_pool=candidate_pool,
-                )
-                quality_score = float(repair_result.quality_score)
-                quality_confidence = float(repair_result.confidence)
-                quality_issues = list(repair_result.issues)
-                log_event(
-                    run_logger,
-                    "info",
-                    "quality_judge_result",
-                    "Must-read quality judge returned result",
-                    quality_score=round(quality_score, 2),
-                    confidence=round(quality_confidence, 3),
-                    issues=quality_issues,
-                )
-                emit_progress(
-                    "quality_judge_result",
-                    "Must-read quality judge returned result",
-                    quality_score=round(quality_score, 2),
-                    confidence=round(quality_confidence, 3),
-                )
-
-                after_ids = before_ids
-                if quality_score < profile.quality_repair_threshold:
-                    sections = rebuild_sections_with_repair(
-                        sections,
-                        ranked_non_videos,
-                        repair_result.repaired_must_read_ids,
-                    )
-                    after_ids = [si.item.id for si in sections.must_read]
-                    quality_repair_applied = True
+                if not reserve_llm_request("quality_repair"):
                     log_event(
                         run_logger,
                         "info",
-                        "quality_repair_applied",
-                        "Applied Must-read online repair",
+                        "quality_repair_skipped",
+                        "Skipped Must-read repair due to LLM budget",
+                        max_llm_requests_per_run=max_llm_requests_per_run,
+                        llm_requests_used=llm_requests_used,
+                    )
+                    emit_progress(
+                        "quality_repair_skipped",
+                        "Skipped Must-read repair due to LLM budget",
+                        max_llm_requests_per_run=max_llm_requests_per_run,
+                        llm_requests_used=llm_requests_used,
+                    )
+                else:
+                    quality_judge = ResponsesAPIQualityRepair(model=quality_model)
+                    repair_result = quality_judge.evaluate_and_repair(
+                        current_must_read=sections.must_read,
+                        candidate_pool=candidate_pool,
+                    )
+                    quality_score = float(repair_result.quality_score)
+                    quality_confidence = float(repair_result.confidence)
+                    quality_issues = list(repair_result.issues)
+                    log_event(
+                        run_logger,
+                        "info",
+                        "quality_judge_result",
+                        "Must-read quality judge returned result",
                         quality_score=round(quality_score, 2),
-                        threshold=profile.quality_repair_threshold,
+                        confidence=round(quality_confidence, 3),
+                        issues=quality_issues,
+                    )
+                    emit_progress(
+                        "quality_judge_result",
+                        "Must-read quality judge returned result",
+                        quality_score=round(quality_score, 2),
+                        confidence=round(quality_confidence, 3),
+                    )
+
+                    after_ids = before_ids
+                    if quality_score < profile.quality_repair_threshold:
+                        sections = rebuild_sections_with_repair(
+                            sections,
+                            ranked_non_videos,
+                            repair_result.repaired_must_read_ids,
+                        )
+                        after_ids = [si.item.id for si in sections.must_read]
+                        quality_repair_applied = True
+                        log_event(
+                            run_logger,
+                            "info",
+                            "quality_repair_applied",
+                            "Applied Must-read online repair",
+                            quality_score=round(quality_score, 2),
+                            threshold=profile.quality_repair_threshold,
+                            issues=quality_issues,
+                            before_ids=before_ids,
+                            after_ids=after_ids,
+                        )
+                        emit_progress(
+                            "quality_repair_applied",
+                            "Applied Must-read online repair",
+                            quality_score=round(quality_score, 2),
+                            threshold=profile.quality_repair_threshold,
+                        )
+                    else:
+                        log_event(
+                            run_logger,
+                            "info",
+                            "quality_repair_skipped",
+                            "Skipped Must-read repair due to quality score",
+                            quality_score=round(quality_score, 2),
+                            threshold=profile.quality_repair_threshold,
+                            issues=quality_issues,
+                        )
+                        emit_progress(
+                            "quality_repair_skipped",
+                            "Skipped Must-read repair due to quality score",
+                            quality_score=round(quality_score, 2),
+                            threshold=profile.quality_repair_threshold,
+                        )
+
+                    store.insert_quality_eval(
+                        run_id=run_id,
+                        quality_score=quality_score,
+                        confidence=quality_confidence,
                         issues=quality_issues,
                         before_ids=before_ids,
                         after_ids=after_ids,
-                    )
-                    emit_progress(
-                        "quality_repair_applied",
-                        "Applied Must-read online repair",
-                        quality_score=round(quality_score, 2),
-                        threshold=profile.quality_repair_threshold,
-                    )
-                else:
-                    log_event(
-                        run_logger,
-                        "info",
-                        "quality_repair_skipped",
-                        "Skipped Must-read repair due to quality score",
-                        quality_score=round(quality_score, 2),
-                        threshold=profile.quality_repair_threshold,
-                        issues=quality_issues,
-                    )
-                    emit_progress(
-                        "quality_repair_skipped",
-                        "Skipped Must-read repair due to quality score",
-                        quality_score=round(quality_score, 2),
-                        threshold=profile.quality_repair_threshold,
+                        repaired=quality_repair_applied,
+                        model=quality_model,
                     )
 
-                store.insert_quality_eval(
-                    run_id=run_id,
-                    quality_score=quality_score,
-                    confidence=quality_confidence,
-                    issues=quality_issues,
-                    before_ids=before_ids,
-                    after_ids=after_ids,
-                    repaired=quality_repair_applied,
-                    model=quality_model,
-                )
-
-                if profile.quality_learning_enabled and after_ids != before_ids:
-                    feature_map = {
-                        si.item.id: item_features(si)
-                        for si in ranked_non_videos[
-                            : profile.quality_repair_candidate_pool_size
-                        ]
-                    }
-                    deltas = compute_repair_feature_deltas(
-                        before_ids,
-                        after_ids,
-                        feature_map=feature_map,
-                    )
-                    store.apply_quality_prior_deltas(
-                        deltas,
-                        max_abs_weight=profile.quality_learning_max_offset,
-                    )
-                    log_event(
-                        run_logger,
-                        "info",
-                        "quality_learning_update",
-                        "Updated quality priors from repair decisions",
-                        delta_feature_count=len(deltas),
-                    )
-                    emit_progress(
-                        "quality_learning_update",
-                        "Updated quality priors from repair decisions",
-                        delta_feature_count=len(deltas),
-                    )
+                    if profile.quality_learning_enabled and after_ids != before_ids:
+                        feature_map = {
+                            si.item.id: item_features(si)
+                            for si in ranked_non_videos[
+                                : profile.quality_repair_candidate_pool_size
+                            ]
+                        }
+                        deltas = compute_repair_feature_deltas(
+                            before_ids,
+                            after_ids,
+                            feature_map=feature_map,
+                        )
+                        store.apply_quality_prior_deltas(
+                            deltas,
+                            max_abs_weight=profile.quality_learning_max_offset,
+                        )
+                        log_event(
+                            run_logger,
+                            "info",
+                            "quality_learning_update",
+                            "Updated quality priors from repair decisions",
+                            delta_feature_count=len(deltas),
+                        )
+                        emit_progress(
+                            "quality_learning_update",
+                            "Updated quality priors from repair decisions",
+                            delta_feature_count=len(deltas),
+                        )
             except Exception as exc:
                 log_event(
                     run_logger,
@@ -701,6 +755,92 @@ def run_digest(
                 candidate_pool_size=len(candidate_pool),
                 must_read_count=len(sections.must_read),
             )
+
+    selected_items: list[ScoredItem] = []
+    selected_ids: set[str] = set()
+    for scored in sections.must_read + sections.skim + sections.videos:
+        if scored.item.id in selected_ids:
+            continue
+        selected_ids.add(scored.item.id)
+        selected_items.append(scored)
+
+    extractive_summarizer = ExtractiveSummarizer()
+    llm_summarizer: FallbackSummarizer | None = None
+    summary_llm_limit = min(
+        len(selected_items),
+        max(0, int(profile.max_llm_summaries_per_run)),
+    )
+    if profile.llm_enabled and summary_llm_limit > 0:
+        try:
+            llm_summarizer = FallbackSummarizer(
+                primary=ResponsesAPISummarizer(model=profile.openai_model),
+                fallback=extractive_summarizer,
+            )
+        except Exception as exc:
+            summary_errors.append(f"llm_init: {exc}")
+
+    log_event(
+        run_logger,
+        "info",
+        "summarize_scope",
+        "Summarizing selected digest items",
+        selected_count=len(selected_items),
+        max_llm_summaries_per_run=summary_llm_limit,
+    )
+    emit_progress(
+        "summarize_scope",
+        "Summarizing selected digest items",
+        selected_count=len(selected_items),
+        max_llm_summaries_per_run=summary_llm_limit,
+    )
+
+    for idx, scored in enumerate(selected_items, start=1):
+        use_llm = llm_summarizer is not None and idx <= summary_llm_limit
+        if use_llm and not reserve_llm_request("summarize"):
+            llm_summary_budget_skips += 1
+            use_llm = False
+
+        if use_llm and llm_summarizer is not None:
+            summary, err = llm_summarizer.summarize(scored.item)
+            llm_summary_count += 1
+            if err:
+                summary_fallback_count += 1
+                summary_errors.append(f"{scored.item.id}: {err}")
+                log_event(
+                    run_logger,
+                    "error",
+                    "summarize",
+                    "Summary fallback used",
+                    item_id=scored.item.id,
+                    error=err,
+                )
+        else:
+            summary = extractive_summarizer.summarize(scored.item)
+            extractive_summary_count += 1
+
+        scored.summary = summary
+        if idx == 1 or idx == len(selected_items) or idx % 10 == 0:
+            emit_progress(
+                "summarize_progress",
+                "Summarizing selected digest items",
+                processed_count=idx,
+                total_count=len(selected_items),
+                llm_item_count=llm_summary_count,
+                extractive_item_count=extractive_summary_count,
+                fallback_count=summary_fallback_count,
+                budget_skip_count=llm_summary_budget_skips,
+            )
+
+    emit_progress(
+        "summarize",
+        "Summarized selected digest items",
+        item_count=len(selected_items),
+        llm_item_count=llm_summary_count,
+        extractive_item_count=extractive_summary_count,
+        fallback_count=summary_fallback_count,
+        budget_skip_count=llm_summary_budget_skips,
+    )
+
     # Keep note naming aligned with run window timestamps (UTC) to avoid
     # local-time drift where repeated runs overwrite the previous-day note.
     date_str = now.date().isoformat()
@@ -710,7 +850,8 @@ def run_digest(
         sections,
         render_mode=profile.output.render_mode,
     )
-    _write_latest_telegram_artifact(run_id, telegram_messages)
+    if not preview_mode:
+        _write_latest_telegram_artifact(run_id, telegram_messages)
     note = render_obsidian_note(
         date_str,
         sections,
@@ -769,7 +910,11 @@ def run_digest(
     if not raw_items and source_errors:
         status = "failed"
 
-    if profile.output.telegram_bot_token and profile.output.telegram_chat_id:
+    if (
+        not preview_mode
+        and profile.output.telegram_bot_token
+        and profile.output.telegram_chat_id
+    ):
         try:
             for idx, chunk in enumerate(telegram_messages, start=1):
                 send_telegram_message(
@@ -807,7 +952,7 @@ def run_digest(
                 error=str(exc),
             )
 
-    if profile.output.obsidian_vault_path:
+    if not preview_mode and profile.output.obsidian_vault_path:
         try:
             out_path = write_obsidian_note(
                 profile.output.obsidian_vault_path,
@@ -870,17 +1015,26 @@ def run_digest(
         ),
         quality_issues=quality_issues,
         quality_model=quality_model,
+        preview_mode=preview_mode,
         source_error_count=len(source_errors),
         summary_error_count=len(summary_errors),
-        final_item_count=len(scored_items),
+        final_item_count=len(selected_items),
+        llm_summary_count=llm_summary_count,
+        extractive_summary_count=extractive_summary_count,
+        llm_summary_budget_skips=llm_summary_budget_skips,
+        llm_requests_used=llm_requests_used,
+        max_llm_requests_per_run=max_llm_requests_per_run,
     )
     emit_progress(
         "run_finish",
         "Digest run finished",
         status=status,
+        preview_mode=preview_mode,
         source_error_count=len(source_errors),
         summary_error_count=len(summary_errors),
-        final_item_count=len(scored_items),
+        final_item_count=len(selected_items),
+        llm_requests_used=llm_requests_used,
+        max_llm_requests_per_run=max_llm_requests_per_run,
     )
 
     return RunReport(
@@ -888,6 +1042,12 @@ def run_digest(
         status=status,
         source_errors=source_errors,
         summary_errors=summary_errors,
+        telegram_messages=telegram_messages,
+        obsidian_note=note,
+        source_count=len(candidate_items),
+        must_read_count=len(sections.must_read),
+        skim_count=len(sections.skim),
+        video_count=len(sections.videos),
     )
 
 

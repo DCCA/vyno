@@ -90,6 +90,8 @@ class TestConfig(unittest.TestCase):
                     "github_repo_max_age_days: 21\n"
                     "github_activity_max_age_days: 5\n"
                     "max_agent_items_per_run: 12\n"
+                    "max_llm_summaries_per_run: 9\n"
+                    "max_llm_requests_per_run: 30\n"
                     "quality_repair_enabled: true\n"
                     "quality_repair_model: gpt-5.1-codex-mini\n"
                     "quality_repair_threshold: 80\n"
@@ -111,6 +113,8 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(profile.github_repo_max_age_days, 21)
             self.assertEqual(profile.github_activity_max_age_days, 5)
             self.assertEqual(profile.max_agent_items_per_run, 12)
+            self.assertEqual(profile.max_llm_summaries_per_run, 9)
+            self.assertEqual(profile.max_llm_requests_per_run, 30)
             self.assertTrue(profile.quality_repair_enabled)
             self.assertEqual(profile.quality_repair_model, "gpt-5.1-codex-mini")
             self.assertEqual(profile.quality_repair_threshold, 80)

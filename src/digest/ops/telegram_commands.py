@@ -334,8 +334,9 @@ def _trigger_run(ctx: CommandContext, chat_id: str) -> str:
                 sources,
                 profile,
                 store,
-                use_last_completed_window=False,
-                only_new=False,
+                use_last_completed_window=True,
+                only_new=True,
+                allow_seen_fallback=False,
                 logger=get_run_logger(run_id),
             )
             ctx.send_message(

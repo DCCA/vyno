@@ -10,10 +10,11 @@
 
 ## Scope control changes
 - Add `allow_seen_fallback` runtime flag (default true for compatibility).
-- Set web and bot live-run defaults to incremental:
+- Set bot live-run defaults to incremental:
   - `use_last_completed_window=True`
   - `only_new=True`
   - `allow_seen_fallback=False`
+- Keep web live runs on existing scope for this change; LLM budget + selected-item summarization still bound API volume.
 
 ## Telemetry changes
 - Emit and log summary-scope + budget usage:

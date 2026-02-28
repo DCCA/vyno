@@ -56,6 +56,8 @@ class ProfileConfig:
     llm_enabled: bool = False
     agent_scoring_enabled: bool = True
     max_agent_items_per_run: int = 40
+    max_llm_summaries_per_run: int = 20
+    max_llm_requests_per_run: int = 80
     min_llm_coverage: float = 0.9
     max_fallback_share: float = 0.1
     agent_scoring_retry_attempts: int = 1
@@ -209,6 +211,12 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         agent_scoring_enabled=bool(data.get("agent_scoring_enabled", True)),
         max_agent_items_per_run=max(
             0, int(data.get("max_agent_items_per_run", 40) or 40)
+        ),
+        max_llm_summaries_per_run=max(
+            0, int(data.get("max_llm_summaries_per_run", 20) or 20)
+        ),
+        max_llm_requests_per_run=max(
+            0, int(data.get("max_llm_requests_per_run", 80) or 80)
         ),
         min_llm_coverage=min_llm_coverage,
         max_fallback_share=max_fallback_share,

@@ -19,10 +19,10 @@ The runtime SHALL enforce a configurable per-run LLM request budget across scori
 - AND SHALL fail open to non-LLM behavior when possible
 
 ### Requirement: Interactive run scope defaults
-Web-triggered and bot-triggered live runs SHALL default to incremental scope.
+Bot-triggered live runs SHALL default to incremental scope.
 
-#### Scenario: Interactive run starts from UI or bot
-- GIVEN a user starts a live run from web or bot
+#### Scenario: Interactive run starts from bot
+- GIVEN a user starts a live run from bot
 - WHEN runtime options are applied
 - THEN the run SHALL use last completed window
 - AND SHALL process only new items by default

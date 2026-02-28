@@ -6,7 +6,7 @@ from unittest.mock import patch
 import sqlite3
 
 from digest.config import OutputSettings, ProfileConfig, SourceConfig
-from digest.models import Item
+from digest.models import Item, Score, Summary
 from digest.runtime import run_digest
 from digest.storage.sqlite_store import SQLiteStore
 
@@ -59,6 +59,8 @@ class TestRuntimeIntegration(unittest.TestCase):
             self.assertIn("run_start", stages)
             self.assertIn("run_finish", stages)
             self.assertIn("score", stages)
+            self.assertIn("score_progress", stages)
+            self.assertIn("summarize_progress", stages)
 
     def test_full_run_with_fixtures(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -109,6 +111,62 @@ class TestRuntimeIntegration(unittest.TestCase):
             conn.close()
             self.assertIsNotNone(row)
             self.assertEqual(row[0], "rules")
+
+    def test_preview_mode_skips_delivery_and_artifact_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            vault = Path(tmp) / "vault"
+            store = SQLiteStore(str(db))
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+            )
+            profile = ProfileConfig(
+                output=OutputSettings(
+                    telegram_bot_token="token",
+                    telegram_chat_id="chat",
+                    obsidian_vault_path=str(vault),
+                    obsidian_folder="AI Digest",
+                ),
+                llm_enabled=False,
+                agent_scoring_enabled=False,
+            )
+
+            fixture_item = Item(
+                id="fixture1",
+                url="https://example.com/fixture1",
+                title="OpenAI evals update",
+                source="fixture-source",
+                author=None,
+                published_at=datetime.now(),
+                type="article",
+                raw_text="Detailed ai evals coverage.",
+                hash="fixturehash1",
+            )
+
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]),
+                patch("digest.runtime.fetch_youtube_items", return_value=[]),
+                patch("digest.runtime.send_telegram_message") as send_mock,
+                patch("digest.runtime.write_obsidian_note") as write_note_mock,
+                patch(
+                    "digest.runtime._write_latest_telegram_artifact"
+                ) as artifact_mock,
+            ):
+                report = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                    preview_mode=True,
+                )
+
+            self.assertIn(report.status, {"success", "partial"})
+            self.assertGreaterEqual(len(report.telegram_messages), 1)
+            self.assertIn("AI Digest", report.obsidian_note)
+            send_mock.assert_not_called()
+            write_note_mock.assert_not_called()
+            artifact_mock.assert_not_called()
 
     def test_manual_mode_keeps_value_when_items_seen(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -387,6 +445,198 @@ class TestRuntimeIntegration(unittest.TestCase):
             self.assertEqual(opts.get("max_items_per_org"), 9)
             self.assertEqual(opts.get("repo_max_age_days"), 21)
             self.assertEqual(opts.get("activity_max_age_days"), 5)
+
+    def test_llm_summarization_is_limited_to_selected_items(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            store = SQLiteStore(str(db))
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+            )
+            profile = ProfileConfig(
+                llm_enabled=True,
+                agent_scoring_enabled=False,
+                max_llm_summaries_per_run=20,
+            )
+
+            fixture_items = [
+                Item(
+                    id=f"fixture-{idx}",
+                    url=f"https://example.com/{idx}",
+                    title=f"AI update {idx}",
+                    source="fixture-source",
+                    author=None,
+                    published_at=datetime.now(),
+                    type="article",
+                    raw_text=f"Detailed coverage {idx}",
+                    hash=f"fixture-hash-{idx}",
+                )
+                for idx in range(60)
+            ]
+            llm_summary_calls: list[str] = []
+
+            class _FakeLLMSummarizer:
+                def __init__(self, *args, **kwargs):
+                    pass
+
+                def summarize(self, item: Item) -> Summary:
+                    llm_summary_calls.append(item.id)
+                    return Summary(
+                        tldr=f"Summary for {item.id}",
+                        key_points=["point"],
+                        why_it_matters="matters",
+                        provider="openai_responses",
+                    )
+
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=fixture_items),
+                patch("digest.runtime.fetch_youtube_items", return_value=[]),
+                patch("digest.runtime.ResponsesAPISummarizer", _FakeLLMSummarizer),
+            ):
+                report = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
+
+            self.assertIn(report.status, {"success", "partial"})
+            selected_count = (
+                report.must_read_count + report.skim_count + report.video_count
+            )
+            self.assertEqual(len(llm_summary_calls), min(selected_count, 20))
+
+    def test_llm_request_budget_caps_scoring_and_summary_calls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            store = SQLiteStore(str(db))
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+            )
+            profile = ProfileConfig(
+                llm_enabled=True,
+                agent_scoring_enabled=True,
+                max_agent_items_per_run=10,
+                max_llm_summaries_per_run=20,
+                max_llm_requests_per_run=5,
+                quality_repair_enabled=False,
+            )
+
+            fixture_items = [
+                Item(
+                    id=f"budget-{idx}",
+                    url=f"https://example.com/budget-{idx}",
+                    title=f"Budget item {idx}",
+                    source="fixture-source",
+                    author=None,
+                    published_at=datetime.now(),
+                    type="article",
+                    raw_text=f"Budget text {idx}",
+                    hash=f"budget-hash-{idx}",
+                )
+                for idx in range(40)
+            ]
+
+            score_calls: list[str] = []
+            summary_calls: list[str] = []
+
+            class _FakeScorer:
+                def __init__(self, *args, **kwargs):
+                    pass
+
+                def score_and_tag(
+                    self, item: Item, *, max_text_chars: int = 8000
+                ) -> Score:
+                    score_calls.append(item.id)
+                    return Score(
+                        item_id=item.id,
+                        relevance=60,
+                        quality=20,
+                        novelty=5,
+                        total=85,
+                        reason="fake",
+                        tags=["llm"],
+                        topic_tags=["llm"],
+                        format_tags=["news"],
+                        provider="agent",
+                    )
+
+            class _FakeLLMSummarizer:
+                def __init__(self, *args, **kwargs):
+                    pass
+
+                def summarize(self, item: Item) -> Summary:
+                    summary_calls.append(item.id)
+                    return Summary(
+                        tldr=f"Summary for {item.id}",
+                        key_points=["point"],
+                        why_it_matters="matters",
+                        provider="openai_responses",
+                    )
+
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=fixture_items),
+                patch("digest.runtime.fetch_youtube_items", return_value=[]),
+                patch("digest.runtime.ResponsesAPIScorerTagger", _FakeScorer),
+                patch("digest.runtime.ResponsesAPISummarizer", _FakeLLMSummarizer),
+            ):
+                run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
+
+            self.assertEqual(len(score_calls), 5)
+            self.assertEqual(len(summary_calls), 0)
+
+    def test_incremental_mode_can_disable_seen_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            store = SQLiteStore(str(db))
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+            )
+            profile = ProfileConfig(llm_enabled=False, agent_scoring_enabled=False)
+
+            fixture_item = Item(
+                id="seen-item",
+                url="https://example.com/seen-item",
+                title="Seen item",
+                source="fixture-source",
+                author=None,
+                published_at=datetime.now(),
+                type="article",
+                raw_text="seen item text",
+                hash="seen-item-hash",
+            )
+
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]),
+                patch("digest.runtime.fetch_youtube_items", return_value=[]),
+            ):
+                run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
+                second = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=True,
+                    allow_seen_fallback=False,
+                )
+
+            self.assertEqual(second.source_count, 0)
+            self.assertEqual(second.must_read_count, 0)
+            self.assertEqual(second.skim_count, 0)
+            self.assertEqual(second.video_count, 0)
 
 
 if __name__ == "__main__":

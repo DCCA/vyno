@@ -105,12 +105,23 @@ class TestTelegramCommands(unittest.TestCase):
             with (
                 patch("digest.ops.telegram_commands.load_effective_profile"),
                 patch("digest.ops.telegram_commands.load_effective_sources"),
-                patch("digest.ops.telegram_commands.run_digest", return_value=Report()),
+                patch(
+                    "digest.ops.telegram_commands.run_digest", return_value=Report()
+                ) as run_mock,
             ):
                 resp = handle_update(upd, ctx)
                 self.assertIsNotNone(resp)
                 assert resp is not None
                 self.assertIn("Run started", resp.text or "")
+                for _ in range(50):
+                    if run_mock.called:
+                        break
+                    time.sleep(0.01)
+                self.assertTrue(run_mock.called)
+                kwargs = run_mock.call_args.kwargs
+                self.assertTrue(kwargs.get("use_last_completed_window"))
+                self.assertTrue(kwargs.get("only_new"))
+                self.assertFalse(kwargs.get("allow_seen_fallback", True))
                 for _ in range(50):
                     if sent:
                         break
