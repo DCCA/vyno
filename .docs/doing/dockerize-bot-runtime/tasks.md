@@ -14,9 +14,9 @@
 - [x] 4.2 Add bot operations runbook section in `README.md`.
 - [x] 4.3 Add first-run checklist (env validation, source overlay, log verification).
 
-- [ ] 5.1 Validate containerized `digest bot` start-up with mounted state.
-- [ ] 5.2 Validate restart behavior after forced bot process exit.
-- [ ] 5.3 Validate persistence across container recreation.
+- [ ] 5.1 Validate containerized `digest bot` start-up with mounted state. (Deferred: Docker CLI unavailable in this workspace; requires Docker-enabled host.)
+- [ ] 5.2 Validate restart behavior after forced bot process exit. (Deferred: Docker CLI unavailable in this workspace; requires Docker-enabled host.)
+- [ ] 5.3 Validate persistence across container recreation. (Deferred: Docker CLI unavailable in this workspace; requires Docker-enabled host.)
 
 - [x] 6.1 Run test suite and ensure no regression from Docker asset additions.
 - [ ] 6.2 Move change to `.docs/done/` after implementation and verification.

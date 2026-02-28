@@ -73,3 +73,9 @@ class RunReport:
     status: Literal["success", "partial", "failed"]
     source_errors: list[str] = field(default_factory=list)
     summary_errors: list[str] = field(default_factory=list)
+    telegram_messages: list[str] = field(default_factory=list)
+    obsidian_note: str = ""
+    source_count: int = 0
+    must_read_count: int = 0
+    skim_count: int = 0
+    video_count: int = 0

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import json
 import time
 from datetime import datetime
 import os
@@ -9,6 +10,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from digest.config import load_dotenv
+from digest.ops.onboarding import OnboardingSettings, run_preflight
 from digest.ops.profile_registry import load_effective_profile
 from digest.delivery.telegram import (
     answer_telegram_callback,
@@ -77,6 +79,47 @@ def _cmd_schedule(args: argparse.Namespace) -> int:
             )
             time.sleep(61)
         time.sleep(1)
+
+
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    settings = OnboardingSettings(
+        sources_path=args.sources,
+        sources_overlay_path=args.sources_overlay,
+        profile_path=args.profile,
+        profile_overlay_path=args.profile_overlay,
+        db_path=args.db,
+    )
+    report = run_preflight(settings)
+
+    if args.json:
+        print(json.dumps(report, ensure_ascii=True, indent=2))
+        return 0 if report.get("ok", False) else 1
+
+    print("Digest doctor report")
+    print(
+        (
+            f"status={'ok' if report.get('ok', False) else 'issues'} "
+            f"pass={report.get('pass_count', 0)} "
+            f"warn={report.get('warn_count', 0)} "
+            f"fail={report.get('fail_count', 0)}"
+        )
+    )
+
+    for check in report.get("checks", []):
+        status = str(check.get("status", "")).strip().lower()
+        marker = {
+            "pass": "PASS",
+            "warn": "WARN",
+            "fail": "FAIL",
+        }.get(status, "INFO")
+        label = str(check.get("label", "")).strip() or "check"
+        detail = str(check.get("detail", "")).strip()
+        hint = str(check.get("hint", "")).strip()
+        print(f"[{marker}] {label} - {detail}")
+        if hint:
+            print(f"  hint: {hint}")
+
+    return 0 if report.get("ok", False) else 1
 
 
 def _print_progress(event: dict[str, Any]) -> None:
@@ -214,6 +257,7 @@ def _cmd_web(args: argparse.Namespace) -> int:
         run_lock_path=args.run_lock_path,
         run_lock_stale_seconds=args.run_lock_stale_seconds,
         history_dir=args.history_dir,
+        onboarding_state_path=args.onboarding_state_path,
     )
     app = create_app(settings)
     uvicorn.run(app, host=args.host, port=args.port, reload=False)
@@ -239,6 +283,10 @@ def main() -> int:
     sched.add_argument("--timezone", default="America/Sao_Paulo")
     sched.set_defaults(func=_cmd_schedule)
 
+    doctor = sub.add_parser("doctor", help="Run onboarding preflight checks")
+    doctor.add_argument("--json", action="store_true", help="Output JSON report")
+    doctor.set_defaults(func=_cmd_doctor)
+
     bot = sub.add_parser("bot", help="Run Telegram command bot worker")
     bot.add_argument("--run-lock-path", default=".runtime/run.lock")
     bot.add_argument("--run-lock-stale-seconds", type=int, default=21600)
@@ -251,6 +299,9 @@ def main() -> int:
     web.add_argument("--run-lock-path", default=".runtime/run.lock")
     web.add_argument("--run-lock-stale-seconds", type=int, default=21600)
     web.add_argument("--history-dir", default=".runtime/config-history")
+    web.add_argument(
+        "--onboarding-state-path", default=".runtime/onboarding-state.json"
+    )
     web.set_defaults(func=_cmd_web)
 
     args = parser.parse_args()

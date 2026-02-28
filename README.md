@@ -52,8 +52,14 @@ pip install -r requirements.txt
 make live
 ```
 
+5. Run setup preflight (recommended before bot/schedule):
+```bash
+make doctor
+```
+
 ## Common Commands
 - Run tests: `make test`
+- Run onboarding preflight checks: `make doctor`
 - Run once (live): `make live`
 - Run scheduler: `make schedule`
 - Scheduler with overrides: `make schedule TIME=08:30 TZ=America/New_York`
@@ -76,9 +82,22 @@ make live
 - API server: `make web-api` (serves at `http://127.0.0.1:8787` by default)
 - UI dev server: `make web-ui` (Vite at `http://127.0.0.1:5173`)
 - UI build: `make web-ui-build`
+- Onboarding tab includes:
+  - preflight checks (`pass/warn/fail` + hints)
+  - source pack bootstrap
+  - safe preview run (no Telegram send, no production DB mutation)
+  - activate action + health confirmation
 - Source health panel shows broken sources from recent runs with suggested fixes.
 - Optional API base override for UI:
   - `VITE_API_BASE=http://127.0.0.1:8787 npm --prefix web run dev`
+
+## Recommended Onboarding Flow
+1. Start API + UI (`make web-api` and `make web-ui`).
+2. Open the Onboarding tab and run preflight.
+3. Fix any failing checks and optional warnings you care about.
+4. Apply a source pack (or configure sources manually).
+5. Run preview and verify output quality.
+6. Activate live run and confirm run health.
 
 ## Docker Bot Runbook
 Use Docker Compose when you want `digest bot` to stay up after shell exits and host restarts.

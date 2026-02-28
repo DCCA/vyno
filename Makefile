@@ -1,4 +1,4 @@
-.PHONY: test live schedule logs bot web-api web-ui web-ui-build docker-build docker-up docker-down docker-logs docker-ps docker-restart
+.PHONY: test doctor live schedule logs bot web-api web-ui web-ui-build docker-build docker-up docker-down docker-logs docker-ps docker-restart
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && echo 1 || echo 0)
 
@@ -12,6 +12,9 @@ endif
 
 test:
 	$(PYTHON_CMD) -m unittest discover -s tests -p 'test_*.py' -v
+
+doctor:
+	$(DIGEST_CMD) --sources config/sources.yaml --sources-overlay data/sources.local.yaml --profile config/profile.yaml --profile-overlay data/profile.local.yaml --db digest-live.db doctor
 
 live:
 	$(DIGEST_CMD) --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db run

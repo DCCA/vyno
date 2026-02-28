@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 
@@ -11,12 +12,22 @@ from digest.models import Item, Summary
 class ResponsesAPISummarizer:
     provider = "openai_responses"
 
-    def __init__(self, model: str = "gpt-5.1-codex-mini", timeout: int = 30) -> None:
+    def __init__(
+        self,
+        model: str = "gpt-5.1-codex-mini",
+        timeout: int = 30,
+        retries: int = 2,
+        retry_backoff_seconds: float = 0.6,
+    ) -> None:
         self.model = model
         self.timeout = timeout
-        self.api_key = os.getenv("OPENAI_API_KEY", "")
+        self.retries = max(0, int(retries))
+        self.retry_backoff_seconds = max(0.0, float(retry_backoff_seconds))
+        self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if not self.api_key:
-            raise RuntimeError("OPENAI_API_KEY is required for Responses API summarization")
+            raise RuntimeError(
+                "OPENAI_API_KEY is required for Responses API summarization"
+            )
 
     def summarize(self, item: Item) -> Summary:
         payload = {
@@ -49,7 +60,10 @@ class ResponsesAPISummarizer:
                         "type": "object",
                         "properties": {
                             "tldr": {"type": "string"},
-                            "key_points": {"type": "array", "items": {"type": "string"}},
+                            "key_points": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
                             "why_it_matters": {"type": "string"},
                         },
                         "required": ["tldr", "key_points", "why_it_matters"],
@@ -67,13 +81,7 @@ class ResponsesAPISummarizer:
                 "Content-Type": "application/json",
             },
         )
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                raw = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"Responses API HTTPError: {exc.code}") from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError("Responses API connection error") from exc
+        raw = self._request_with_retries(req)
 
         parsed = _extract_json_output(raw)
         return Summary(
@@ -82,6 +90,33 @@ class ResponsesAPISummarizer:
             why_it_matters=str(parsed.get("why_it_matters", "")).strip()[:280],
             provider=self.provider,
         )
+
+    def _request_with_retries(self, req: urllib.request.Request) -> dict:
+        attempts = self.retries + 1
+        last_err: Exception | None = None
+        for attempt in range(attempts):
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                last_err = exc
+                if not _is_retryable_http(exc.code) or attempt >= attempts - 1:
+                    raise RuntimeError(f"Responses API HTTPError: {exc.code}") from exc
+            except TimeoutError as exc:
+                last_err = exc
+                if attempt >= attempts - 1:
+                    raise RuntimeError("Responses API timeout") from exc
+            except urllib.error.URLError as exc:
+                last_err = exc
+                if not _is_retryable_url_error(exc) or attempt >= attempts - 1:
+                    raise RuntimeError("Responses API connection error") from exc
+
+            if self.retry_backoff_seconds > 0:
+                time.sleep(self.retry_backoff_seconds * (attempt + 1))
+
+        if last_err is not None:
+            raise RuntimeError("Responses API request failed") from last_err
+        raise RuntimeError("Responses API request failed")
 
 
 def _extract_json_output(raw: dict) -> dict:
@@ -102,3 +137,20 @@ def _extract_json_output(raw: dict) -> dict:
         except json.JSONDecodeError as exc:
             raise RuntimeError("Responses API returned non-JSON output") from exc
     raise RuntimeError("Responses API output missing structured JSON")
+
+
+def _is_retryable_http(code: int) -> bool:
+    return code == 429 or code >= 500
+
+
+def _is_retryable_url_error(exc: urllib.error.URLError) -> bool:
+    reason = str(getattr(exc, "reason", "") or exc).lower()
+    retry_markers = (
+        "timed out",
+        "timeout",
+        "temporary failure",
+        "connection reset",
+        "connection refused",
+        "remote end closed",
+    )
+    return any(marker in reason for marker in retry_markers)
