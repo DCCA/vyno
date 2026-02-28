@@ -18,6 +18,7 @@ from digest.delivery.obsidian import render_obsidian_note, write_obsidian_note
 from digest.delivery.telegram import render_telegram_messages, send_telegram_message
 from digest.models import Item, RunReport, ScoredItem
 from digest.pipeline.dedupe import dedupe_and_cluster
+from digest.pipeline.github_issue_impact import evaluate_github_issue_impact
 from digest.pipeline.normalize import normalize_items
 from digest.pipeline.scoring import is_blocked, score_item
 from digest.pipeline.selection import rank_scored_items, select_digest_sections
@@ -321,6 +322,8 @@ def run_digest(
     seen = store.seen_keys()
     candidate_items = unique_items
     supplemental_seen_videos = 0
+    github_issue_kept_high_impact = 0
+    github_issue_dropped_low_impact = 0
     if only_new:
         candidate_items = [i for i in unique_items if (i.url or i.hash) not in seen]
         # Keep delivery non-empty for manual/interactive usage when window has content
@@ -348,6 +351,20 @@ def run_digest(
                 if supplements:
                     candidate_items.extend(supplements)
                     supplemental_seen_videos = len(supplements)
+
+    filtered_candidates: list[Item] = []
+    for item in candidate_items:
+        if item.type != "github_issue":
+            filtered_candidates.append(item)
+            continue
+        decision = evaluate_github_issue_impact(item, profile)
+        if decision.keep:
+            github_issue_kept_high_impact += 1
+            filtered_candidates.append(item)
+            continue
+        github_issue_dropped_low_impact += 1
+    candidate_items = filtered_candidates
+
     log_event(
         run_logger,
         "info",
@@ -356,6 +373,8 @@ def run_digest(
         seen_count=len(seen),
         candidate_count=len(candidate_items),
         supplemental_seen_videos=supplemental_seen_videos,
+        github_issue_kept_high_impact=github_issue_kept_high_impact,
+        github_issue_dropped_low_impact=github_issue_dropped_low_impact,
     )
     emit_progress(
         "candidate_select",
@@ -363,6 +382,8 @@ def run_digest(
         candidate_count=len(candidate_items),
         seen_count=len(seen),
         supplemental_seen_videos=supplemental_seen_videos,
+        github_issue_kept_high_impact=github_issue_kept_high_impact,
+        github_issue_dropped_low_impact=github_issue_dropped_low_impact,
     )
 
     scores = []

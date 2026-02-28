@@ -711,6 +711,86 @@ class TestRuntimeIntegration(unittest.TestCase):
             self.assertEqual(second.source_count, 2)
             self.assertGreaterEqual(second.video_count, 1)
 
+    def test_runtime_filters_low_impact_github_issues(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            store = SQLiteStore(str(db))
+            sources = SourceConfig(
+                rss_feeds=[],
+                youtube_channels=[],
+                youtube_queries=[],
+                github_repos=["anthropics/claude-code"],
+            )
+            profile = ProfileConfig(
+                llm_enabled=False,
+                agent_scoring_enabled=False,
+                trusted_orgs_github=["anthropics"],
+            )
+
+            kept_issue = Item(
+                id="issue-keep",
+                url="https://github.com/anthropics/claude-code/issues/1",
+                title="Regression causes outage in auth flow",
+                source="github:anthropics/claude-code",
+                author="maintainer",
+                published_at=datetime.now(),
+                type="github_issue",
+                raw_text="labels=bug,incident | comments=10",
+                hash="issue-keep-hash",
+            )
+            dropped_no_keyword = Item(
+                id="issue-drop-keyword",
+                url="https://github.com/anthropics/claude-code/issues/2",
+                title="Small UI typo",
+                source="github:anthropics/claude-code",
+                author="maintainer",
+                published_at=datetime.now(),
+                type="github_issue",
+                raw_text="labels=docs | comments=1",
+                hash="issue-drop-keyword-hash",
+            )
+            dropped_untrusted = Item(
+                id="issue-drop-untrusted",
+                url="https://github.com/random/repo/issues/3",
+                title="Regression causes outage",
+                source="github:random/repo",
+                author="maintainer",
+                published_at=datetime.now(),
+                type="github_issue",
+                raw_text="labels=incident | comments=2",
+                hash="issue-drop-untrusted-hash",
+            )
+
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[]),
+                patch("digest.runtime.fetch_youtube_items", return_value=[]),
+                patch(
+                    "digest.runtime.fetch_github_items",
+                    return_value=[kept_issue, dropped_no_keyword, dropped_untrusted],
+                ),
+            ):
+                report = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
+
+            self.assertIn(report.status, {"success", "partial"})
+            self.assertEqual(report.source_count, 1)
+
+            conn = sqlite3.connect(db)
+            rows = conn.execute(
+                "select item_id from scores where run_id = ?",
+                (report.run_id,),
+            ).fetchall()
+            conn.close()
+            scored_ids = {row[0] for row in rows}
+            self.assertIn("issue-keep", scored_ids)
+            self.assertNotIn("issue-drop-keyword", scored_ids)
+            self.assertNotIn("issue-drop-untrusted", scored_ids)
+
 
 if __name__ == "__main__":
     unittest.main()
