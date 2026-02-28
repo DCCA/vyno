@@ -1,6 +1,6 @@
 # Tasks: high-impact-github-issues
 
-- [ ] 1.0 Implement trusted-org medium-severity gate for github issues
+- [x] 1.0 Implement trusted-org medium-severity gate for github issues
   - [x] 1.1 Add issue impact helper module
   - [x] 1.2 Enrich GitHub issue raw text with labels/comments metadata
   - [x] 1.3 Apply issue gate in runtime candidate filtering
@@ -10,8 +10,8 @@
   - [x] 2.1 Add unit tests for issue impact helper
   - [x] 2.2 Update connector tests for issue metadata enrichment
   - [x] 2.3 Add runtime integration test for gate behavior
-  - [ ] 2.4 Run full test suite
-  - [ ] 2.5 Run web build
+  - [x] 2.4 Run full test suite
+  - [x] 2.5 Run web build
 
 - [ ] 3.0 Archive change
   - [ ] 3.1 Move change to `.docs/done/`

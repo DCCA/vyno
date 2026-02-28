@@ -295,6 +295,7 @@ class TestRuntimeIntegration(unittest.TestCase):
                 ),
                 llm_enabled=False,
                 agent_scoring_enabled=False,
+                trusted_orgs_github=["openai"],
             )
 
             rss_item = Item(
@@ -322,12 +323,12 @@ class TestRuntimeIntegration(unittest.TestCase):
             gh_item = Item(
                 id="gh1",
                 url="https://github.com/openai/openai-cookbook/issues/1",
-                title="GH issue",
+                title="Regression issue",
                 source="github:openai/openai-cookbook",
                 author="openai",
                 published_at=datetime.now(),
                 type="github_issue",
-                raw_text="gh body",
+                raw_text="incident with degraded auth flow",
                 hash="gh1",
             )
 
