@@ -25,6 +25,8 @@ class TestGitHubConnector(unittest.TestCase):
                         "html_url": "https://github.com/openai/openai-cookbook/issues/1",
                         "title": "Issue title",
                         "body": "Issue body",
+                        "labels": [{"name": "bug"}, {"name": "regression"}],
+                        "comments": 12,
                         "updated_at": fresh,
                         "user": {"login": "alice"},
                     },
@@ -32,6 +34,8 @@ class TestGitHubConnector(unittest.TestCase):
                         "html_url": "https://github.com/openai/openai-cookbook/pull/2",
                         "title": "PR title",
                         "body": "PR body",
+                        "labels": [{"name": "enhancement"}],
+                        "comments": 4,
                         "updated_at": fresh,
                         "user": {"login": "bob"},
                         "pull_request": {"url": "x"},
@@ -56,6 +60,8 @@ class TestGitHubConnector(unittest.TestCase):
                             "html_url": "https://github.com/acme/agent-repo/issues/10",
                             "title": "search issue",
                             "body": "body",
+                            "labels": [{"name": "incident"}],
+                            "comments": 7,
                             "updated_at": fresh,
                             "repository_url": "https://api.github.com/repos/acme/agent-repo",
                             "user": {"login": "charlie"},
@@ -79,6 +85,10 @@ class TestGitHubConnector(unittest.TestCase):
         self.assertIn("github_pr", types)
         self.assertIn("github_repo", types)
         self.assertGreaterEqual(len(items), 5)
+
+        issue_item = next(i for i in items if i.type == "github_issue")
+        self.assertIn("labels=bug,regression", issue_item.raw_text)
+        self.assertIn("comments=12", issue_item.raw_text)
 
     def test_normalize_github_org_accepts_url_and_login(self):
         self.assertEqual(

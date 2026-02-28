@@ -273,6 +273,8 @@ def _fetch_repo_issues_and_prs(
             continue
         title = str(issue.get("title") or "Issue")
         body = str(issue.get("body") or "")
+        labels = _extract_issue_labels(issue.get("labels"))
+        comments = int(issue.get("comments") or 0)
         pub = _parse_iso(str(issue.get("updated_at") or issue.get("created_at") or ""))
         if not _is_recent(pub, max_age_days=max_age_days):
             continue
@@ -289,7 +291,7 @@ def _fetch_repo_issues_and_prs(
                 author=author,
                 published_at=pub,
                 item_type=item_type,
-                raw_text=body,
+                raw_text=_compose_issue_raw_text(body, labels, comments),
             )
         )
     return out
@@ -360,6 +362,8 @@ def _search_issues_and_prs(
             continue
         title = str(issue.get("title") or "Issue")
         body = str(issue.get("body") or "")
+        labels = _extract_issue_labels(issue.get("labels"))
+        comments = int(issue.get("comments") or 0)
         pub = _parse_iso(str(issue.get("updated_at") or issue.get("created_at") or ""))
         if not _is_recent(pub, max_age_days=max_age_days):
             continue
@@ -380,10 +384,32 @@ def _search_issues_and_prs(
                 author=author,
                 published_at=pub,
                 item_type=item_type,
-                raw_text=body,
+                raw_text=_compose_issue_raw_text(body, labels, comments),
             )
         )
     return out
+
+
+def _extract_issue_labels(raw: object) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    labels: list[str] = []
+    for entry in raw:
+        if isinstance(entry, dict):
+            name = str(entry.get("name") or "").strip().lower()
+        else:
+            name = str(entry or "").strip().lower()
+        if name and name not in labels:
+            labels.append(name)
+    return labels
+
+
+def _compose_issue_raw_text(body: str, labels: list[str], comments: int) -> str:
+    details = [body.strip()]
+    if labels:
+        details.append(f"labels={','.join(labels)}")
+    details.append(f"comments={max(0, comments)}")
+    return " | ".join([d for d in details if d])
 
 
 def _request_json(path: str, token: str, timeout: int) -> dict | list:
