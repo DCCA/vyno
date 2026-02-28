@@ -535,7 +535,11 @@ def run_digest(
 
     ranked_items = rank_scored_items(scored_items, rank_overrides=rank_overrides)
     ranked_non_videos = [si for si in ranked_items if si.item.type != "video"]
-    sections = select_digest_sections(scored_items, rank_overrides=rank_overrides)
+    sections = select_digest_sections(
+        scored_items,
+        rank_overrides=rank_overrides,
+        must_read_max_per_source=profile.must_read_max_per_source,
+    )
 
     if profile.quality_repair_enabled and ranked_non_videos and sections.must_read:
         candidate_pool = ranked_non_videos[: profile.quality_repair_candidate_pool_size]

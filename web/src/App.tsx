@@ -391,6 +391,11 @@ export default function App() {
                     onChange={(value) => updateProfileField("max_agent_items_per_run", value)}
                   />
                   <NumberField
+                    label="Must-read Max Per Source"
+                    value={Number(profile.must_read_max_per_source ?? 2)}
+                    onChange={(value) => updateProfileField("must_read_max_per_source", value)}
+                  />
+                  <NumberField
                     label="Quality Repair Threshold"
                     value={Number(profile.quality_repair_threshold ?? 80)}
                     onChange={(value) => updateProfileField("quality_repair_threshold", value)}

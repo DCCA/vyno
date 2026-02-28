@@ -72,6 +72,7 @@ class TestQualityRepairRuntime(unittest.TestCase):
             quality_learning_enabled=True,
             quality_learning_max_offset=8.0,
             quality_learning_half_life_days=14,
+            must_read_max_per_source=5,
         )
 
     def test_online_repair_applies_below_threshold(self):

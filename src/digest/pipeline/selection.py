@@ -20,12 +20,14 @@ def select_digest_sections(
     scored_items: list[ScoredItem],
     *,
     rank_overrides: dict[str, float] | None = None,
+    must_read_max_per_source: int = 2,
 ) -> DigestSections:
     ranked = rank_scored_items(scored_items, rank_overrides=rank_overrides)
     videos = [i for i in ranked if i.item.type == "video"][:5]
     non_videos = [i for i in ranked if i.item.type != "video"]
-    must_read = non_videos[:5]
-    skim = non_videos[5:15]
+    must_read = _select_must_read(non_videos, max_per_source=must_read_max_per_source)
+    must_read_ids = {item.item.id for item in must_read}
+    skim = [i for i in non_videos if i.item.id not in must_read_ids][:10]
 
     total = must_read + skim + videos
     total = total[:20]
@@ -35,3 +37,35 @@ def select_digest_sections(
     videos = [i for i in total if i in videos][:5]
 
     return DigestSections(must_read=must_read, skim=skim, videos=videos)
+
+
+def _select_must_read(
+    non_videos: list[ScoredItem],
+    *,
+    max_per_source: int,
+) -> list[ScoredItem]:
+    if max_per_source <= 0:
+        return non_videos[:5]
+
+    selected: list[ScoredItem] = []
+    selected_ids: set[str] = set()
+    source_counts: dict[str, int] = {}
+
+    for scored in non_videos:
+        source = scored.item.source.strip().lower()
+        if source_counts.get(source, 0) >= max_per_source:
+            continue
+        selected.append(scored)
+        selected_ids.add(scored.item.id)
+        source_counts[source] = source_counts.get(source, 0) + 1
+        if len(selected) >= 5:
+            return selected
+
+    for scored in non_videos:
+        if scored.item.id in selected_ids:
+            continue
+        selected.append(scored)
+        if len(selected) >= 5:
+            break
+
+    return selected

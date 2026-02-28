@@ -140,6 +140,7 @@ Use `docker compose ps` to inspect health status.
 - Scoring:
   - `agent_scoring_enabled: true`
   - `max_agent_items_per_run` (default `40`)
+  - `must_read_max_per_source` (default `2`, source diversity cap in Must-read)
   - `min_llm_coverage` (default `0.9`)
   - `max_fallback_share` (default `0.1`)
   - `agent_scoring_retry_attempts` (default `1`)

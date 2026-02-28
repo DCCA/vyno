@@ -69,6 +69,7 @@ class ProfileConfig:
     quality_learning_enabled: bool = True
     quality_learning_max_offset: float = 8.0
     quality_learning_half_life_days: int = 14
+    must_read_max_per_source: int = 2
 
 
 def _read_yaml(path: str | Path) -> dict:
@@ -229,6 +230,9 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         quality_learning_max_offset=quality_learning_max_offset,
         quality_learning_half_life_days=max(
             1, int(data.get("quality_learning_half_life_days", 14) or 14)
+        ),
+        must_read_max_per_source=max(
+            1, int(data.get("must_read_max_per_source", 2) or 2)
         ),
     )
 

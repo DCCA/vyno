@@ -98,6 +98,7 @@ class TestConfig(unittest.TestCase):
                     "quality_learning_enabled: true\n"
                     "quality_learning_max_offset: 7.5\n"
                     "quality_learning_half_life_days: 10\n"
+                    "must_read_max_per_source: 3\n"
                 ),
                 encoding="utf-8",
             )
@@ -118,6 +119,7 @@ class TestConfig(unittest.TestCase):
             self.assertTrue(profile.quality_learning_enabled)
             self.assertEqual(profile.quality_learning_max_offset, 7.5)
             self.assertEqual(profile.quality_learning_half_life_days, 10)
+            self.assertEqual(profile.must_read_max_per_source, 3)
 
     def test_profile_loads_render_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
