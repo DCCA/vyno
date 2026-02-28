@@ -1,12 +1,14 @@
 import unittest
 from datetime import datetime
 
-from digest.models import Item, Score, ScoredItem
-from digest.pipeline.selection import select_digest_sections
+from digest.models import Item, ItemType, Score, ScoredItem
+from digest.pipeline.selection import rank_scored_items, select_digest_sections
 
 
-def _mk(idx: int, t: str = "article") -> ScoredItem:
-    item = Item(str(idx), f"https://e/{idx}", f"T{idx}", "src", None, datetime.now(), t, "x")
+def _mk(idx: int, t: ItemType = "article") -> ScoredItem:
+    item = Item(
+        str(idx), f"https://e/{idx}", f"T{idx}", "src", None, datetime.now(), t, "x"
+    )
     score = Score(str(idx), 20, 10, 5, 35)
     return ScoredItem(item=item, score=score)
 
@@ -20,6 +22,22 @@ class TestSelection(unittest.TestCase):
         self.assertLessEqual(len(sections.must_read), 5)
         self.assertLessEqual(len(sections.skim), 10)
         self.assertLessEqual(len(sections.videos), 5)
+
+    def test_rank_overrides_can_promote_item(self):
+        rows = [_mk(1, "article"), _mk(2, "article"), _mk(3, "article")]
+        rows[0].score.total = 90
+        rows[1].score.total = 80
+        rows[2].score.total = 70
+        ranked = rank_scored_items(rows, rank_overrides={"3": 120.0})
+        self.assertEqual(ranked[0].item.id, "3")
+
+    def test_selection_uses_rank_overrides(self):
+        rows = [_mk(i, "article") for i in range(1, 8)]
+        for idx, row in enumerate(rows, start=1):
+            row.score.total = 100 - idx
+        sections = select_digest_sections(rows, rank_overrides={"7": 200.0})
+        self.assertTrue(sections.must_read)
+        self.assertEqual(sections.must_read[0].item.id, "7")
 
 
 if __name__ == "__main__":

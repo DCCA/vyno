@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
@@ -60,6 +61,14 @@ class ProfileConfig:
     agent_scoring_retry_attempts: int = 1
     agent_scoring_text_max_chars: int = 8000
     openai_model: str = "gpt-5.1-codex-mini"
+    quality_repair_enabled: bool = False
+    quality_repair_model: str = ""
+    quality_repair_threshold: float = 80.0
+    quality_repair_candidate_pool_size: int = 40
+    quality_repair_fail_open: bool = True
+    quality_learning_enabled: bool = True
+    quality_learning_max_offset: float = 8.0
+    quality_learning_half_life_days: int = 14
 
 
 def _read_yaml(path: str | Path) -> dict:
@@ -120,7 +129,17 @@ def load_sources(path: str | Path) -> SourceConfig:
 
 def load_profile(path: str | Path) -> ProfileConfig:
     data = _read_yaml(path)
+    return parse_profile_dict(data)
+
+
+def parse_profile_dict(data: dict) -> ProfileConfig:
+    if not isinstance(data, dict):
+        raise ValueError("profile payload must be an object")
     out = data.get("output", {})
+    if out is None:
+        out = {}
+    if not isinstance(out, dict):
+        raise ValueError("output must be an object")
     naming = str(out.get("obsidian_naming", "timestamped")).strip().lower()
     if naming not in {"timestamped", "daily"}:
         raise ValueError("output.obsidian_naming must be 'timestamped' or 'daily'")
@@ -151,6 +170,14 @@ def load_profile(path: str | Path) -> ProfileConfig:
         raise ValueError("min_llm_coverage must be between 0 and 1")
     if not (0 <= max_fallback_share <= 1):
         raise ValueError("max_fallback_share must be between 0 and 1")
+    quality_repair_threshold = float(data.get("quality_repair_threshold", 80.0) or 80.0)
+    if not (0 <= quality_repair_threshold <= 100):
+        raise ValueError("quality_repair_threshold must be between 0 and 100")
+    quality_learning_max_offset = float(
+        data.get("quality_learning_max_offset", 8.0) or 8.0
+    )
+    if quality_learning_max_offset < 0:
+        raise ValueError("quality_learning_max_offset must be >= 0")
     return ProfileConfig(
         topics=_as_str_list(data, "topics"),
         entities=_as_str_list(data, "entities"),
@@ -191,7 +218,23 @@ def load_profile(path: str | Path) -> ProfileConfig:
             400, int(data.get("agent_scoring_text_max_chars", 8000) or 8000)
         ),
         openai_model=str(data.get("openai_model", env_model or "gpt-5.1-codex-mini")),
+        quality_repair_enabled=bool(data.get("quality_repair_enabled", False)),
+        quality_repair_model=str(data.get("quality_repair_model", "")).strip(),
+        quality_repair_threshold=quality_repair_threshold,
+        quality_repair_candidate_pool_size=max(
+            5, int(data.get("quality_repair_candidate_pool_size", 40) or 40)
+        ),
+        quality_repair_fail_open=bool(data.get("quality_repair_fail_open", True)),
+        quality_learning_enabled=bool(data.get("quality_learning_enabled", True)),
+        quality_learning_max_offset=quality_learning_max_offset,
+        quality_learning_half_life_days=max(
+            1, int(data.get("quality_learning_half_life_days", 14) or 14)
+        ),
     )
+
+
+def profile_to_dict(profile: ProfileConfig) -> dict:
+    return asdict(profile)
 
 
 def _as_str_list(data: dict, key: str) -> list[str]:

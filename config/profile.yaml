@@ -25,7 +25,7 @@ github_max_repos_per_org: 20
 github_max_items_per_org: 40
 github_repo_max_age_days: 30
 github_activity_max_age_days: 14
-llm_enabled: false
+llm_enabled: true
 agent_scoring_enabled: true
 max_agent_items_per_run: 40
 min_llm_coverage: 0.9
@@ -33,6 +33,14 @@ max_fallback_share: 0.1
 agent_scoring_retry_attempts: 1
 agent_scoring_text_max_chars: 8000
 openai_model: gpt-5.1-codex-mini
+quality_repair_enabled: true
+quality_repair_model: gpt-5.1-codex-mini
+quality_repair_threshold: 80
+quality_repair_candidate_pool_size: 40
+quality_repair_fail_open: true
+quality_learning_enabled: true
+quality_learning_max_offset: 8.0
+quality_learning_half_life_days: 14
 output:
   telegram_chat_id: ""
   telegram_bot_token: ""

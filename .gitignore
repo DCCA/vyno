@@ -28,7 +28,10 @@ logs/
 data/x_inbox.txt
 !data/x_inbox.example.txt
 data/sources.local.yaml
+data/profile.local.yaml
 .runtime/
+web/node_modules/
+web/dist/
 
 # Keep .docs as source-of-truth; ignore only ephemeral paths.
 .docs/tmp/

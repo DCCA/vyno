@@ -43,6 +43,9 @@ pip install -r requirements.txt
 - `config/sources.yaml`
 - `config/profile.yaml`
 - `data/x_inbox.txt` (copy from template if needed)
+- Optional local overlays:
+  - `data/sources.local.yaml`
+  - `data/profile.local.yaml` (copy from `data/profile.local.example.yaml`)
 
 4. Run once:
 ```bash
@@ -57,6 +60,10 @@ make live
 - Tail logs: `make logs`
 - Run Telegram command bot:
   - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db bot`
+- Run config API directly via CLI:
+  - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --sources-overlay data/sources.local.yaml --profile config/profile.yaml --profile-overlay data/profile.local.yaml --db digest-live.db web --host 127.0.0.1 --port 8787`
+- Run config web API (for Vite UI): `make web-api`
+- Run config web UI (Vite + shadcn + Tailwind): `make web-ui`
 - Docker operations:
   - Build image: `make docker-build`
   - Start bot service: `make docker-up`
@@ -64,6 +71,13 @@ make live
   - Service status: `make docker-ps`
   - Restart bot: `make docker-restart`
   - Stop services: `make docker-down`
+
+## Config Web Console (Vite + shadcn + Tailwind)
+- API server: `make web-api` (serves at `http://127.0.0.1:8787` by default)
+- UI dev server: `make web-ui` (Vite at `http://127.0.0.1:5173`)
+- UI build: `make web-ui-build`
+- Optional API base override for UI:
+  - `VITE_API_BASE=http://127.0.0.1:8787 npm --prefix web run dev`
 
 ## Docker Bot Runbook
 Use Docker Compose when you want `digest bot` to stay up after shell exits and host restarts.
@@ -104,7 +118,7 @@ Expected state:
 ### Persistence Model
 Container runtime state is persisted on host mounts:
 - `config/` (read-only in container)
-- `data/` (includes `sources.local.yaml` and inbox file)
+- `data/` (includes `sources.local.yaml`, `profile.local.yaml`, and inbox file)
 - `logs/`
 - `.runtime/` (run lock, runtime artifacts)
 - `digest-live.db`
@@ -131,6 +145,16 @@ Use `docker compose ps` to inspect health status.
   - `agent_scoring_retry_attempts` (default `1`)
   - `agent_scoring_text_max_chars` (default `8000`)
   - `openai_model: gpt-5.1-codex-mini`
+- Must-read online quality repair:
+  - `quality_repair_enabled` (default `false`)
+  - `quality_repair_model` (defaults to `openai_model` when empty)
+  - `quality_repair_threshold` (0-100, default `80`)
+  - `quality_repair_candidate_pool_size` (default `40`)
+  - `quality_repair_fail_open` (default `true`)
+- Quality learning (cross-run):
+  - `quality_learning_enabled` (default `true`)
+  - `quality_learning_max_offset` (default `8.0`)
+  - `quality_learning_half_life_days` (default `14`)
 - GitHub quality guardrails:
   - `github_min_stars`
   - `github_include_forks`
@@ -176,6 +200,7 @@ Supported source types:
 - `github_org`
 
 Runtime-added sources are persisted in `data/sources.local.yaml` (overlay), merged with tracked `config/sources.yaml`.
+Runtime profile edits from the web console are persisted in `data/profile.local.yaml` (overlay), merged with tracked `config/profile.yaml`.
 
 ## Output Format
 - Telegram: compact digest sections (`Must-read`, `Skim`, `Videos`) with automatic chunking for long digests

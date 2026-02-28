@@ -90,6 +90,14 @@ class TestConfig(unittest.TestCase):
                     "github_repo_max_age_days: 21\n"
                     "github_activity_max_age_days: 5\n"
                     "max_agent_items_per_run: 12\n"
+                    "quality_repair_enabled: true\n"
+                    "quality_repair_model: gpt-5.1-codex-mini\n"
+                    "quality_repair_threshold: 80\n"
+                    "quality_repair_candidate_pool_size: 40\n"
+                    "quality_repair_fail_open: true\n"
+                    "quality_learning_enabled: true\n"
+                    "quality_learning_max_offset: 7.5\n"
+                    "quality_learning_half_life_days: 10\n"
                 ),
                 encoding="utf-8",
             )
@@ -102,6 +110,14 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(profile.github_repo_max_age_days, 21)
             self.assertEqual(profile.github_activity_max_age_days, 5)
             self.assertEqual(profile.max_agent_items_per_run, 12)
+            self.assertTrue(profile.quality_repair_enabled)
+            self.assertEqual(profile.quality_repair_model, "gpt-5.1-codex-mini")
+            self.assertEqual(profile.quality_repair_threshold, 80)
+            self.assertEqual(profile.quality_repair_candidate_pool_size, 40)
+            self.assertTrue(profile.quality_repair_fail_open)
+            self.assertTrue(profile.quality_learning_enabled)
+            self.assertEqual(profile.quality_learning_max_offset, 7.5)
+            self.assertEqual(profile.quality_learning_half_life_days, 10)
 
     def test_profile_loads_render_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -135,6 +151,13 @@ class TestConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "profile.yaml"
             path.write_text("min_llm_coverage: 1.2\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_profile(path)
+
+    def test_profile_rejects_invalid_quality_repair_threshold(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text("quality_repair_threshold: 120\n", encoding="utf-8")
             with self.assertRaises(ValueError):
                 load_profile(path)
 

@@ -14,27 +14,41 @@ class TestTelegramCommands(unittest.TestCase):
         profile = Path(tmp) / "profile.yaml"
         db = Path(tmp) / "digest.db"
         overlay = Path(tmp) / "sources.local.yaml"
-        sources.write_text("rss_feeds: ['https://example.com/rss.xml']\n", encoding="utf-8")
-        profile.write_text("output:\n  telegram_bot_token: ''\n  telegram_chat_id: ''\n", encoding="utf-8")
+        profile_overlay = Path(tmp) / "profile.local.yaml"
+        sources.write_text(
+            "rss_feeds: ['https://example.com/rss.xml']\n", encoding="utf-8"
+        )
+        profile.write_text(
+            "output:\n  telegram_bot_token: ''\n  telegram_chat_id: ''\n",
+            encoding="utf-8",
+        )
         sent: list[tuple[str, str, dict | None]] = []
         answered: list[tuple[str, str]] = []
         ctx = CommandContext(
             sources_path=str(sources),
             profile_path=str(profile),
+            profile_overlay_path=str(profile_overlay),
             db_path=str(db),
             overlay_path=str(overlay),
             admin_chat_ids={"1"},
             admin_user_ids={"2"},
             lock=RunLock(str(Path(tmp) / "run.lock"), stale_seconds=3600),
-            send_message=lambda chat_id, msg, markup=None: sent.append((chat_id, msg, markup)),
-            answer_callback=lambda callback_id, text="": answered.append((callback_id, text)),
+            send_message=lambda chat_id, msg, markup=None: sent.append(
+                (chat_id, msg, markup)
+            ),
+            answer_callback=lambda callback_id, text="": answered.append(
+                (callback_id, text)
+            ),
         )
         return ctx, sent, answered
 
     def test_unauthorized_is_denied(self):
         with tempfile.TemporaryDirectory() as tmp:
             ctx, _, _ = self._ctx(tmp)
-            upd = {"update_id": 1, "message": {"text": "/help", "chat": {"id": 99}, "from": {"id": 2}}}
+            upd = {
+                "update_id": 1,
+                "message": {"text": "/help", "chat": {"id": 99}, "from": {"id": 2}},
+            }
             resp = handle_update(upd, ctx)
             self.assertIsNotNone(resp)
             assert resp is not None
@@ -60,7 +74,10 @@ class TestTelegramCommands(unittest.TestCase):
     def test_status_command_reports_last_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             ctx, _, _ = self._ctx(tmp)
-            upd = {"update_id": 1, "message": {"text": "/status", "chat": {"id": 1}, "from": {"id": 2}}}
+            upd = {
+                "update_id": 1,
+                "message": {"text": "/status", "chat": {"id": 1}, "from": {"id": 2}},
+            }
             resp = handle_update(upd, ctx)
             self.assertIsNotNone(resp)
             assert resp is not None
@@ -70,7 +87,14 @@ class TestTelegramCommands(unittest.TestCase):
     def test_digest_run_command_starts_and_sends_completion(self):
         with tempfile.TemporaryDirectory() as tmp:
             ctx, sent, _ = self._ctx(tmp)
-            upd = {"update_id": 1, "message": {"text": "/digest run", "chat": {"id": 1}, "from": {"id": 2}}}
+            upd = {
+                "update_id": 1,
+                "message": {
+                    "text": "/digest run",
+                    "chat": {"id": 1},
+                    "from": {"id": 2},
+                },
+            }
 
             class Report:
                 run_id = "abc123"
@@ -78,9 +102,11 @@ class TestTelegramCommands(unittest.TestCase):
                 source_errors = []
                 summary_errors = []
 
-            with patch("digest.ops.telegram_commands.load_profile"), patch(
-                "digest.ops.telegram_commands.load_effective_sources"
-            ), patch("digest.ops.telegram_commands.run_digest", return_value=Report()):
+            with (
+                patch("digest.ops.telegram_commands.load_effective_profile"),
+                patch("digest.ops.telegram_commands.load_effective_sources"),
+                patch("digest.ops.telegram_commands.run_digest", return_value=Report()),
+            ):
                 resp = handle_update(upd, ctx)
                 self.assertIsNotNone(resp)
                 assert resp is not None
@@ -98,7 +124,11 @@ class TestTelegramCommands(unittest.TestCase):
 
             start = {
                 "update_id": 1,
-                "message": {"text": "/source wizard", "chat": {"id": 1}, "from": {"id": 2}},
+                "message": {
+                    "text": "/source wizard",
+                    "chat": {"id": 1},
+                    "from": {"id": 2},
+                },
             }
             resp1 = handle_update(start, ctx)
             self.assertIsNotNone(resp1)
@@ -137,7 +167,11 @@ class TestTelegramCommands(unittest.TestCase):
 
             value_msg = {
                 "update_id": 4,
-                "message": {"text": "https://github.com/vercel-labs", "chat": {"id": 1}, "from": {"id": 2}},
+                "message": {
+                    "text": "https://github.com/vercel-labs",
+                    "chat": {"id": 1},
+                    "from": {"id": 2},
+                },
             }
             resp4 = handle_update(value_msg, ctx)
             self.assertIsNotNone(resp4)

@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from digest.config import load_profile
 from digest.logging_utils import get_run_logger
+from digest.ops.profile_registry import load_effective_profile
 from digest.ops.run_lock import RunLock
 from digest.ops.source_registry import (
     add_source,
@@ -27,6 +27,7 @@ WIZARD_TTL_SECONDS = 15 * 60
 class CommandContext:
     sources_path: str
     profile_path: str
+    profile_overlay_path: str
     db_path: str
     overlay_path: str
     admin_chat_ids: set[str]
@@ -75,7 +76,13 @@ def handle_update(update: dict, ctx: CommandContext) -> BotResponse | None:
             return BotResponse(chat_id=chat_id, text=_trigger_run(ctx, chat_id))
         return BotResponse(chat_id=chat_id, text="Usage: /digest run")
     if cmd == "/source":
-        return BotResponse(chat_id=chat_id, text=_handle_source(args, ctx, chat_id, user_id), reply_markup=_wizard_action_keyboard() if args and args[0] == "wizard" else None)
+        return BotResponse(
+            chat_id=chat_id,
+            text=_handle_source(args, ctx, chat_id, user_id),
+            reply_markup=_wizard_action_keyboard()
+            if args and args[0] == "wizard"
+            else None,
+        )
 
     return BotResponse(chat_id=chat_id, text="Unknown command. Use /help")
 
@@ -100,7 +107,9 @@ def _handle_callback_query(callback: dict, ctx: CommandContext) -> BotResponse:
     user_id = str((callback.get("from") or {}).get("id") or "").strip()
 
     if not chat_id or not user_id:
-        return BotResponse(callback_query_id=callback_id, callback_text="Invalid callback")
+        return BotResponse(
+            callback_query_id=callback_id, callback_text="Invalid callback"
+        )
 
     if not _is_authorized(chat_id, user_id, ctx):
         return BotResponse(
@@ -111,13 +120,22 @@ def _handle_callback_query(callback: dict, ctx: CommandContext) -> BotResponse:
         )
 
     if not data.startswith("sw:"):
-        return BotResponse(callback_query_id=callback_id, callback_text="Unsupported action")
+        return BotResponse(
+            callback_query_id=callback_id, callback_text="Unsupported action"
+        )
 
     state = _get_state(ctx, chat_id, user_id)
     key = data[3:]
 
     if key in {"add", "remove", "list"}:
-        state.update({"action": key, "source_type": "", "awaiting_value": False, "draft_value": ""})
+        state.update(
+            {
+                "action": key,
+                "source_type": "",
+                "awaiting_value": False,
+                "draft_value": "",
+            }
+        )
         return BotResponse(
             chat_id=chat_id,
             text=f"Selected action: {key}. Choose source type:",
@@ -129,7 +147,9 @@ def _handle_callback_query(callback: dict, ctx: CommandContext) -> BotResponse:
     if key.startswith("t:"):
         source_type = key.split(":", 1)[1].strip()
         if source_type not in supported_source_types():
-            return BotResponse(callback_query_id=callback_id, callback_text="Unknown source type")
+            return BotResponse(
+                callback_query_id=callback_id, callback_text="Unknown source type"
+            )
         state["source_type"] = source_type
         action = state.get("action", "")
         if action == "list":
@@ -161,14 +181,28 @@ def _handle_callback_query(callback: dict, ctx: CommandContext) -> BotResponse:
         source_type = state.get("source_type", "")
         draft_value = state.get("draft_value", "")
         if action not in {"add", "remove"} or not source_type or not draft_value:
-            return BotResponse(callback_query_id=callback_id, callback_text="Nothing to confirm")
+            return BotResponse(
+                callback_query_id=callback_id, callback_text="Nothing to confirm"
+            )
         try:
             if action == "add":
-                created, canonical = add_source(ctx.sources_path, ctx.overlay_path, source_type, draft_value)
-                msg = f"Added {source_type}: {canonical}" if created else f"Already tracked: {canonical}"
+                created, canonical = add_source(
+                    ctx.sources_path, ctx.overlay_path, source_type, draft_value
+                )
+                msg = (
+                    f"Added {source_type}: {canonical}"
+                    if created
+                    else f"Already tracked: {canonical}"
+                )
             else:
-                removed, canonical = remove_source(ctx.sources_path, ctx.overlay_path, source_type, draft_value)
-                msg = f"Removed {source_type}: {canonical}" if removed else f"Not found: {canonical}"
+                removed, canonical = remove_source(
+                    ctx.sources_path, ctx.overlay_path, source_type, draft_value
+                )
+                msg = (
+                    f"Removed {source_type}: {canonical}"
+                    if removed
+                    else f"Not found: {canonical}"
+                )
         except Exception as exc:
             msg = f"Source command failed: {exc}"
         _clear_state(ctx, chat_id, user_id)
@@ -203,7 +237,9 @@ def _handle_callback_query(callback: dict, ctx: CommandContext) -> BotResponse:
     return BotResponse(callback_query_id=callback_id, callback_text="Unknown action")
 
 
-def _handle_wizard_value_input(chat_id: str, user_id: str, raw_value: str, ctx: CommandContext) -> BotResponse:
+def _handle_wizard_value_input(
+    chat_id: str, user_id: str, raw_value: str, ctx: CommandContext
+) -> BotResponse:
     state = _get_state(ctx, chat_id, user_id)
     source_type = state.get("source_type", "")
     action = state.get("action", "")
@@ -219,15 +255,14 @@ def _handle_wizard_value_input(chat_id: str, user_id: str, raw_value: str, ctx: 
     state["awaiting_value"] = False
     return BotResponse(
         chat_id=chat_id,
-        text=(
-            f"Confirm {action} for {source_type}:\n"
-            f"`{canonical}`"
-        ),
+        text=(f"Confirm {action} for {source_type}:\n`{canonical}`"),
         reply_markup=_wizard_confirm_keyboard(),
     )
 
 
-def _handle_source(args: list[str], ctx: CommandContext, chat_id: str, user_id: str) -> str:
+def _handle_source(
+    args: list[str], ctx: CommandContext, chat_id: str, user_id: str
+) -> str:
     if not args:
         return "Usage: /source <add|remove|list|wizard> ..."
 
@@ -254,11 +289,15 @@ def _handle_source(args: list[str], ctx: CommandContext, chat_id: str, user_id: 
         source_value = " ".join(args[2:]).strip()
         try:
             if action == "add":
-                created, canonical = add_source(ctx.sources_path, ctx.overlay_path, source_type, source_value)
+                created, canonical = add_source(
+                    ctx.sources_path, ctx.overlay_path, source_type, source_value
+                )
                 if created:
                     return f"Added {source_type}: {canonical}"
                 return f"Already tracked: {canonical}"
-            removed, canonical = remove_source(ctx.sources_path, ctx.overlay_path, source_type, source_value)
+            removed, canonical = remove_source(
+                ctx.sources_path, ctx.overlay_path, source_type, source_value
+            )
             if removed:
                 return f"Removed {source_type}: {canonical}"
             return f"Not found: {canonical}"
@@ -276,7 +315,7 @@ def _render_source_list(rows: dict[str, list[str]]) -> str:
         for v in vals[:10]:
             lines.append(f"  - {v}")
         if len(vals) > 10:
-            lines.append(f"  - ... (+{len(vals)-10} more)")
+            lines.append(f"  - ... (+{len(vals) - 10} more)")
     return "\n".join(lines)
 
 
@@ -288,7 +327,7 @@ def _trigger_run(ctx: CommandContext, chat_id: str) -> str:
 
     def worker() -> None:
         try:
-            profile = load_profile(ctx.profile_path)
+            profile = load_effective_profile(ctx.profile_path, ctx.profile_overlay_path)
             sources = load_effective_sources(ctx.sources_path, ctx.overlay_path)
             store = SQLiteStore(ctx.db_path)
             report = run_digest(
@@ -324,7 +363,9 @@ def _status_text(ctx: CommandContext) -> str:
 
     lines = []
     if lock_state is not None:
-        lines.append(f"Active run: {lock_state.run_id} (started {lock_state.started_at})")
+        lines.append(
+            f"Active run: {lock_state.run_id} (started {lock_state.started_at})"
+        )
     else:
         lines.append("Active run: none")
 
@@ -375,7 +416,12 @@ def _wizard_type_keyboard() -> dict:
             row = []
     if row:
         rows.append(row)
-    rows.append([{"text": "Back", "callback_data": "sw:back"}, {"text": "Cancel", "callback_data": "sw:cancel"}])
+    rows.append(
+        [
+            {"text": "Back", "callback_data": "sw:back"},
+            {"text": "Cancel", "callback_data": "sw:cancel"},
+        ]
+    )
     return {"inline_keyboard": rows}
 
 
@@ -404,7 +450,9 @@ def _parse_command(text: str) -> tuple[str, list[str]]:
     if not tokens:
         return "", []
     cmd = tokens[0].split("@", 1)[0].lower()
-    args = [t.strip().lower() if i == 0 else t.strip() for i, t in enumerate(tokens[1:])]
+    args = [
+        t.strip().lower() if i == 0 else t.strip() for i, t in enumerate(tokens[1:])
+    ]
     return cmd, args
 
 

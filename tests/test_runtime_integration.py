@@ -12,6 +12,54 @@ from digest.storage.sqlite_store import SQLiteStore
 
 
 class TestRuntimeIntegration(unittest.TestCase):
+    def test_progress_callback_emits_start_and_finish(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            store = SQLiteStore(str(db))
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+            )
+            profile = ProfileConfig(
+                output=OutputSettings(
+                    obsidian_vault_path="", obsidian_folder="AI Digest"
+                ),
+                llm_enabled=False,
+                agent_scoring_enabled=False,
+            )
+
+            fixture_item = Item(
+                id="fixture1",
+                url="https://example.com/fixture1",
+                title="OpenAI evals update",
+                source="fixture-source",
+                author=None,
+                published_at=datetime.now(),
+                type="article",
+                raw_text="Detailed ai evals coverage.",
+                hash="fixturehash1",
+            )
+
+            events: list[dict] = []
+
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]),
+                patch("digest.runtime.fetch_youtube_items", return_value=[]),
+            ):
+                report = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                    progress_cb=lambda event: events.append(event),
+                )
+
+            self.assertIn(report.status, {"success", "partial"})
+            stages = [str(e.get("stage", "")) for e in events]
+            self.assertIn("run_start", stages)
+            self.assertIn("run_finish", stages)
+            self.assertIn("score", stages)
+
     def test_full_run_with_fixtures(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "digest.db"

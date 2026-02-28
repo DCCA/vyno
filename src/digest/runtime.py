@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import logging
 import os
 from pathlib import Path
+from typing import Any, Callable
 
 from digest.config import ProfileConfig, SourceConfig
 from digest.connectors.github import fetch_github_items, normalize_github_org
@@ -19,13 +20,23 @@ from digest.models import Item, RunReport, ScoredItem
 from digest.pipeline.dedupe import dedupe_and_cluster
 from digest.pipeline.normalize import normalize_items
 from digest.pipeline.scoring import is_blocked, score_item
-from digest.pipeline.selection import select_digest_sections
+from digest.pipeline.selection import rank_scored_items, select_digest_sections
 from digest.pipeline.summarize import FallbackSummarizer
+from digest.quality.online_repair import (
+    ResponsesAPIQualityRepair,
+    build_rank_overrides,
+    compute_repair_feature_deltas,
+    item_features,
+    rebuild_sections_with_repair,
+)
 from digest.storage.sqlite_store import SQLiteStore
 from digest.logging_utils import get_run_logger, log_event
 from digest.summarizers.extractive import ExtractiveSummarizer
 from digest.summarizers.responses_api import ResponsesAPISummarizer
 from digest.scorers.agent import ResponsesAPIScorerTagger
+
+
+ProgressCallback = Callable[[dict[str, Any]], None]
 
 
 def run_digest(
@@ -36,10 +47,31 @@ def run_digest(
     use_last_completed_window: bool = True,
     only_new: bool = True,
     logger: logging.Logger | logging.LoggerAdapter | None = None,
+    progress_cb: ProgressCallback | None = None,
 ) -> RunReport:
     run_id = uuid.uuid4().hex[:12]
     run_logger = logger or get_run_logger(run_id)
     now = datetime.now(tz=timezone.utc)
+    run_started_at = now
+
+    def emit_progress(stage: str, message: str, **fields: Any) -> None:
+        if progress_cb is None:
+            return
+        payload: dict[str, Any] = {
+            "run_id": run_id,
+            "stage": stage,
+            "message": message,
+            "elapsed_s": round(
+                (datetime.now(tz=timezone.utc) - run_started_at).total_seconds(),
+                1,
+            ),
+        }
+        payload.update(fields)
+        try:
+            progress_cb(payload)
+        except Exception:
+            return
+
     window_start = (now - timedelta(hours=24)).isoformat()
     if use_last_completed_window:
         window_start = store.last_completed_window_end() or window_start
@@ -55,6 +87,12 @@ def run_digest(
         only_new=only_new,
     )
     store.start_run(run_id, window_start, window_end)
+    emit_progress(
+        "run_start",
+        "Digest run started",
+        window_start=window_start,
+        window_end=window_end,
+    )
 
     source_errors: list[str] = []
     summary_errors: list[str] = []
@@ -72,11 +110,23 @@ def run_digest(
                 source=feed_url,
                 item_count=len(fetched),
             )
+            emit_progress(
+                "fetch_rss",
+                "Fetched RSS source",
+                source=feed_url,
+                item_count=len(fetched),
+            )
         except Exception as exc:
             source_errors.append(f"rss:{feed_url}: {exc}")
             log_event(
                 run_logger,
                 "error",
+                "fetch_rss",
+                "RSS source fetch failed",
+                source=feed_url,
+                error=str(exc),
+            )
+            emit_progress(
                 "fetch_rss",
                 "RSS source fetch failed",
                 source=feed_url,
@@ -95,11 +145,23 @@ def run_digest(
                 channel_id=channel_id,
                 item_count=len(fetched),
             )
+            emit_progress(
+                "fetch_youtube_channel",
+                "Fetched YouTube channel source",
+                channel_id=channel_id,
+                item_count=len(fetched),
+            )
         except Exception as exc:
             source_errors.append(f"youtube:channel:{channel_id}: {exc}")
             log_event(
                 run_logger,
                 "error",
+                "fetch_youtube_channel",
+                "YouTube channel fetch failed",
+                channel_id=channel_id,
+                error=str(exc),
+            )
+            emit_progress(
                 "fetch_youtube_channel",
                 "YouTube channel fetch failed",
                 channel_id=channel_id,
@@ -118,11 +180,23 @@ def run_digest(
                 query=query,
                 item_count=len(fetched),
             )
+            emit_progress(
+                "fetch_youtube_query",
+                "Fetched YouTube query source",
+                query=query,
+                item_count=len(fetched),
+            )
         except Exception as exc:
             source_errors.append(f"youtube:query:{query}: {exc}")
             log_event(
                 run_logger,
                 "error",
+                "fetch_youtube_query",
+                "YouTube query fetch failed",
+                query=query,
+                error=str(exc),
+            )
+            emit_progress(
                 "fetch_youtube_query",
                 "YouTube query fetch failed",
                 query=query,
@@ -141,11 +215,23 @@ def run_digest(
                 inbox_path=sources.x_inbox_path,
                 item_count=len(fetched),
             )
+            emit_progress(
+                "fetch_x_inbox",
+                "Fetched X inbox items",
+                inbox_path=sources.x_inbox_path,
+                item_count=len(fetched),
+            )
         except Exception as exc:
             source_errors.append(f"x_inbox:{sources.x_inbox_path}: {exc}")
             log_event(
                 run_logger,
                 "error",
+                "fetch_x_inbox",
+                "X inbox fetch failed",
+                inbox_path=sources.x_inbox_path,
+                error=str(exc),
+            )
+            emit_progress(
                 "fetch_x_inbox",
                 "X inbox fetch failed",
                 inbox_path=sources.x_inbox_path,
@@ -190,6 +276,15 @@ def run_digest(
                 org_count=len(github_orgs),
                 item_count=len(fetched),
             )
+            emit_progress(
+                "fetch_github",
+                "Fetched GitHub items",
+                repo_count=len(sources.github_repos),
+                topic_count=len(sources.github_topics),
+                query_count=len(sources.github_search_queries),
+                org_count=len(github_orgs),
+                item_count=len(fetched),
+            )
         except Exception as exc:
             source_errors.append(f"github: {exc}")
             log_event(
@@ -199,6 +294,7 @@ def run_digest(
                 "GitHub fetch failed",
                 error=str(exc),
             )
+            emit_progress("fetch_github", "GitHub fetch failed", error=str(exc))
 
     normalized = normalize_items(raw_items)
     unique_items = dedupe_and_cluster(normalized)
@@ -206,6 +302,12 @@ def run_digest(
     log_event(
         run_logger,
         "info",
+        "normalize_filter",
+        "Normalized and filtered candidates",
+        raw_count=len(raw_items),
+        unique_count=len(unique_items),
+    )
+    emit_progress(
         "normalize_filter",
         "Normalized and filtered candidates",
         raw_count=len(raw_items),
@@ -227,6 +329,12 @@ def run_digest(
         "Selected candidate items",
         seen_count=len(seen),
         candidate_count=len(candidate_items),
+    )
+    emit_progress(
+        "candidate_select",
+        "Selected candidate items",
+        candidate_count=len(candidate_items),
+        seen_count=len(seen),
     )
 
     scores = []
@@ -262,10 +370,21 @@ def run_digest(
                 model=profile.openai_model,
                 max_agent_items_per_run=profile.max_agent_items_per_run,
             )
+            emit_progress(
+                "score_init",
+                "Agent scorer initialized",
+                model=profile.openai_model,
+                max_agent_items_per_run=profile.max_agent_items_per_run,
+            )
         except Exception as exc:
             log_event(
                 run_logger,
                 "error",
+                "score_init",
+                "Agent scorer unavailable, using rules fallback",
+                error=str(exc),
+            )
+            emit_progress(
                 "score_init",
                 "Agent scorer unavailable, using rules fallback",
                 error=str(exc),
@@ -338,6 +457,12 @@ def run_digest(
         score_count=len(scores),
         scored_item_count=len(scored_items),
     )
+    emit_progress(
+        "score",
+        "Scored candidate items",
+        score_count=len(scores),
+        scored_item_count=len(scored_items),
+    )
 
     primary = ExtractiveSummarizer()
     if profile.llm_enabled:
@@ -348,10 +473,12 @@ def run_digest(
             primary = ExtractiveSummarizer()
 
     summarizer = FallbackSummarizer(primary=primary, fallback=ExtractiveSummarizer())
+    summary_fallback_count = 0
     for scored in scored_items:
         summary, err = summarizer.summarize(scored.item)
         scored.summary = summary
         if err:
+            summary_fallback_count += 1
             summary_errors.append(f"{scored.item.id}: {err}")
             log_event(
                 run_logger,
@@ -361,8 +488,215 @@ def run_digest(
                 item_id=scored.item.id,
                 error=err,
             )
+    emit_progress(
+        "summarize",
+        "Summarized scored items",
+        item_count=len(scored_items),
+        fallback_count=summary_fallback_count,
+    )
 
-    sections = select_digest_sections(scored_items)
+    quality_score: float | None = None
+    quality_confidence: float | None = None
+    quality_issues: list[str] = []
+    quality_repair_applied = False
+    quality_model = ""
+
+    rank_overrides: dict[str, float] | None = None
+    if profile.quality_learning_enabled and scored_items:
+        prior_weights = store.quality_prior_weights(
+            half_life_days=profile.quality_learning_half_life_days,
+            max_abs_weight=profile.quality_learning_max_offset,
+        )
+        feedback_weights = store.feedback_feature_bias(
+            max_abs_bias=max(1.0, profile.quality_learning_max_offset / 2.0)
+        )
+        rank_overrides = build_rank_overrides(
+            scored_items,
+            prior_weights=prior_weights,
+            feedback_weights=feedback_weights,
+            max_offset=profile.quality_learning_max_offset,
+        )
+        log_event(
+            run_logger,
+            "info",
+            "quality_learning",
+            "Applied quality learning priors",
+            prior_feature_count=len(prior_weights),
+            feedback_feature_count=len(feedback_weights),
+            max_offset=profile.quality_learning_max_offset,
+            half_life_days=profile.quality_learning_half_life_days,
+        )
+        emit_progress(
+            "quality_learning",
+            "Applied quality learning priors",
+            prior_feature_count=len(prior_weights),
+            feedback_feature_count=len(feedback_weights),
+        )
+
+    ranked_items = rank_scored_items(scored_items, rank_overrides=rank_overrides)
+    ranked_non_videos = [si for si in ranked_items if si.item.type != "video"]
+    sections = select_digest_sections(scored_items, rank_overrides=rank_overrides)
+
+    if profile.quality_repair_enabled and ranked_non_videos and sections.must_read:
+        candidate_pool = ranked_non_videos[: profile.quality_repair_candidate_pool_size]
+        if len(candidate_pool) >= 5 and len(sections.must_read) >= 5:
+            before_ids = [si.item.id for si in sections.must_read]
+            quality_model = profile.quality_repair_model or profile.openai_model
+            try:
+                log_event(
+                    run_logger,
+                    "info",
+                    "quality_judge_start",
+                    "Starting Must-read quality judge",
+                    threshold=profile.quality_repair_threshold,
+                    candidate_pool_size=len(candidate_pool),
+                    model=quality_model,
+                )
+                emit_progress(
+                    "quality_judge_start",
+                    "Starting Must-read quality judge",
+                    threshold=profile.quality_repair_threshold,
+                    candidate_pool_size=len(candidate_pool),
+                    model=quality_model,
+                )
+                quality_judge = ResponsesAPIQualityRepair(model=quality_model)
+                repair_result = quality_judge.evaluate_and_repair(
+                    current_must_read=sections.must_read,
+                    candidate_pool=candidate_pool,
+                )
+                quality_score = float(repair_result.quality_score)
+                quality_confidence = float(repair_result.confidence)
+                quality_issues = list(repair_result.issues)
+                log_event(
+                    run_logger,
+                    "info",
+                    "quality_judge_result",
+                    "Must-read quality judge returned result",
+                    quality_score=round(quality_score, 2),
+                    confidence=round(quality_confidence, 3),
+                    issues=quality_issues,
+                )
+                emit_progress(
+                    "quality_judge_result",
+                    "Must-read quality judge returned result",
+                    quality_score=round(quality_score, 2),
+                    confidence=round(quality_confidence, 3),
+                )
+
+                after_ids = before_ids
+                if quality_score < profile.quality_repair_threshold:
+                    sections = rebuild_sections_with_repair(
+                        sections,
+                        ranked_non_videos,
+                        repair_result.repaired_must_read_ids,
+                    )
+                    after_ids = [si.item.id for si in sections.must_read]
+                    quality_repair_applied = True
+                    log_event(
+                        run_logger,
+                        "info",
+                        "quality_repair_applied",
+                        "Applied Must-read online repair",
+                        quality_score=round(quality_score, 2),
+                        threshold=profile.quality_repair_threshold,
+                        issues=quality_issues,
+                        before_ids=before_ids,
+                        after_ids=after_ids,
+                    )
+                    emit_progress(
+                        "quality_repair_applied",
+                        "Applied Must-read online repair",
+                        quality_score=round(quality_score, 2),
+                        threshold=profile.quality_repair_threshold,
+                    )
+                else:
+                    log_event(
+                        run_logger,
+                        "info",
+                        "quality_repair_skipped",
+                        "Skipped Must-read repair due to quality score",
+                        quality_score=round(quality_score, 2),
+                        threshold=profile.quality_repair_threshold,
+                        issues=quality_issues,
+                    )
+                    emit_progress(
+                        "quality_repair_skipped",
+                        "Skipped Must-read repair due to quality score",
+                        quality_score=round(quality_score, 2),
+                        threshold=profile.quality_repair_threshold,
+                    )
+
+                store.insert_quality_eval(
+                    run_id=run_id,
+                    quality_score=quality_score,
+                    confidence=quality_confidence,
+                    issues=quality_issues,
+                    before_ids=before_ids,
+                    after_ids=after_ids,
+                    repaired=quality_repair_applied,
+                    model=quality_model,
+                )
+
+                if profile.quality_learning_enabled and after_ids != before_ids:
+                    feature_map = {
+                        si.item.id: item_features(si)
+                        for si in ranked_non_videos[
+                            : profile.quality_repair_candidate_pool_size
+                        ]
+                    }
+                    deltas = compute_repair_feature_deltas(
+                        before_ids,
+                        after_ids,
+                        feature_map=feature_map,
+                    )
+                    store.apply_quality_prior_deltas(
+                        deltas,
+                        max_abs_weight=profile.quality_learning_max_offset,
+                    )
+                    log_event(
+                        run_logger,
+                        "info",
+                        "quality_learning_update",
+                        "Updated quality priors from repair decisions",
+                        delta_feature_count=len(deltas),
+                    )
+                    emit_progress(
+                        "quality_learning_update",
+                        "Updated quality priors from repair decisions",
+                        delta_feature_count=len(deltas),
+                    )
+            except Exception as exc:
+                log_event(
+                    run_logger,
+                    "error",
+                    "quality_repair",
+                    "Online quality repair failed",
+                    error=str(exc),
+                    fail_open=profile.quality_repair_fail_open,
+                )
+                emit_progress(
+                    "quality_repair",
+                    "Online quality repair failed",
+                    error=str(exc),
+                    fail_open=profile.quality_repair_fail_open,
+                )
+                if not profile.quality_repair_fail_open:
+                    summary_errors.append(f"quality_repair: {exc}")
+        else:
+            log_event(
+                run_logger,
+                "info",
+                "quality_repair_skipped",
+                "Skipped Must-read repair due to insufficient candidates",
+                candidate_pool_size=len(candidate_pool),
+                must_read_count=len(sections.must_read),
+            )
+            emit_progress(
+                "quality_repair_skipped",
+                "Skipped Must-read repair due to insufficient candidates",
+                candidate_pool_size=len(candidate_pool),
+                must_read_count=len(sections.must_read),
+            )
     # Keep note naming aligned with run window timestamps (UTC) to avoid
     # local-time drift where repeated runs overwrite the previous-day note.
     date_str = now.date().isoformat()
@@ -447,12 +781,23 @@ def run_digest(
                     chunk_index=idx,
                     chunk_count=len(telegram_messages),
                 )
+                emit_progress(
+                    "deliver_telegram",
+                    "Telegram message sent",
+                    chunk_index=idx,
+                    chunk_count=len(telegram_messages),
+                )
         except Exception as exc:
             source_errors.append(f"telegram: {exc}")
             status = "partial"
             log_event(
                 run_logger,
                 "error",
+                "deliver_telegram",
+                "Telegram delivery failed",
+                error=str(exc),
+            )
+            emit_progress(
                 "deliver_telegram",
                 "Telegram delivery failed",
                 error=str(exc),
@@ -476,12 +821,22 @@ def run_digest(
                 "Obsidian note written",
                 path=str(out_path),
             )
+            emit_progress(
+                "deliver_obsidian",
+                "Obsidian note written",
+                path=str(out_path),
+            )
         except Exception as exc:
             source_errors.append(f"obsidian: {exc}")
             status = "partial"
             log_event(
                 run_logger,
                 "error",
+                "deliver_obsidian",
+                "Obsidian write failed",
+                error=str(exc),
+            )
+            emit_progress(
                 "deliver_obsidian",
                 "Obsidian write failed",
                 error=str(exc),
@@ -503,6 +858,22 @@ def run_digest(
         cache_hits=cache_hits,
         cache_misses=cache_misses,
         policy_fallback_count=policy_fallback_count,
+        quality_repair_enabled=profile.quality_repair_enabled,
+        quality_repair_applied=quality_repair_applied,
+        quality_score=round(quality_score, 2) if quality_score is not None else None,
+        quality_confidence=(
+            round(quality_confidence, 3) if quality_confidence is not None else None
+        ),
+        quality_issues=quality_issues,
+        quality_model=quality_model,
+        source_error_count=len(source_errors),
+        summary_error_count=len(summary_errors),
+        final_item_count=len(scored_items),
+    )
+    emit_progress(
+        "run_finish",
+        "Digest run finished",
+        status=status,
         source_error_count=len(source_errors),
         summary_error_count=len(summary_errors),
         final_item_count=len(scored_items),

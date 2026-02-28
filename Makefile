@@ -1,4 +1,4 @@
-.PHONY: test live schedule logs bot docker-build docker-up docker-down docker-logs docker-ps docker-restart
+.PHONY: test live schedule logs bot web-api web-ui web-ui-build docker-build docker-up docker-down docker-logs docker-ps docker-restart
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && echo 1 || echo 0)
 
@@ -24,6 +24,15 @@ logs:
 
 bot:
 	$(DIGEST_CMD) --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db bot
+
+web-api:
+	$(DIGEST_CMD) --sources config/sources.yaml --sources-overlay data/sources.local.yaml --profile config/profile.yaml --profile-overlay data/profile.local.yaml --db digest-live.db web --host $(or $(HOST),127.0.0.1) --port $(or $(PORT),8787)
+
+web-ui:
+	npm --prefix web run dev
+
+web-ui-build:
+	npm --prefix web run build
 
 docker-build:
 	docker compose build digest-bot
