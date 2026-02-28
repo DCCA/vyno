@@ -23,8 +23,11 @@ github_include_forks: false
 github_include_archived: false
 github_max_repos_per_org: 20
 github_max_items_per_org: 40
+github_repo_max_age_days: 30
+github_activity_max_age_days: 14
 llm_enabled: false
 agent_scoring_enabled: true
+max_agent_items_per_run: 40
 min_llm_coverage: 0.9
 max_fallback_share: 0.1
 agent_scoring_retry_attempts: 1

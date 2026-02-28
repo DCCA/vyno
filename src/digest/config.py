@@ -49,9 +49,12 @@ class ProfileConfig:
     github_include_archived: bool = False
     github_max_repos_per_org: int = 20
     github_max_items_per_org: int = 40
+    github_repo_max_age_days: int = 30
+    github_activity_max_age_days: int = 14
     output: OutputSettings = field(default_factory=OutputSettings)
     llm_enabled: bool = False
     agent_scoring_enabled: bool = True
+    max_agent_items_per_run: int = 40
     min_llm_coverage: float = 0.9
     max_fallback_share: float = 0.1
     agent_scoring_retry_attempts: int = 1
@@ -129,10 +132,15 @@ def load_profile(path: str | Path) -> ProfileConfig:
     env_obsidian_vault = os.getenv("OBSIDIAN_VAULT_PATH", "").strip()
     env_obsidian_folder = os.getenv("OBSIDIAN_FOLDER", "").strip()
     output = OutputSettings(
-        telegram_chat_id=str(out.get("telegram_chat_id", "")).strip() or env_telegram_chat_id,
-        telegram_bot_token=str(out.get("telegram_bot_token", "")).strip() or env_telegram_bot_token,
-        obsidian_vault_path=str(out.get("obsidian_vault_path", "")).strip() or env_obsidian_vault,
-        obsidian_folder=str(out.get("obsidian_folder", "AI Digest")).strip() or env_obsidian_folder or "AI Digest",
+        telegram_chat_id=str(out.get("telegram_chat_id", "")).strip()
+        or env_telegram_chat_id,
+        telegram_bot_token=str(out.get("telegram_bot_token", "")).strip()
+        or env_telegram_bot_token,
+        obsidian_vault_path=str(out.get("obsidian_vault_path", "")).strip()
+        or env_obsidian_vault,
+        obsidian_folder=str(out.get("obsidian_folder", "AI Digest")).strip()
+        or env_obsidian_folder
+        or "AI Digest",
         obsidian_naming=naming,
         render_mode=render_mode,
     )
@@ -156,15 +164,32 @@ def load_profile(path: str | Path) -> ProfileConfig:
         github_min_stars=max(0, int(data.get("github_min_stars", 0) or 0)),
         github_include_forks=bool(data.get("github_include_forks", False)),
         github_include_archived=bool(data.get("github_include_archived", False)),
-        github_max_repos_per_org=max(1, int(data.get("github_max_repos_per_org", 20) or 20)),
-        github_max_items_per_org=max(1, int(data.get("github_max_items_per_org", 40) or 40)),
+        github_max_repos_per_org=max(
+            1, int(data.get("github_max_repos_per_org", 20) or 20)
+        ),
+        github_max_items_per_org=max(
+            1, int(data.get("github_max_items_per_org", 40) or 40)
+        ),
+        github_repo_max_age_days=max(
+            1, int(data.get("github_repo_max_age_days", 30) or 30)
+        ),
+        github_activity_max_age_days=max(
+            1, int(data.get("github_activity_max_age_days", 14) or 14)
+        ),
         output=output,
         llm_enabled=bool(data.get("llm_enabled", False)),
         agent_scoring_enabled=bool(data.get("agent_scoring_enabled", True)),
+        max_agent_items_per_run=max(
+            0, int(data.get("max_agent_items_per_run", 40) or 40)
+        ),
         min_llm_coverage=min_llm_coverage,
         max_fallback_share=max_fallback_share,
-        agent_scoring_retry_attempts=max(0, int(data.get("agent_scoring_retry_attempts", 1) or 1)),
-        agent_scoring_text_max_chars=max(400, int(data.get("agent_scoring_text_max_chars", 8000) or 8000)),
+        agent_scoring_retry_attempts=max(
+            0, int(data.get("agent_scoring_retry_attempts", 1) or 1)
+        ),
+        agent_scoring_text_max_chars=max(
+            400, int(data.get("agent_scoring_text_max_chars", 8000) or 8000)
+        ),
         openai_model=str(data.get("openai_model", env_model or "gpt-5.1-codex-mini")),
     )
 

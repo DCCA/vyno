@@ -96,6 +96,22 @@ class SQLiteStore:
                     details TEXT,
                     created_at TEXT
                 );
+
+                CREATE TABLE IF NOT EXISTS score_cache (
+                    item_hash TEXT,
+                    model TEXT,
+                    cached_at TEXT,
+                    relevance INTEGER,
+                    quality INTEGER,
+                    novelty INTEGER,
+                    total INTEGER,
+                    reason TEXT,
+                    tags_json TEXT,
+                    topic_tags_json TEXT,
+                    format_tags_json TEXT,
+                    provider TEXT,
+                    PRIMARY KEY (item_hash, model)
+                );
                 """
             )
             self._ensure_column(conn, "scores", "tags_json", "TEXT")
@@ -103,7 +119,9 @@ class SQLiteStore:
             self._ensure_column(conn, "scores", "format_tags_json", "TEXT")
             self._ensure_column(conn, "scores", "provider", "TEXT")
 
-    def _ensure_column(self, conn: sqlite3.Connection, table: str, column: str, col_type: str) -> None:
+    def _ensure_column(
+        self, conn: sqlite3.Connection, table: str, column: str, col_type: str
+    ) -> None:
         rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
         columns = {r[1] for r in rows}
         if column not in columns:
@@ -117,7 +135,13 @@ class SQLiteStore:
                 (run_id, now, window_start, window_end, "running"),
             )
 
-    def finish_run(self, run_id: str, status: str, source_errors: list[str], summary_errors: list[str]) -> None:
+    def finish_run(
+        self,
+        run_id: str,
+        status: str,
+        source_errors: list[str],
+        summary_errors: list[str],
+    ) -> None:
         with self._conn() as conn:
             conn.execute(
                 "UPDATE runs SET status = ?, source_errors = ?, summary_errors = ? WHERE run_id = ?",
@@ -204,6 +228,78 @@ class SQLiteStore:
         sum_errs = len((row[4] or "").splitlines()) if row[4] else 0
         return str(row[0]), str(row[1]), str(row[2]), src_errs, sum_errs
 
+    def get_cached_score(
+        self, item_hash: str, model: str, *, item_id: str, max_age_hours: int = 24
+    ) -> Score | None:
+        key = item_hash.strip()
+        model_key = model.strip()
+        if not key or not model_key:
+            return None
+        with self._conn() as conn:
+            row = conn.execute(
+                (
+                    "SELECT cached_at, relevance, quality, novelty, total, reason, "
+                    "tags_json, topic_tags_json, format_tags_json, provider "
+                    "FROM score_cache WHERE item_hash = ? AND model = ?"
+                ),
+                (key, model_key),
+            ).fetchone()
+        if not row:
+            return None
+        cached_at = _parse_dt(str(row[0] or ""))
+        if cached_at is None:
+            return None
+        age_seconds = (datetime.now(tz=timezone.utc) - cached_at).total_seconds()
+        if age_seconds > max(1, max_age_hours) * 3600:
+            return None
+        return Score(
+            item_id=item_id,
+            relevance=int(row[1] or 0),
+            quality=int(row[2] or 0),
+            novelty=int(row[3] or 0),
+            total=int(row[4] or 0),
+            reason=str(row[5] or ""),
+            tags=_json_list(row[6]),
+            topic_tags=_json_list(row[7]),
+            format_tags=_json_list(row[8]),
+            provider=str(row[9] or "agent"),
+        )
+
+    def upsert_cached_score(self, item_hash: str, model: str, score: Score) -> None:
+        key = item_hash.strip()
+        model_key = model.strip()
+        if not key or not model_key:
+            return
+        now = datetime.now(tz=timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                (
+                    "INSERT INTO score_cache "
+                    "(item_hash, model, cached_at, relevance, quality, novelty, total, reason, "
+                    "tags_json, topic_tags_json, format_tags_json, provider) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(item_hash, model) DO UPDATE SET "
+                    "cached_at=excluded.cached_at, relevance=excluded.relevance, quality=excluded.quality, "
+                    "novelty=excluded.novelty, total=excluded.total, reason=excluded.reason, "
+                    "tags_json=excluded.tags_json, topic_tags_json=excluded.topic_tags_json, "
+                    "format_tags_json=excluded.format_tags_json, provider=excluded.provider"
+                ),
+                (
+                    key,
+                    model_key,
+                    now,
+                    int(score.relevance),
+                    int(score.quality),
+                    int(score.novelty),
+                    int(score.total),
+                    score.reason,
+                    json.dumps(score.tags),
+                    json.dumps(score.topic_tags),
+                    json.dumps(score.format_tags),
+                    score.provider,
+                ),
+            )
+
     def list_runs(self, limit: int = 50) -> list[RunRecord]:
         with self._conn() as conn:
             rows = conn.execute(
@@ -228,10 +324,19 @@ class SQLiteStore:
                     "INSERT INTO feedback (run_id, item_id, rating, label, comment, created_at) "
                     "VALUES (?, ?, ?, ?, ?, ?)"
                 ),
-                (run_id.strip(), item_id.strip(), int(rating), label.strip(), comment.strip(), now),
+                (
+                    run_id.strip(),
+                    item_id.strip(),
+                    int(rating),
+                    label.strip(),
+                    comment.strip(),
+                    now,
+                ),
             )
 
-    def list_feedback(self, limit: int = 200) -> list[tuple[int, str, str, int, str, str, str]]:
+    def list_feedback(
+        self, limit: int = 200
+    ) -> list[tuple[int, str, str, int, str, str, str]]:
         with self._conn() as conn:
             rows = conn.execute(
                 (
@@ -249,7 +354,9 @@ class SQLiteStore:
             ).fetchall()
         return [(int(r[0]), int(r[1])) for r in rows]
 
-    def log_admin_action(self, *, actor: str, action: str, target: str, details: str = "") -> None:
+    def log_admin_action(
+        self, *, actor: str, action: str, target: str, details: str = ""
+    ) -> None:
         now = datetime.now(tz=timezone.utc).isoformat()
         with self._conn() as conn:
             conn.execute(
@@ -260,7 +367,9 @@ class SQLiteStore:
                 (actor.strip(), action.strip(), target.strip(), details.strip(), now),
             )
 
-    def list_admin_actions(self, limit: int = 200) -> list[tuple[int, str, str, str, str, str]]:
+    def list_admin_actions(
+        self, limit: int = 200
+    ) -> list[tuple[int, str, str, str, str, str]]:
         with self._conn() as conn:
             rows = conn.execute(
                 (
@@ -270,3 +379,36 @@ class SQLiteStore:
                 (max(1, limit),),
             ).fetchall()
         return [tuple(r) for r in rows]
+
+
+def _parse_dt(value: str) -> datetime | None:
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw)
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _json_list(raw: object) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, (bytes, bytearray)):
+        text = raw.decode("utf-8", errors="ignore")
+    else:
+        text = str(raw)
+    try:
+        rows = json.loads(text)
+    except Exception:
+        return []
+    if not isinstance(rows, list):
+        return []
+    out: list[str] = []
+    for value in rows:
+        if isinstance(value, str) and value.strip():
+            out.append(value.strip())
+    return out

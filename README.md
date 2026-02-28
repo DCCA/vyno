@@ -125,17 +125,20 @@ Use `docker compose ps` to inspect health status.
 ### `config/profile.yaml`
 - Scoring:
   - `agent_scoring_enabled: true`
+  - `max_agent_items_per_run` (default `40`)
   - `min_llm_coverage` (default `0.9`)
   - `max_fallback_share` (default `0.1`)
   - `agent_scoring_retry_attempts` (default `1`)
   - `agent_scoring_text_max_chars` (default `8000`)
   - `openai_model: gpt-5.1-codex-mini`
-- GitHub org guardrails:
+- GitHub quality guardrails:
   - `github_min_stars`
   - `github_include_forks`
   - `github_include_archived`
   - `github_max_repos_per_org`
   - `github_max_items_per_org`
+  - `github_repo_max_age_days`
+  - `github_activity_max_age_days`
 - Summarization:
   - `llm_enabled: false|true`
 - Output:

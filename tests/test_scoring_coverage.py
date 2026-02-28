@@ -44,6 +44,27 @@ class _RetryPassScorer:
         )
 
 
+class _CountingPassScorer:
+    def __init__(self, model: str = "x", timeout: int = 30) -> None:
+        _ = model, timeout
+        self.calls = 0
+
+    def score_and_tag(self, item, *, max_text_chars: int = 8000):
+        from digest.models import Score
+
+        _ = max_text_chars
+        self.calls += 1
+        return Score(
+            item_id=item.id,
+            relevance=12,
+            quality=9,
+            novelty=6,
+            total=27,
+            reason="ok",
+            provider="agent",
+        )
+
+
 class TestScoringCoverage(unittest.TestCase):
     def _item(self, item_id: str) -> Item:
         return Item(
@@ -61,19 +82,30 @@ class TestScoringCoverage(unittest.TestCase):
     def test_low_llm_coverage_marks_run_partial(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = SQLiteStore(str(Path(tmp) / "digest.db"))
-            sources = SourceConfig(rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[])
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+            )
             profile = ProfileConfig(
-                output=OutputSettings(obsidian_vault_path="", obsidian_folder="AI Digest"),
+                output=OutputSettings(
+                    obsidian_vault_path="", obsidian_folder="AI Digest"
+                ),
                 llm_enabled=False,
                 agent_scoring_enabled=True,
                 min_llm_coverage=0.9,
                 max_fallback_share=0.1,
             )
             items = [self._item("a1"), self._item("a2")]
-            with patch("digest.runtime.fetch_rss_items", return_value=items), patch(
-                "digest.runtime.ResponsesAPIScorerTagger", _AlwaysFailScorer
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=items),
+                patch("digest.runtime.ResponsesAPIScorerTagger", _AlwaysFailScorer),
             ):
-                report = run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
+                report = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
 
             self.assertEqual(report.status, "partial")
             joined = "\n".join(report.summary_errors)
@@ -83,9 +115,13 @@ class TestScoringCoverage(unittest.TestCase):
     def test_retry_with_smaller_text_limit_recovers(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = SQLiteStore(str(Path(tmp) / "digest.db"))
-            sources = SourceConfig(rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[])
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+            )
             profile = ProfileConfig(
-                output=OutputSettings(obsidian_vault_path="", obsidian_folder="AI Digest"),
+                output=OutputSettings(
+                    obsidian_vault_path="", obsidian_folder="AI Digest"
+                ),
                 llm_enabled=False,
                 agent_scoring_enabled=True,
                 min_llm_coverage=0.5,
@@ -95,15 +131,100 @@ class TestScoringCoverage(unittest.TestCase):
             )
             items = [self._item("a1")]
             scorer = _RetryPassScorer()
-            with patch("digest.runtime.fetch_rss_items", return_value=items), patch(
-                "digest.runtime.ResponsesAPIScorerTagger", return_value=scorer
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=items),
+                patch("digest.runtime.ResponsesAPIScorerTagger", return_value=scorer),
             ):
-                report = run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
+                report = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
 
             self.assertIn(report.status, {"success", "partial"})
             self.assertGreaterEqual(len(scorer.max_chars_used), 2)
             self.assertEqual(scorer.max_chars_used[0], 8000)
             self.assertEqual(scorer.max_chars_used[1], 4000)
+
+    def test_cap_overflow_does_not_fail_coverage_policy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = SQLiteStore(str(Path(tmp) / "digest.db"))
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+            )
+            profile = ProfileConfig(
+                output=OutputSettings(
+                    obsidian_vault_path="", obsidian_folder="AI Digest"
+                ),
+                llm_enabled=False,
+                agent_scoring_enabled=True,
+                max_agent_items_per_run=1,
+                min_llm_coverage=1.0,
+                max_fallback_share=0.0,
+            )
+            items = [self._item("a1"), self._item("a2"), self._item("a3")]
+            scorer = _CountingPassScorer()
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=items),
+                patch("digest.runtime.ResponsesAPIScorerTagger", return_value=scorer),
+            ):
+                report = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
+
+            self.assertEqual(report.status, "success")
+            self.assertEqual(scorer.calls, 1)
+
+    def test_score_cache_reuses_agent_score_on_repeat_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = SQLiteStore(str(Path(tmp) / "digest.db"))
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+            )
+            profile = ProfileConfig(
+                output=OutputSettings(
+                    obsidian_vault_path="", obsidian_folder="AI Digest"
+                ),
+                llm_enabled=False,
+                agent_scoring_enabled=True,
+                max_agent_items_per_run=5,
+                min_llm_coverage=0.0,
+                max_fallback_share=1.0,
+            )
+            item = self._item("cache1")
+            scorer = _CountingPassScorer()
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[item]),
+                patch("digest.runtime.ResponsesAPIScorerTagger", return_value=scorer),
+            ):
+                first = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
+                second = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
+
+            self.assertEqual(first.status, "success")
+            self.assertEqual(second.status, "success")
+            self.assertEqual(scorer.calls, 1)
+            cached = store.get_cached_score(
+                item.hash, profile.openai_model, item_id=item.id, max_age_hours=24
+            )
+            self.assertIsNotNone(cached)
 
 
 if __name__ == "__main__":

@@ -18,11 +18,15 @@ class TestRuntimeIntegration(unittest.TestCase):
             vault = Path(tmp) / "vault"
             store = SQLiteStore(str(db))
 
-            sources = SourceConfig(rss_feeds=["fixture"], youtube_channels=["fixture"], youtube_queries=[])
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=["fixture"], youtube_queries=[]
+            )
             profile = ProfileConfig(
                 topics=["ai"],
                 entities=["openai"],
-                output=OutputSettings(obsidian_vault_path=str(vault), obsidian_folder="AI Digest"),
+                output=OutputSettings(
+                    obsidian_vault_path=str(vault), obsidian_folder="AI Digest"
+                ),
                 llm_enabled=False,
             )
 
@@ -38,8 +42,9 @@ class TestRuntimeIntegration(unittest.TestCase):
                 hash="fixturehash1",
             )
 
-            with patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]), patch(
-                "digest.runtime.fetch_youtube_items", return_value=[]
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]),
+                patch("digest.runtime.fetch_youtube_items", return_value=[]),
             ):
                 report = run_digest(sources, profile, store)
 
@@ -63,11 +68,15 @@ class TestRuntimeIntegration(unittest.TestCase):
             vault = Path(tmp) / "vault"
             store = SQLiteStore(str(db))
 
-            sources = SourceConfig(rss_feeds=["fixture"], youtube_channels=["fixture"], youtube_queries=[])
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=["fixture"], youtube_queries=[]
+            )
             profile = ProfileConfig(
                 topics=["ai"],
                 entities=["openai"],
-                output=OutputSettings(obsidian_vault_path=str(vault), obsidian_folder="AI Digest"),
+                output=OutputSettings(
+                    obsidian_vault_path=str(vault), obsidian_folder="AI Digest"
+                ),
                 llm_enabled=False,
             )
 
@@ -83,13 +92,26 @@ class TestRuntimeIntegration(unittest.TestCase):
                 hash="fixturehash1",
             )
 
-            with patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]), patch(
-                "digest.runtime.fetch_youtube_items", return_value=[]
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]),
+                patch("digest.runtime.fetch_youtube_items", return_value=[]),
             ):
                 # Scheduled/incremental run marks item as seen.
-                first = run_digest(sources, profile, store, use_last_completed_window=True, only_new=True)
+                first = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=True,
+                    only_new=True,
+                )
                 # Manual run should still include recent window items.
-                second = run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
+                second = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
 
             self.assertIn(first.status, {"success", "partial"})
             self.assertIn(second.status, {"success", "partial"})
@@ -100,7 +122,9 @@ class TestRuntimeIntegration(unittest.TestCase):
             vault = Path(tmp) / "vault"
             store = SQLiteStore(str(db))
 
-            sources = SourceConfig(rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[])
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+            )
             profile = ProfileConfig(
                 output=OutputSettings(
                     obsidian_vault_path=str(vault),
@@ -122,11 +146,24 @@ class TestRuntimeIntegration(unittest.TestCase):
                 hash="fixturehash1",
             )
 
-            with patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]), patch(
-                "digest.runtime.fetch_youtube_items", return_value=[]
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]),
+                patch("digest.runtime.fetch_youtube_items", return_value=[]),
             ):
-                run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
-                run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
+                run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
+                run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
 
             files = sorted((vault / "AI Digest").glob("*/*.md"))
             self.assertEqual(len(files), 2)
@@ -147,7 +184,9 @@ class TestRuntimeIntegration(unittest.TestCase):
                 github_orgs=["https://github.com/vercel-labs"],
             )
             profile = ProfileConfig(
-                output=OutputSettings(obsidian_vault_path=str(vault), obsidian_folder="AI Digest"),
+                output=OutputSettings(
+                    obsidian_vault_path=str(vault), obsidian_folder="AI Digest"
+                ),
                 llm_enabled=False,
                 agent_scoring_enabled=False,
             )
@@ -186,12 +225,21 @@ class TestRuntimeIntegration(unittest.TestCase):
                 hash="gh1",
             )
 
-            with patch("digest.runtime.fetch_rss_items", return_value=[rss_item]), patch(
-                "digest.runtime.fetch_youtube_items", return_value=[]
-            ), patch("digest.runtime.fetch_x_inbox_items", return_value=[x_item]), patch(
-                "digest.runtime.fetch_github_items", return_value=[gh_item]
-            ) as gh_mock:
-                report = run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[rss_item]),
+                patch("digest.runtime.fetch_youtube_items", return_value=[]),
+                patch("digest.runtime.fetch_x_inbox_items", return_value=[x_item]),
+                patch(
+                    "digest.runtime.fetch_github_items", return_value=[gh_item]
+                ) as gh_mock,
+            ):
+                report = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
 
             self.assertIn(report.status, {"success", "partial"})
             self.assertEqual(gh_mock.call_args.kwargs.get("orgs"), ["vercel-labs"])
@@ -208,7 +256,9 @@ class TestRuntimeIntegration(unittest.TestCase):
             db = Path(tmp) / "digest.db"
             vault = Path(tmp) / "vault"
             store = SQLiteStore(str(db))
-            sources = SourceConfig(rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[])
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+            )
             profile = ProfileConfig(
                 output=OutputSettings(
                     obsidian_vault_path=str(vault),
@@ -230,10 +280,17 @@ class TestRuntimeIntegration(unittest.TestCase):
                 raw_text="release note",
                 hash="fixturehash1",
             )
-            with patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]), patch(
-                "digest.runtime.fetch_youtube_items", return_value=[]
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]),
+                patch("digest.runtime.fetch_youtube_items", return_value=[]),
             ):
-                run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
+                run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
 
             files = sorted((vault / "AI Digest").glob("*/*.md"))
             self.assertEqual(len(files), 1)
@@ -253,7 +310,9 @@ class TestRuntimeIntegration(unittest.TestCase):
                 github_orgs=["vercel-labs"],
             )
             profile = ProfileConfig(
-                output=OutputSettings(obsidian_vault_path=str(vault), obsidian_folder="AI Digest"),
+                output=OutputSettings(
+                    obsidian_vault_path=str(vault), obsidian_folder="AI Digest"
+                ),
                 llm_enabled=False,
                 agent_scoring_enabled=False,
                 github_min_stars=123,
@@ -261,15 +320,25 @@ class TestRuntimeIntegration(unittest.TestCase):
                 github_include_archived=True,
                 github_max_repos_per_org=4,
                 github_max_items_per_org=9,
+                github_repo_max_age_days=21,
+                github_activity_max_age_days=5,
             )
             with patch("digest.runtime.fetch_github_items", return_value=[]) as gh_mock:
-                run_digest(sources, profile, store, use_last_completed_window=False, only_new=False)
+                run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
             opts = gh_mock.call_args.kwargs.get("org_options") or {}
             self.assertEqual(opts.get("min_stars"), 123)
             self.assertTrue(opts.get("include_forks"))
             self.assertTrue(opts.get("include_archived"))
             self.assertEqual(opts.get("max_repos_per_org"), 4)
             self.assertEqual(opts.get("max_items_per_org"), 9)
+            self.assertEqual(opts.get("repo_max_age_days"), 21)
+            self.assertEqual(opts.get("activity_max_age_days"), 5)
 
 
 if __name__ == "__main__":

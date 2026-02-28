@@ -61,7 +61,10 @@ class TestConfig(unittest.TestCase):
     def test_profile_uses_env_fallback_for_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "profile.yaml"
-            path.write_text("output:\n  telegram_bot_token: ''\n  telegram_chat_id: ''\n", encoding="utf-8")
+            path.write_text(
+                "output:\n  telegram_bot_token: ''\n  telegram_chat_id: ''\n",
+                encoding="utf-8",
+            )
             with patch.dict(
                 "os.environ",
                 {
@@ -84,6 +87,9 @@ class TestConfig(unittest.TestCase):
                     "github_include_archived: true\n"
                     "github_max_repos_per_org: 7\n"
                     "github_max_items_per_org: 11\n"
+                    "github_repo_max_age_days: 21\n"
+                    "github_activity_max_age_days: 5\n"
+                    "max_agent_items_per_run: 12\n"
                 ),
                 encoding="utf-8",
             )
@@ -93,6 +99,9 @@ class TestConfig(unittest.TestCase):
             self.assertTrue(profile.github_include_archived)
             self.assertEqual(profile.github_max_repos_per_org, 7)
             self.assertEqual(profile.github_max_items_per_org, 11)
+            self.assertEqual(profile.github_repo_max_age_days, 21)
+            self.assertEqual(profile.github_activity_max_age_days, 5)
+            self.assertEqual(profile.max_agent_items_per_run, 12)
 
     def test_profile_loads_render_mode(self):
         with tempfile.TemporaryDirectory() as tmp:

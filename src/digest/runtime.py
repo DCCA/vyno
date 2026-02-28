@@ -64,10 +64,24 @@ def run_digest(
         try:
             fetched = fetch_rss_items([feed_url])
             raw_items.extend(fetched)
-            log_event(run_logger, "info", "fetch_rss", "Fetched RSS source", source=feed_url, item_count=len(fetched))
+            log_event(
+                run_logger,
+                "info",
+                "fetch_rss",
+                "Fetched RSS source",
+                source=feed_url,
+                item_count=len(fetched),
+            )
         except Exception as exc:
             source_errors.append(f"rss:{feed_url}: {exc}")
-            log_event(run_logger, "error", "fetch_rss", "RSS source fetch failed", source=feed_url, error=str(exc))
+            log_event(
+                run_logger,
+                "error",
+                "fetch_rss",
+                "RSS source fetch failed",
+                source=feed_url,
+                error=str(exc),
+            )
 
     for channel_id in sources.youtube_channels:
         try:
@@ -138,7 +152,12 @@ def run_digest(
                 error=str(exc),
             )
 
-    if sources.github_repos or sources.github_topics or sources.github_search_queries or sources.github_orgs:
+    if (
+        sources.github_repos
+        or sources.github_topics
+        or sources.github_search_queries
+        or sources.github_orgs
+    ):
         try:
             gh_token = os.getenv("GITHUB_TOKEN", "").strip()
             github_orgs = [normalize_github_org(v) for v in sources.github_orgs]
@@ -155,6 +174,8 @@ def run_digest(
                     "include_archived": profile.github_include_archived,
                     "max_repos_per_org": profile.github_max_repos_per_org,
                     "max_items_per_org": profile.github_max_items_per_org,
+                    "repo_max_age_days": profile.github_repo_max_age_days,
+                    "activity_max_age_days": profile.github_activity_max_age_days,
                 },
             )
             raw_items.extend(fetched)
@@ -171,7 +192,13 @@ def run_digest(
             )
         except Exception as exc:
             source_errors.append(f"github: {exc}")
-            log_event(run_logger, "error", "fetch_github", "GitHub fetch failed", error=str(exc))
+            log_event(
+                run_logger,
+                "error",
+                "fetch_github",
+                "GitHub fetch failed",
+                error=str(exc),
+            )
 
     normalized = normalize_items(raw_items)
     unique_items = dedupe_and_cluster(normalized)
@@ -206,24 +233,81 @@ def run_digest(
     agent_scorer = None
     llm_scored_count = 0
     fallback_scored_count = 0
+    policy_fallback_count = 0
+    cache_hits = 0
+    cache_misses = 0
     fallback_reasons: Counter[str] = Counter()
-    eligible_count = 0
+
+    eligible_items = [item for item in candidate_items if not is_blocked(item, profile)]
+    rules_scores = {item.id: score_item(item, profile) for item in eligible_items}
+    eligible_count = len(eligible_items)
+
+    agent_scope_ids: set[str] = set()
     if profile.agent_scoring_enabled:
+        ranked_for_agent = sorted(
+            eligible_items,
+            key=lambda i: rules_scores[i.id].total,
+            reverse=True,
+        )
+        agent_scope_ids = {
+            item.id for item in ranked_for_agent[: profile.max_agent_items_per_run]
+        }
         try:
             agent_scorer = ResponsesAPIScorerTagger(model=profile.openai_model)
-            log_event(run_logger, "info", "score_init", "Agent scorer initialized", model=profile.openai_model)
+            log_event(
+                run_logger,
+                "info",
+                "score_init",
+                "Agent scorer initialized",
+                model=profile.openai_model,
+                max_agent_items_per_run=profile.max_agent_items_per_run,
+            )
         except Exception as exc:
-            log_event(run_logger, "error", "score_init", "Agent scorer unavailable, using rules fallback", error=str(exc))
+            log_event(
+                run_logger,
+                "error",
+                "score_init",
+                "Agent scorer unavailable, using rules fallback",
+                error=str(exc),
+            )
 
+    agent_scope_count = len(agent_scope_ids)
     for item in candidate_items:
-        if is_blocked(item, profile):
+        rules_score = rules_scores.get(item.id)
+        if rules_score is None:
             continue
-        eligible_count += 1
+        in_agent_scope = item.id in agent_scope_ids
+
+        if not in_agent_scope:
+            if profile.agent_scoring_enabled:
+                policy_fallback_count += 1
+            scores.append(rules_score)
+            continue
+
+        cached_score = store.get_cached_score(
+            item.hash,
+            profile.openai_model,
+            item_id=item.id,
+            max_age_hours=24,
+        )
+        if cached_score is not None:
+            cache_hits += 1
+            llm_scored_count += 1
+            scores.append(cached_score)
+            continue
+        cache_misses += 1
+
         if agent_scorer is not None:
-            score, err = _score_with_retries(item, agent_scorer, profile.agent_scoring_retry_attempts, profile.agent_scoring_text_max_chars)
+            score, err = _score_with_retries(
+                item,
+                agent_scorer,
+                profile.agent_scoring_retry_attempts,
+                profile.agent_scoring_text_max_chars,
+            )
             if score is not None:
                 llm_scored_count += 1
                 scores.append(score)
+                store.upsert_cached_score(item.hash, profile.openai_model, score)
                 continue
             if err is not None:
                 reason = _classify_fallback_reason(str(err))
@@ -237,11 +321,23 @@ def run_digest(
                     error=str(err),
                     fallback_reason=reason,
                 )
+
         fallback_scored_count += 1
-        scores.append(score_item(item, profile))
+        scores.append(rules_score)
     score_map = {s.item_id: s for s in scores}
-    scored_items = [ScoredItem(item=i, score=score_map[i.id]) for i in candidate_items if i.id in score_map]
-    log_event(run_logger, "info", "score", "Scored candidate items", score_count=len(scores), scored_item_count=len(scored_items))
+    scored_items = [
+        ScoredItem(item=i, score=score_map[i.id])
+        for i in candidate_items
+        if i.id in score_map
+    ]
+    log_event(
+        run_logger,
+        "info",
+        "score",
+        "Scored candidate items",
+        score_count=len(scores),
+        scored_item_count=len(scored_items),
+    )
 
     primary = ExtractiveSummarizer()
     if profile.llm_enabled:
@@ -286,8 +382,10 @@ def run_digest(
         render_mode=profile.output.render_mode,
     )
 
-    llm_coverage = (llm_scored_count / eligible_count) if eligible_count else 1.0
-    fallback_share = (fallback_scored_count / eligible_count) if eligible_count else 0.0
+    llm_coverage = (llm_scored_count / agent_scope_count) if agent_scope_count else 1.0
+    fallback_share = (
+        (fallback_scored_count / agent_scope_count) if agent_scope_count else 0.0
+    )
     if profile.agent_scoring_enabled:
         log_event(
             run_logger,
@@ -295,8 +393,12 @@ def run_digest(
             "score_coverage",
             "LLM classification coverage",
             eligible_count=eligible_count,
+            agent_scope_count=agent_scope_count,
             llm_scored_count=llm_scored_count,
             fallback_scored_count=fallback_scored_count,
+            policy_fallback_count=policy_fallback_count,
+            cache_hits=cache_hits,
+            cache_misses=cache_misses,
             llm_coverage=round(llm_coverage, 4),
             fallback_share=round(fallback_share, 4),
             fallback_reasons=dict(fallback_reasons),
@@ -309,14 +411,19 @@ def run_digest(
         status = "partial"
     if (
         profile.agent_scoring_enabled
-        and eligible_count > 0
-        and (llm_coverage < profile.min_llm_coverage or fallback_share > profile.max_fallback_share)
+        and agent_scope_count > 0
+        and (
+            llm_coverage < profile.min_llm_coverage
+            or fallback_share > profile.max_fallback_share
+        )
     ):
         summary_errors.append(
             (
                 "scoring_coverage_below_threshold:"
                 f" llm_coverage={llm_coverage:.3f} (min={profile.min_llm_coverage:.3f}),"
                 f" fallback_share={fallback_share:.3f} (max={profile.max_fallback_share:.3f}),"
+                f" agent_scope_count={agent_scope_count},"
+                f" policy_fallback_count={policy_fallback_count},"
                 f" reasons={json.dumps(dict(fallback_reasons), ensure_ascii=True)}"
             )
         )
@@ -327,7 +434,11 @@ def run_digest(
     if profile.output.telegram_bot_token and profile.output.telegram_chat_id:
         try:
             for idx, chunk in enumerate(telegram_messages, start=1):
-                send_telegram_message(profile.output.telegram_bot_token, profile.output.telegram_chat_id, chunk)
+                send_telegram_message(
+                    profile.output.telegram_bot_token,
+                    profile.output.telegram_chat_id,
+                    chunk,
+                )
                 log_event(
                     run_logger,
                     "info",
@@ -339,7 +450,13 @@ def run_digest(
         except Exception as exc:
             source_errors.append(f"telegram: {exc}")
             status = "partial"
-            log_event(run_logger, "error", "deliver_telegram", "Telegram delivery failed", error=str(exc))
+            log_event(
+                run_logger,
+                "error",
+                "deliver_telegram",
+                "Telegram delivery failed",
+                error=str(exc),
+            )
 
     if profile.output.obsidian_vault_path:
         try:
@@ -352,11 +469,23 @@ def run_digest(
                 run_id=run_id,
                 run_dt_utc=now,
             )
-            log_event(run_logger, "info", "deliver_obsidian", "Obsidian note written", path=str(out_path))
+            log_event(
+                run_logger,
+                "info",
+                "deliver_obsidian",
+                "Obsidian note written",
+                path=str(out_path),
+            )
         except Exception as exc:
             source_errors.append(f"obsidian: {exc}")
             status = "partial"
-            log_event(run_logger, "error", "deliver_obsidian", "Obsidian write failed", error=str(exc))
+            log_event(
+                run_logger,
+                "error",
+                "deliver_obsidian",
+                "Obsidian write failed",
+                error=str(exc),
+            )
 
     store.upsert_items(candidate_items)
     store.insert_scores(run_id, scores)
@@ -370,12 +499,21 @@ def run_digest(
         status=status,
         llm_coverage=round(llm_coverage, 4),
         fallback_share=round(fallback_share, 4),
+        agent_scope_count=agent_scope_count,
+        cache_hits=cache_hits,
+        cache_misses=cache_misses,
+        policy_fallback_count=policy_fallback_count,
         source_error_count=len(source_errors),
         summary_error_count=len(summary_errors),
         final_item_count=len(scored_items),
     )
 
-    return RunReport(run_id=run_id, status=status, source_errors=source_errors, summary_errors=summary_errors)
+    return RunReport(
+        run_id=run_id,
+        status=status,
+        source_errors=source_errors,
+        summary_errors=summary_errors,
+    )
 
 
 def _filter_window(items: list[Item], window_start_iso: str) -> list[Item]:
@@ -416,7 +554,9 @@ def _score_with_retries(
         text_limit = max(400, int(max_text_chars / (2**attempt)))
         try:
             return agent_scorer.score_and_tag(item, max_text_chars=text_limit), None
-        except Exception as exc:  # pragma: no cover - behavior validated through runtime tests
+        except (
+            Exception
+        ) as exc:  # pragma: no cover - behavior validated through runtime tests
             last_exc = exc
             continue
     return None, last_exc
@@ -428,7 +568,11 @@ def _classify_fallback_reason(error_text: str) -> str:
         return "timeout"
     if "429" in text or "rate" in text:
         return "rate_limit"
-    if "invalid schema" in text or "non-json" in text or "missing structured json" in text:
+    if (
+        "invalid schema" in text
+        or "non-json" in text
+        or "missing structured json" in text
+    ):
         return "invalid_schema"
     if "empty response" in text:
         return "empty_response"
