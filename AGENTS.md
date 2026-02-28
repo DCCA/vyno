@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This repository is currently documentation-first. The root contains project-level guidance in `FIREHOSE.md` and operational notes in `excalidraw.log`.
+This repository is currently documentation-first. The root contains project-level guidance in `FIREHOSE.md`.
 
 Use `.docs/` as the primary workspace for planned and active work:
 - `.docs/PRD.md`: product goals, constraints, and non-goals.
