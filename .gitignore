@@ -32,6 +32,9 @@ data/profile.local.yaml
 .runtime/
 web/node_modules/
 web/dist/
+web/*.tsbuildinfo
+web/*.d.ts
+web/*.js
 
 # Keep .docs as source-of-truth; ignore only ephemeral paths.
 .docs/tmp/
