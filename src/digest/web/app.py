@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
 import threading
 import uuid
 from typing import Any
@@ -265,7 +266,8 @@ def create_app(settings: WebSettings):
     @app.get("/api/run-status")
     def get_run_status() -> dict[str, Any]:
         store = SQLiteStore(settings.db_path)
-        latest = store.latest_run_summary()
+        latest = store.latest_run_details(completed_only=False)
+        latest_completed = store.latest_run_details(completed_only=True)
         active = lock.current()
         return {
             "active": (
@@ -278,13 +280,57 @@ def create_app(settings: WebSettings):
                     "run_id": latest[0],
                     "status": latest[1],
                     "started_at": latest[2],
-                    "source_errors": latest[3],
-                    "summary_errors": latest[4],
+                    "source_error_count": len(latest[3]),
+                    "summary_error_count": len(latest[4]),
                 }
                 if latest is not None
                 else None
             ),
+            "latest_completed": (
+                {
+                    "run_id": latest_completed[0],
+                    "status": latest_completed[1],
+                    "started_at": latest_completed[2],
+                    "source_error_count": len(latest_completed[3]),
+                    "summary_error_count": len(latest_completed[4]),
+                    "source_errors": [
+                        _parse_source_error(line) for line in latest_completed[3]
+                    ],
+                }
+                if latest_completed is not None
+                else None
+            ),
         }
+
+    @app.get("/api/source-health")
+    def get_source_health() -> dict[str, Any]:
+        store = SQLiteStore(settings.db_path)
+        rows = store.recent_source_error_runs(limit=20)
+        aggregate: dict[tuple[str, str], dict[str, Any]] = {}
+        for run_id, started_at, errors in rows:
+            for raw in errors:
+                parsed = _parse_source_error(raw)
+                key = (parsed["kind"], parsed["source"])
+                current = aggregate.get(key)
+                if current is None:
+                    aggregate[key] = {
+                        "kind": parsed["kind"],
+                        "source": parsed["source"],
+                        "count": 1,
+                        "last_seen": started_at,
+                        "last_run_id": run_id,
+                        "last_error": parsed["error"],
+                        "hint": parsed["hint"],
+                    }
+                else:
+                    current["count"] = int(current["count"]) + 1
+
+        items = sorted(
+            aggregate.values(),
+            key=lambda r: (int(r["count"]), str(r["last_seen"])),
+            reverse=True,
+        )
+        return {"items": items}
 
     return app
 
@@ -352,3 +398,61 @@ def _dict_diff(base: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
         if left != right:
             out[key] = right
     return out
+
+
+def _parse_source_error(line: str) -> dict[str, str]:
+    raw = (line or "").strip()
+    kind = "unknown"
+    source = raw
+    error_text = raw
+
+    if raw.startswith("rss:"):
+        kind = "rss"
+        source, error_text = _split_once(raw[len("rss:") :], ": ")
+    elif raw.startswith("youtube:channel:"):
+        kind = "youtube_channel"
+        source, error_text = _split_once(raw[len("youtube:channel:") :], ": ")
+    elif raw.startswith("youtube:query:"):
+        kind = "youtube_query"
+        source, error_text = _split_once(raw[len("youtube:query:") :], ": ")
+    elif raw.startswith("x_inbox:"):
+        kind = "x_inbox"
+        source, error_text = _split_once(raw[len("x_inbox:") :], ": ")
+    elif raw.startswith("github:"):
+        kind = "github"
+        error_text = raw[len("github:") :].strip()
+        source = "github"
+        m = re.search(r"\(/repos/[^\)]+\)", error_text)
+        if m:
+            source = m.group(0).strip("()")
+
+    return {
+        "kind": kind,
+        "source": source or "unknown",
+        "error": error_text,
+        "hint": _error_hint(kind, error_text),
+    }
+
+
+def _split_once(value: str, marker: str) -> tuple[str, str]:
+    if marker not in value:
+        return value, ""
+    left, right = value.split(marker, 1)
+    return left.strip(), right.strip()
+
+
+def _error_hint(kind: str, error_text: str) -> str:
+    text = (error_text or "").lower()
+    if kind == "rss":
+        return "Feed may be unavailable or invalid. Open URL in browser and verify it still publishes RSS/Atom."
+    if kind.startswith("youtube"):
+        return "YouTube source may be invalid/rate-limited. Verify channel/query and retry."
+    if kind == "x_inbox":
+        return "Inbox file path/content issue. Check x_inbox_path and file permissions."
+    if kind == "github" and "httperror: 403" in text:
+        return (
+            "GitHub API rate limit/auth issue. Set or refresh GITHUB_TOKEN and re-run."
+        )
+    if "timed out" in text or "connection" in text or "temporary failure" in text:
+        return "Network/connectivity issue. Check internet or retry later."
+    return "Inspect source settings and logs; then retry the run."

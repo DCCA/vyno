@@ -252,6 +252,61 @@ class SQLiteStore:
         sum_errs = len((row[4] or "").splitlines()) if row[4] else 0
         return str(row[0]), str(row[1]), str(row[2]), src_errs, sum_errs
 
+    def latest_run_details(
+        self,
+        *,
+        completed_only: bool = False,
+    ) -> tuple[str, str, str, list[str], list[str]] | None:
+        query = (
+            "SELECT run_id, status, started_at, source_errors, summary_errors "
+            "FROM runs ORDER BY started_at DESC LIMIT 1"
+        )
+        if completed_only:
+            query = (
+                "SELECT run_id, status, started_at, source_errors, summary_errors "
+                "FROM runs WHERE status IN ('success','partial','failed') "
+                "ORDER BY started_at DESC LIMIT 1"
+            )
+        with self._conn() as conn:
+            row = conn.execute(query).fetchone()
+        if not row:
+            return None
+        source_errors = [
+            line.strip() for line in str(row[3] or "").splitlines() if line.strip()
+        ]
+        summary_errors = [
+            line.strip() for line in str(row[4] or "").splitlines() if line.strip()
+        ]
+        return (
+            str(row[0]),
+            str(row[1]),
+            str(row[2]),
+            source_errors,
+            summary_errors,
+        )
+
+    def recent_source_error_runs(
+        self, limit: int = 20
+    ) -> list[tuple[str, str, list[str]]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                (
+                    "SELECT run_id, started_at, source_errors "
+                    "FROM runs WHERE source_errors IS NOT NULL AND source_errors != '' "
+                    "ORDER BY started_at DESC LIMIT ?"
+                ),
+                (max(1, limit),),
+            ).fetchall()
+        out: list[tuple[str, str, list[str]]] = []
+        for run_id, started_at, source_errors_raw in rows:
+            source_errors = [
+                line.strip()
+                for line in str(source_errors_raw or "").splitlines()
+                if line.strip()
+            ]
+            out.append((str(run_id), str(started_at), source_errors))
+        return out
+
     def get_cached_score(
         self, item_hash: str, model: str, *, item_id: str, max_age_hours: int = 24
     ) -> Score | None:

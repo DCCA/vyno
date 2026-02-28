@@ -15,14 +15,39 @@ import { Textarea } from "@/components/ui/textarea"
 
 type SourceMap = Record<string, string[]>
 
+type SourceErrorDetail = {
+  kind: string
+  source: string
+  error: string
+  hint: string
+}
+
+type SourceHealthItem = {
+  kind: string
+  source: string
+  count: number
+  last_seen: string
+  last_run_id: string
+  last_error: string
+  hint: string
+}
+
 type RunStatus = {
   active: { run_id: string; started_at: string } | null
   latest: {
     run_id: string
     status: string
     started_at: string
-    source_errors: number
-    summary_errors: number
+    source_error_count: number
+    summary_error_count: number
+  } | null
+  latest_completed: {
+    run_id: string
+    status: string
+    started_at: string
+    source_error_count: number
+    summary_error_count: number
+    source_errors: SourceErrorDetail[]
   } | null
 }
 
@@ -70,6 +95,7 @@ export default function App() {
   const [profileDiff, setProfileDiff] = useState<Record<string, unknown>>({})
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [runStatus, setRunStatus] = useState<RunStatus | null>(null)
+  const [sourceHealth, setSourceHealth] = useState<SourceHealthItem[]>([])
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null)
 
   const sortedSourceRows = useMemo(
@@ -80,7 +106,15 @@ export default function App() {
   useEffect(() => {
     void refreshAll()
     const timer = setInterval(() => {
-      void api<RunStatus>("/api/run-status").then(setRunStatus).catch(() => undefined)
+      void Promise.all([
+        api<RunStatus>("/api/run-status"),
+        api<{ items: SourceHealthItem[] }>("/api/source-health"),
+      ])
+        .then(([status, health]) => {
+          setRunStatus(status)
+          setSourceHealth(health.items)
+        })
+        .catch(() => undefined)
     }, 8000)
     return () => clearInterval(timer)
   }, [])
@@ -88,12 +122,13 @@ export default function App() {
   async function refreshAll() {
     setLoading(true)
     try {
-      const [typeData, sourceData, profileData, historyData, statusData] = await Promise.all([
+      const [typeData, sourceData, profileData, historyData, statusData, healthData] = await Promise.all([
         api<{ types: string[] }>("/api/config/source-types"),
         api<{ sources: SourceMap }>("/api/config/sources"),
         api<{ profile: Record<string, unknown> }>("/api/config/profile"),
         api<{ snapshots: HistoryItem[] }>("/api/config/history"),
         api<RunStatus>("/api/run-status"),
+        api<{ items: SourceHealthItem[] }>("/api/source-health"),
       ])
       setSourceTypes(typeData.types)
       setSources(sourceData.sources)
@@ -101,6 +136,7 @@ export default function App() {
       setProfileJson(JSON.stringify(profileData.profile, null, 2))
       setHistory(historyData.snapshots)
       setRunStatus(statusData)
+      setSourceHealth(healthData.items)
       if (typeData.types.length > 0 && !typeData.types.includes(sourceType)) {
         setSourceType(typeData.types[0])
       }
@@ -261,6 +297,11 @@ export default function App() {
               {runStatus?.latest ? (
                 <Badge variant="secondary">Last: {runStatus.latest.status}</Badge>
               ) : null}
+              {runStatus?.latest_completed && runStatus.latest_completed.source_error_count > 0 ? (
+                <Badge variant="warning">
+                  Source errors: {runStatus.latest_completed.source_error_count}
+                </Badge>
+              ) : null}
               <Button variant="outline" onClick={() => void refreshAll()} disabled={loading || saving}>
                 <RefreshCcw className="h-4 w-4" /> Refresh
               </Button>
@@ -276,6 +317,39 @@ export default function App() {
             <AlertTitle>{notice.kind === "error" ? "Action failed" : "Action completed"}</AlertTitle>
             <AlertDescription>{notice.text}</AlertDescription>
           </Alert>
+        ) : null}
+
+        {sourceHealth.length > 0 ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Source Health</CardTitle>
+              <CardDescription>
+                Broken sources detected in recent runs. Fix these to improve source coverage.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Source</TableHead>
+                    <TableHead>Failures (20 runs)</TableHead>
+                    <TableHead>Last Error</TableHead>
+                    <TableHead>Suggested Fix</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sourceHealth.slice(0, 6).map((item) => (
+                    <TableRow key={`${item.kind}:${item.source}`}>
+                      <TableCell className="font-mono text-xs">{item.source}</TableCell>
+                      <TableCell>{item.count}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{item.last_error}</TableCell>
+                      <TableCell className="text-xs">{item.hint}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         ) : null}
 
         {loading || !profile ? (

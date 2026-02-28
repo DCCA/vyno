@@ -76,6 +76,7 @@ make live
 - API server: `make web-api` (serves at `http://127.0.0.1:8787` by default)
 - UI dev server: `make web-ui` (Vite at `http://127.0.0.1:5173`)
 - UI build: `make web-ui-build`
+- Source health panel shows broken sources from recent runs with suggested fixes.
 - Optional API base override for UI:
   - `VITE_API_BASE=http://127.0.0.1:8787 npm --prefix web run dev`
 
