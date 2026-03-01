@@ -76,7 +76,6 @@ def create_app(settings: WebSettings):
     try:
         from fastapi import Body, FastAPI, HTTPException
         from fastapi.middleware.cors import CORSMiddleware
-        from pydantic import BaseModel
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
             "FastAPI and pydantic are required for web mode. Install optional web deps."
@@ -279,19 +278,6 @@ def create_app(settings: WebSettings):
                 key: value for key, value in state.items() if not key.startswith("_")
             }
 
-    class SourceMutation(BaseModel):
-        source_type: str
-        value: str
-
-    class ProfilePayload(BaseModel):
-        profile: dict[str, Any]
-
-    class RollbackPayload(BaseModel):
-        snapshot_id: str
-
-    class SourcePackPayload(BaseModel):
-        pack_id: str
-
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -313,42 +299,56 @@ def create_app(settings: WebSettings):
         }
 
     @app.post("/api/config/sources/add")
-    def post_source_add(payload: SourceMutation = Body(...)) -> dict[str, Any]:
+    def post_source_add(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        source_type = str(payload.get("source_type", "") or "").strip()
+        value = str(payload.get("value", "") or "").strip()
+        if not source_type or not value:
+            raise HTTPException(
+                status_code=400,
+                detail="source_type and value are required",
+            )
         created, canonical = add_source(
             settings.sources_path,
             settings.sources_overlay_path,
-            payload.source_type,
-            payload.value,
+            source_type,
+            value,
         )
         _save_snapshot(
             settings,
             action="source_add",
-            details={"source_type": payload.source_type, "value": canonical},
+            details={"source_type": source_type, "value": canonical},
         )
         mark_step_completed(
             settings.onboarding_state_path,
             "sources",
-            details=f"{payload.source_type}:{canonical}",
+            details=f"{source_type}:{canonical}",
         )
         return {"created": created, "canonical": canonical}
 
     @app.post("/api/config/sources/remove")
-    def post_source_remove(payload: SourceMutation = Body(...)) -> dict[str, Any]:
+    def post_source_remove(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        source_type = str(payload.get("source_type", "") or "").strip()
+        value = str(payload.get("value", "") or "").strip()
+        if not source_type or not value:
+            raise HTTPException(
+                status_code=400,
+                detail="source_type and value are required",
+            )
         removed, canonical = remove_source(
             settings.sources_path,
             settings.sources_overlay_path,
-            payload.source_type,
-            payload.value,
+            source_type,
+            value,
         )
         _save_snapshot(
             settings,
             action="source_remove",
-            details={"source_type": payload.source_type, "value": canonical},
+            details={"source_type": source_type, "value": canonical},
         )
         mark_step_completed(
             settings.onboarding_state_path,
             "sources",
-            details=f"{payload.source_type}:{canonical}",
+            details=f"{source_type}:{canonical}",
         )
         return {"removed": removed, "canonical": canonical}
 
@@ -360,13 +360,19 @@ def create_app(settings: WebSettings):
         return {"profile": profile_to_dict(effective)}
 
     @app.post("/api/config/profile/validate")
-    def post_profile_validate(payload: ProfilePayload = Body(...)) -> dict[str, Any]:
-        validated = parse_profile_dict(payload.profile)
+    def post_profile_validate(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        profile_data = payload.get("profile")
+        if not isinstance(profile_data, dict):
+            raise HTTPException(status_code=400, detail="profile object is required")
+        validated = parse_profile_dict(profile_data)
         return {"valid": True, "profile": profile_to_dict(validated)}
 
     @app.post("/api/config/profile/diff")
-    def post_profile_diff(payload: ProfilePayload = Body(...)) -> dict[str, Any]:
-        validated = parse_profile_dict(payload.profile)
+    def post_profile_diff(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        profile_data = payload.get("profile")
+        if not isinstance(profile_data, dict):
+            raise HTTPException(status_code=400, detail="profile object is required")
+        validated = parse_profile_dict(profile_data)
         candidate = profile_to_dict(validated)
         current = profile_to_dict(
             load_effective_profile(settings.profile_path, settings.profile_overlay_path)
@@ -376,11 +382,14 @@ def create_app(settings: WebSettings):
         }
 
     @app.post("/api/config/profile/save")
-    def post_profile_save(payload: ProfilePayload = Body(...)) -> dict[str, Any]:
+    def post_profile_save(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        profile_data = payload.get("profile")
+        if not isinstance(profile_data, dict):
+            raise HTTPException(status_code=400, detail="profile object is required")
         overlay = save_profile_overlay(
             settings.profile_path,
             settings.profile_overlay_path,
-            payload.profile,
+            profile_data,
         )
         _save_snapshot(
             settings,
@@ -458,8 +467,11 @@ def create_app(settings: WebSettings):
         return {"snapshots": snapshots[:100]}
 
     @app.post("/api/config/rollback")
-    def post_rollback(payload: RollbackPayload = Body(...)) -> dict[str, Any]:
-        path = Path(settings.history_dir) / f"{payload.snapshot_id}.json"
+    def post_rollback(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        snapshot_id = str(payload.get("snapshot_id", "") or "").strip()
+        if not snapshot_id:
+            raise HTTPException(status_code=400, detail="snapshot_id is required")
+        path = Path(settings.history_dir) / f"{snapshot_id}.json"
         if not path.exists():
             raise HTTPException(status_code=404, detail="snapshot not found")
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -468,7 +480,7 @@ def create_app(settings: WebSettings):
         _write_yaml_dict(settings.sources_overlay_path, sources_overlay)
         _write_yaml_dict(settings.profile_overlay_path, profile_overlay)
         _save_snapshot(
-            settings, action="rollback", details={"snapshot_id": payload.snapshot_id}
+            settings, action="rollback", details={"snapshot_id": snapshot_id}
         )
         return {"rolled_back": True}
 
@@ -548,10 +560,13 @@ def create_app(settings: WebSettings):
 
     @app.post("/api/onboarding/source-packs/apply")
     def post_onboarding_source_pack_apply(
-        payload: SourcePackPayload = Body(...),
+        payload: dict[str, Any] = Body(...),
     ) -> dict[str, Any]:
+        pack_id = str(payload.get("pack_id", "") or "").strip()
+        if not pack_id:
+            raise HTTPException(status_code=400, detail="pack_id is required")
         try:
-            result = apply_source_pack(onboarding_settings, payload.pack_id)
+            result = apply_source_pack(onboarding_settings, pack_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -559,7 +574,7 @@ def create_app(settings: WebSettings):
             settings,
             action="source_pack_apply",
             details={
-                "pack_id": payload.pack_id,
+                "pack_id": pack_id,
                 "added_count": int(result.get("added_count", 0)),
                 "error_count": int(result.get("error_count", 0)),
             },
@@ -572,7 +587,7 @@ def create_app(settings: WebSettings):
             mark_step_completed(
                 settings.onboarding_state_path,
                 "sources",
-                details=f"pack:{payload.pack_id}",
+                details=f"pack:{pack_id}",
             )
 
         return result
