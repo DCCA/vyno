@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
 import threading
@@ -44,6 +45,36 @@ FETCH_STAGES = {
     "fetch_github",
 }
 
+DEFAULT_WEB_CORS_ORIGINS = [
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "http://127.0.0.1:4173",
+    "http://localhost:4173",
+]
+
+DEFAULT_WEB_CORS_ORIGIN_REGEX = (
+    r"^https?://((localhost|127\.0\.0\.1|0\.0\.0\.0)"
+    r"|(10\.\d+\.\d+\.\d+)"
+    r"|(192\.168\.\d+\.\d+)"
+    r"|(172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+))(:\d+)?$"
+)
+
+
+def _cors_allowed_origins() -> list[str]:
+    raw = str(os.getenv("DIGEST_WEB_CORS_ORIGINS", "") or "").strip()
+    if not raw:
+        return list(DEFAULT_WEB_CORS_ORIGINS)
+
+    values = [part.strip() for part in raw.split(",")]
+    return [value for value in values if value]
+
+
+def _cors_allow_origin_regex() -> str:
+    raw = str(os.getenv("DIGEST_WEB_CORS_ORIGIN_REGEX", "") or "").strip()
+    if raw:
+        return raw
+    return DEFAULT_WEB_CORS_ORIGIN_REGEX
+
 
 def _web_live_run_options(*, trigger: str) -> dict[str, bool]:
     if trigger == "web":
@@ -84,12 +115,8 @@ def create_app(settings: WebSettings):
     app = FastAPI(title="Digest Config Console API", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://127.0.0.1:5173",
-            "http://localhost:5173",
-            "http://127.0.0.1:4173",
-            "http://localhost:4173",
-        ],
+        allow_origins=_cors_allowed_origins(),
+        allow_origin_regex=_cors_allow_origin_regex(),
         allow_methods=["*"],
         allow_headers=["*"],
     )
