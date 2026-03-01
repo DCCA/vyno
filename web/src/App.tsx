@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Activity,
   CheckCircle2,
@@ -260,6 +260,18 @@ type SaveAction =
 type ConsoleSurface = "dashboard" | "run" | "onboarding" | "sources" | "profile" | "review" | "timeline" | "history"
 type SourcesView = "overview" | "effective" | "health"
 
+const CONSOLE_SURFACES: ConsoleSurface[] = [
+  "dashboard",
+  "run",
+  "onboarding",
+  "sources",
+  "profile",
+  "review",
+  "timeline",
+  "history",
+]
+const SOURCES_VIEWS: SourcesView[] = ["overview", "effective", "health"]
+
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").trim().replace(/\/$/, "")
 const API_TOKEN = import.meta.env.VITE_WEB_API_TOKEN ?? ""
 const API_TOKEN_HEADER = import.meta.env.VITE_WEB_API_TOKEN_HEADER ?? "X-Digest-Api-Token"
@@ -351,7 +363,22 @@ function truncateText(value: string, maxChars = 92): string {
   return `${source.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`
 }
 
+function readSurfaceFromUrl(): ConsoleSurface | null {
+  if (typeof window === "undefined") return null
+  const search = new URLSearchParams(window.location.search)
+  const value = (search.get("surface") || "").trim()
+  return CONSOLE_SURFACES.includes(value as ConsoleSurface) ? (value as ConsoleSurface) : null
+}
+
+function readSourcesViewFromUrl(): SourcesView | null {
+  if (typeof window === "undefined") return null
+  const search = new URLSearchParams(window.location.search)
+  const value = (search.get("sourcesView") || "").trim()
+  return SOURCES_VIEWS.includes(value as SourcesView) ? (value as SourcesView) : null
+}
+
 export default function App() {
+  const uiStateHydratedRef = useRef(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [sourceTypes, setSourceTypes] = useState<string[]>([])
@@ -616,6 +643,18 @@ export default function App() {
     }, 8000)
     return () => clearInterval(timer)
   }, [timelineRunId])
+
+  useEffect(() => {
+    const initialSurface = readSurfaceFromUrl()
+    const initialSourcesView = readSourcesViewFromUrl()
+    if (initialSurface) {
+      setSurface(initialSurface)
+    }
+    if (initialSourcesView) {
+      setSourcesView(initialSourcesView)
+    }
+    uiStateHydratedRef.current = true
+  }, [])
 
   useEffect(() => {
     const activeRunId = runStatus?.active?.run_id || runProgress?.run_id
@@ -1128,6 +1167,20 @@ export default function App() {
   }, [sourceHealthSearch, sourceHealth.length])
 
   useEffect(() => {
+    if (!uiStateHydratedRef.current || typeof window === "undefined") return
+    const search = new URLSearchParams(window.location.search)
+    search.set("surface", surface)
+    if (surface === "sources") {
+      search.set("sourcesView", sourcesView)
+    } else {
+      search.delete("sourcesView")
+    }
+    const nextSearch = search.toString()
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`
+    window.history.replaceState({}, "", nextUrl)
+  }, [surface, sourcesView])
+
+  useEffect(() => {
     if (!timelineRunId) return
     void refreshTimeline({ silent: true })
   }, [timelineRunId, timelineStageFilter, timelineSeverityFilter, timelineOrder])
@@ -1279,9 +1332,9 @@ export default function App() {
   const isManageSurface = surface === "sources" || surface === "profile" || surface === "review" || surface === "timeline" || surface === "history"
 
   return (
-    <main className="min-h-screen bg-console-canvas">
+    <main className="min-h-screen bg-console-canvas pb-10" aria-label="Digest Control Center">
       <div className="mx-auto flex w-full max-w-[1380px] flex-col gap-5 px-4 py-6 md:px-6 lg:px-8 lg:py-8">
-        <header className="rounded-2xl border border-border/80 bg-card/90 p-5 shadow-lg shadow-primary/5 backdrop-blur-sm">
+        <header className="rounded-2xl border border-border/80 bg-card/90 p-5 shadow-lg shadow-primary/5 backdrop-blur-sm animate-surface-enter">
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
@@ -1350,6 +1403,20 @@ export default function App() {
             </div>
           </div>
         </header>
+
+        <section className="console-status-ribbon rounded-2xl px-4 py-3 animate-surface-enter [animation-delay:40ms]" aria-label="Run status ribbon">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={runStatus?.active ? "warning" : "success"}>{runStatus?.active ? "Run active" : "Run idle"}</Badge>
+            <Badge variant="secondary">surface: {surface}</Badge>
+            <Badge variant="secondary">mode default: {runPolicy.default_mode}</Badge>
+            <Badge variant={sourceHealth.length > 0 ? "warning" : "success"}>
+              {sourceHealth.length > 0 ? `source issues: ${sourceHealth.length}` : "source health clear"}
+            </Badge>
+            {runStatus?.latest_completed ? (
+              <Badge variant="secondary">latest completed: {runStatus.latest_completed.status}</Badge>
+            ) : null}
+          </div>
+        </section>
 
         {globalLoadingText ? (
           <Card aria-live="polite" aria-busy className="border-primary/20 bg-primary/5">
@@ -1423,6 +1490,7 @@ export default function App() {
                 <CardDescription>Focused surfaces for daily operations and advanced controls.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
+                <nav aria-label="Workspace surfaces" className="space-y-2">
                 {navItems.map((item, index) => {
                   const Icon = item.icon
                   return (
@@ -1430,7 +1498,8 @@ export default function App() {
                       key={item.id}
                       type="button"
                       onClick={() => setSurface(item.id)}
-                      className={`group flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-all duration-200 ${
+                      aria-current={surface === item.id ? "page" : undefined}
+                      className={`group flex min-h-[52px] w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-all duration-200 ${
                         surface === item.id
                           ? "border-primary/40 bg-primary/10 shadow-sm"
                           : "border-border/70 bg-background/60 hover:border-primary/20 hover:bg-primary/5"
@@ -1450,6 +1519,7 @@ export default function App() {
                     </button>
                   )
                 })}
+                </nav>
               </CardContent>
             </Card>
 
@@ -1482,11 +1552,21 @@ export default function App() {
             </Card>
           </aside>
 
-          <section className="space-y-4 animate-surface-enter">
+          <section className="space-y-4 animate-surface-enter" aria-live="polite" aria-label="Console surface content">
             {loading || !profile ? (
-              <Card>
-                <CardContent className="flex items-center gap-3 p-6">
-                  <Loader2 className="h-5 w-5 animate-spin" /> Loading configuration...
+              <Card aria-busy>
+                <CardHeader className="pb-2">
+                  <div className="h-5 w-52 rounded-md skeleton-shimmer" />
+                  <div className="h-3.5 w-72 rounded-md skeleton-shimmer" />
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="h-20 rounded-xl skeleton-shimmer" />
+                    <div className="h-20 rounded-xl skeleton-shimmer" />
+                    <div className="h-20 rounded-xl skeleton-shimmer" />
+                    <div className="h-20 rounded-xl skeleton-shimmer" />
+                  </div>
+                  <div className="h-44 rounded-xl skeleton-shimmer" />
                 </CardContent>
               </Card>
             ) : surface === "dashboard" ? (
@@ -2188,6 +2268,7 @@ export default function App() {
                               </p>
                             </div>
                             <Switch
+                              aria-label="allow_run_override"
                               checked={runPolicy.allow_run_override}
                               onCheckedChange={(checked) =>
                                 setRunPolicy((prev) => ({ ...prev, allow_run_override: checked }))
@@ -2243,8 +2324,13 @@ export default function App() {
                       <CardContent className="space-y-3">
                         <div className="grid gap-3 md:grid-cols-[200px,auto,auto,1fr]">
                           <div className="space-y-2">
-                            <Label>Older Than (days)</Label>
-                            <Input value={seenResetDays} onChange={(event) => setSeenResetDays(event.target.value)} />
+                            <Label htmlFor="seen-reset-days">Older Than (days)</Label>
+                            <Input
+                              id="seen-reset-days"
+                              inputMode="numeric"
+                              value={seenResetDays}
+                              onChange={(event) => setSeenResetDays(event.target.value)}
+                            />
                           </div>
                           <div className="flex items-end">
                             <Button variant="outline" onClick={() => void previewSeenReset()} disabled={saving}>
@@ -2271,7 +2357,7 @@ export default function App() {
                             </Button>
                           </div>
                           <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3">
-                            <Switch checked={seenResetConfirm} onCheckedChange={setSeenResetConfirm} />
+                            <Switch aria-label="Confirm seen reset" checked={seenResetConfirm} onCheckedChange={setSeenResetConfirm} />
                             <span className="text-xs text-muted-foreground">
                               Confirm seen reset
                             </span>
@@ -2579,7 +2665,11 @@ export default function App() {
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">{timelineLivePaused ? "Paused" : "Live"}</span>
-                            <Switch checked={!timelineLivePaused} onCheckedChange={(checked) => setTimelineLivePaused(!checked)} />
+                            <Switch
+                              aria-label="Toggle live timeline polling"
+                              checked={!timelineLivePaused}
+                              onCheckedChange={(checked) => setTimelineLivePaused(!checked)}
+                            />
                           </div>
                         </div>
                       </CardContent>
@@ -2757,12 +2847,23 @@ export default function App() {
                       </CardHeader>
                       <CardContent className="space-y-3">
                         <div className="grid gap-3 md:grid-cols-[180px,1fr,auto]">
-                          <Input value={timelineNoteAuthor} onChange={(event) => setTimelineNoteAuthor(event.target.value)} />
+                          <div className="space-y-1">
+                            <Label htmlFor="timeline-note-author">Author</Label>
+                            <Input
+                              id="timeline-note-author"
+                              value={timelineNoteAuthor}
+                              onChange={(event) => setTimelineNoteAuthor(event.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="timeline-note-text">Note</Label>
                           <Input
+                            id="timeline-note-text"
                             placeholder="Add note about this run..."
                             value={timelineNoteText}
                             onChange={(event) => setTimelineNoteText(event.target.value)}
                           />
+                          </div>
                           <Button onClick={() => void addTimelineNote()} disabled={saving || !timelineRunId || !timelineNoteText.trim()}>
                             {saveAction === "timeline-note" ? (
                               <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
@@ -2857,7 +2958,7 @@ function ToggleField({
   return (
     <div className="flex items-center justify-between rounded-lg border p-3">
       <Label>{label}</Label>
-      <Switch checked={checked} onCheckedChange={onChange} />
+      <Switch aria-label={label} checked={checked} onCheckedChange={onChange} />
     </div>
   )
 }
@@ -2875,6 +2976,7 @@ function NumberField({
     <div className="space-y-2">
       <Label>{label}</Label>
       <Input
+        aria-label={label}
         type="number"
         value={Number.isFinite(value) ? String(value) : "0"}
         onChange={(event) => onChange(Number(event.target.value))}
@@ -2895,7 +2997,7 @@ function ListField({
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <Textarea value={value} onChange={(event) => onChange(event.target.value)} className="min-h-[120px]" />
+      <Textarea aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="min-h-[120px]" />
     </div>
   )
 }
