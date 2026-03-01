@@ -132,6 +132,14 @@ def _build_context_lines(context: dict[str, Any] | None) -> list[str]:
     pipeline = (
         context.get("pipeline") if isinstance(context.get("pipeline"), dict) else {}
     )
+    filtering = (
+        context.get("filtering") if isinstance(context.get("filtering"), dict) else {}
+    )
+    video_funnel = (
+        context.get("video_funnel")
+        if isinstance(context.get("video_funnel"), dict)
+        else {}
+    )
     selection = (
         context.get("selection") if isinstance(context.get("selection"), dict) else {}
     )
@@ -156,6 +164,22 @@ def _build_context_lines(context: dict[str, Any] | None) -> list[str]:
             "- filters "
             f"seen={int(pipeline.get('seen_count', 0) or 0)} "
             f"low-impact-issues={int(pipeline.get('github_issue_dropped_low_impact', 0) or 0)}"
+        ),
+        (
+            "- dropped "
+            f"dedupe={int(filtering.get('dedupe_dropped', 0) or 0)} "
+            f"window={int(filtering.get('window_dropped', 0) or 0)} "
+            f"seen={int(filtering.get('seen_dropped', 0) or 0)} "
+            f"blocked={int(filtering.get('blocked_dropped', 0) or 0)} "
+            f"ranked-out={int(filtering.get('ranking_dropped', 0) or 0)}"
+        ),
+        (
+            "- videos "
+            f"fetched={int(video_funnel.get('fetched', 0) or 0)} "
+            f"post-window={int(video_funnel.get('post_window', 0) or 0)} "
+            f"post-seen={int(video_funnel.get('post_seen', 0) or 0)} "
+            f"post-block={int(video_funnel.get('post_block', 0) or 0)} "
+            f"selected={int(video_funnel.get('selected', 0) or 0)}"
         ),
         (
             "- selected "

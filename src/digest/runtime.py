@@ -316,9 +316,17 @@ def run_digest(
             )
             emit_progress("fetch_github", "GitHub fetch failed", error=str(exc))
 
+    raw_video_count = _count_item_type(raw_items, "video")
+
     normalized = normalize_items(raw_items)
-    unique_items = dedupe_and_cluster(normalized)
-    unique_items = _filter_window(unique_items, window_start)
+    deduped_items = dedupe_and_cluster(normalized)
+    deduped_video_count = _count_item_type(deduped_items, "video")
+    dedupe_dropped_count = max(0, len(normalized) - len(deduped_items))
+    dedupe_dropped_video_count = max(0, raw_video_count - deduped_video_count)
+    unique_items = _filter_window(deduped_items, window_start)
+    window_video_count = _count_item_type(unique_items, "video")
+    window_dropped_count = max(0, len(deduped_items) - len(unique_items))
+    window_dropped_video_count = max(0, deduped_video_count - window_video_count)
     log_event(
         run_logger,
         "info",
@@ -337,14 +345,27 @@ def run_digest(
     seen = store.seen_keys()
     candidate_items = unique_items
     supplemental_seen_videos = 0
+    seen_filtered_count = 0
+    seen_filtered_video_count = 0
+    seen_readded_count = 0
+    seen_readded_video_count = 0
     github_issue_kept_high_impact = 0
     github_issue_dropped_low_impact = 0
     if only_new:
-        candidate_items = [i for i in unique_items if (i.url or i.hash) not in seen]
+        new_items = [i for i in unique_items if (i.url or i.hash) not in seen]
+        seen_filtered_count = max(0, len(unique_items) - len(new_items))
+        seen_filtered_video_count = max(
+            0,
+            _count_item_type(unique_items, "video")
+            - _count_item_type(new_items, "video"),
+        )
+        candidate_items = new_items
         # Keep delivery non-empty for manual/interactive usage when window has content
         # but all items were already seen in previous runs.
         if allow_seen_fallback and not candidate_items and unique_items:
             candidate_items = unique_items
+            seen_readded_count = len(unique_items)
+            seen_readded_video_count = _count_item_type(unique_items, "video")
         elif not allow_seen_fallback and candidate_items:
             has_video = any(i.type == "video" for i in candidate_items)
             if not has_video:
@@ -366,6 +387,8 @@ def run_digest(
                 if supplements:
                     candidate_items.extend(supplements)
                     supplemental_seen_videos = len(supplements)
+                    seen_readded_count += len(supplements)
+                    seen_readded_video_count += len(supplements)
 
     candidate_pre_issue_filter_count = len(candidate_items)
     filtered_candidates: list[Item] = []
@@ -380,6 +403,7 @@ def run_digest(
             continue
         github_issue_dropped_low_impact += 1
     candidate_items = filtered_candidates
+    candidate_video_count = _count_item_type(candidate_items, "video")
 
     log_event(
         run_logger,
@@ -441,9 +465,18 @@ def run_digest(
             )
         return False
 
-    eligible_items = [item for item in candidate_items if not is_blocked(item, profile)]
+    blocked_items: list[Item] = []
+    eligible_items: list[Item] = []
+    for item in candidate_items:
+        if is_blocked(item, profile):
+            blocked_items.append(item)
+            continue
+        eligible_items.append(item)
+    blocked_count = len(blocked_items)
+    blocked_video_count = _count_item_type(blocked_items, "video")
     rules_scores = {item.id: score_item(item, profile) for item in eligible_items}
     eligible_count = len(eligible_items)
+    eligible_video_count = _count_item_type(eligible_items, "video")
 
     agent_scope_ids: set[str] = set()
     if profile.agent_scoring_enabled:
@@ -908,6 +941,9 @@ def run_digest(
     )
 
     final_item_count = len(selected_items)
+    ranking_dropped_count = max(0, len(scored_items) - final_item_count)
+    selected_video_count = len(sections.videos)
+    ranking_dropped_video_count = max(0, eligible_video_count - selected_video_count)
     context_payload: dict[str, Any] = {
         "mode": {
             "use_last_completed_window": use_last_completed_window,
@@ -932,10 +968,32 @@ def run_digest(
             "github_issue_kept_high_impact": github_issue_kept_high_impact,
             "github_issue_dropped_low_impact": github_issue_dropped_low_impact,
         },
+        "filtering": {
+            "dedupe_dropped": dedupe_dropped_count,
+            "dedupe_dropped_videos": dedupe_dropped_video_count,
+            "window_dropped": window_dropped_count,
+            "window_dropped_videos": window_dropped_video_count,
+            "seen_dropped": seen_filtered_count,
+            "seen_dropped_videos": seen_filtered_video_count,
+            "seen_readded": seen_readded_count,
+            "seen_readded_videos": seen_readded_video_count,
+            "blocked_dropped": blocked_count,
+            "blocked_dropped_videos": blocked_video_count,
+            "github_low_impact_dropped": github_issue_dropped_low_impact,
+            "ranking_dropped": ranking_dropped_count,
+            "ranking_dropped_videos": ranking_dropped_video_count,
+        },
+        "video_funnel": {
+            "fetched": raw_video_count,
+            "post_window": window_video_count,
+            "post_seen": candidate_video_count,
+            "post_block": eligible_video_count,
+            "selected": selected_video_count,
+        },
         "selection": {
             "must_read_count": len(sections.must_read),
             "skim_count": len(sections.skim),
-            "video_count": len(sections.videos),
+            "video_count": selected_video_count,
             "final_item_count": final_item_count,
         },
     }
@@ -1188,6 +1246,10 @@ def _build_sparse_context_note(
     if candidate_count == 0:
         parts.append("No candidates remained after filtering.")
     return " ".join(parts)
+
+
+def _count_item_type(items: list[Item], item_type: str) -> int:
+    return sum(1 for item in items if item.type == item_type)
 
 
 def _filter_window(items: list[Item], window_start_iso: str) -> list[Item]:

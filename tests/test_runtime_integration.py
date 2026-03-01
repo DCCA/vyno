@@ -711,6 +711,11 @@ class TestRuntimeIntegration(unittest.TestCase):
 
             self.assertEqual(second.source_count, 2)
             self.assertGreaterEqual(second.video_count, 1)
+            self.assertIn("filtering", second.context)
+            self.assertIn("video_funnel", second.context)
+            self.assertEqual(second.context["video_funnel"]["selected"], second.video_count)
+            self.assertIn("dedupe_dropped", second.context["filtering"])
+            self.assertGreaterEqual(second.context["filtering"]["seen_readded_videos"], 1)
 
     def test_runtime_filters_low_impact_github_issues(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -828,9 +833,13 @@ class TestRuntimeIntegration(unittest.TestCase):
             self.assertIsInstance(report.context, dict)
             self.assertIn("fetched", report.context)
             self.assertIn("pipeline", report.context)
+            self.assertIn("filtering", report.context)
+            self.assertIn("video_funnel", report.context)
             self.assertIn("selection", report.context)
             self.assertEqual(report.context["selection"]["final_item_count"], 1)
             self.assertGreaterEqual(report.context["fetched"]["raw_total"], 1)
+            self.assertEqual(report.context["video_funnel"]["selected"], 0)
+            self.assertIn("dedupe_dropped", report.context["filtering"])
             self.assertIn("sparse_note", report.context)
 
 

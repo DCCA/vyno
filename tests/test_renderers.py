@@ -188,6 +188,20 @@ class TestRenderers(unittest.TestCase):
                 "seen_count": 42,
                 "github_issue_dropped_low_impact": 2,
             },
+            "filtering": {
+                "dedupe_dropped": 5,
+                "window_dropped": 3,
+                "seen_dropped": 2,
+                "blocked_dropped": 1,
+                "ranking_dropped": 4,
+            },
+            "video_funnel": {
+                "fetched": 8,
+                "post_window": 3,
+                "post_seen": 1,
+                "post_block": 1,
+                "selected": 0,
+            },
             "selection": {"must_read_count": 1, "skim_count": 0, "video_count": 0},
             "sparse_note": "Sparse digest: strict quality filters kept only high-signal items.",
         }
@@ -206,6 +220,8 @@ class TestRenderers(unittest.TestCase):
         self.assertIn("Sparse digest:", note)
         self.assertIn("Context", msg)
         self.assertIn("low-impact-issues=2", msg)
+        self.assertIn("Dropped: dedupe=5, window=3, seen=2, blocked=1, ranked-out=4", note)
+        self.assertIn("videos fetched=8 post-window=3 post-seen=1 post-block=1 selected=0", msg)
 
 
 if __name__ == "__main__":
