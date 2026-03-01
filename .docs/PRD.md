@@ -1,178 +1,141 @@
-# AI Daily Digest — Telegram + Obsidian (PRD / Spec)
+# AI Daily Digest Product Requirements (Current)
 
-## User story
-As a user, I want to receive every morning a list of the most relevant and good AI content on my **Telegram** and saved in my **Obsidian**, so I stay updated with minimal noise.
+## Document Status
+- Status: Current shipped-product PRD baseline
+- Updated: 2026-03-01
+- Source of truth alignment: `README.md`, `src/digest/*`, `web/src/*`
 
----
+## Product Intent
+AI Daily Digest exists to reduce AI information overload by ingesting multi-source signals, ranking them for quality and relevance, and delivering concise daily output to Telegram and Obsidian with full run traceability.
 
-## Goals
-- Deliver a **daily AI digest** at a fixed time (morning).
-- Support **manual execution** on demand.
-- Include only **high-signal** content (relevance + quality + novelty).
-- Save an **archived Markdown note** into Obsidian.
+## Primary Users
+- Solo operator who wants a reliable daily AI brief with low noise.
+- Power user who tunes source/profile configuration and run policy from a web console.
+- Admin operator who controls runtime via Telegram bot commands.
 
-## Non-goals (MVP)
-- Fully automated X ingestion (API/ToS complexity). Start with RSS + YouTube; add X via manual link drops later.
-- Perfect personalization from day 1 (start rules-based + feedback loop later).
+## Product Goals
+- The product SHALL support end-to-end digest generation from configured sources without manual data stitching.
+- The product SHALL provide both automated and manual run triggers.
+- The product SHALL preserve operator trust via observable run status, progress, and source-health diagnostics.
+- The product SHALL preserve configuration safety with overlays, diff/review workflows, and explicit auth controls for web API access.
+- The product SHALL produce outputs optimized for quick consumption (Telegram) and long-term retrieval (Obsidian Markdown).
 
----
+## Non-Goals
+- Full direct X API automation is NOT required in current scope; X ingestion is manual inbox based.
+- Multi-tenant SaaS hosting is NOT in scope.
+- Replacing Telegram and Obsidian with new delivery channels is NOT currently required.
 
-## Inputs (sources)
-### MVP
-- **RSS feeds** (blogs/newsletters/sites)
-- **YouTube** (channels + keyword searches)
+## Implemented Scope (Current State)
+- Ingestion:
+  - RSS feeds
+  - YouTube channels and query feeds
+  - X links from inbox file
+  - GitHub repos, topics, search queries, and organizations
+- Pipeline:
+  - normalization, dedupe, scoring, selection, summarization
+  - Must-read diversity constraints and guardrails
+  - quality repair and fallback strategies
+- Delivery:
+  - Telegram digest sections with chunking
+  - Obsidian markdown notes (timestamped default, legacy daily optional)
+- Operations:
+  - CLI run/schedule/doctor/bot/web modes
+  - web console with setup/manage surfaces
+  - onboarding preflight, source packs, preview, activate
+  - run policy controls and seen-reset controls
+  - timeline and history observability
+- Security and reliability:
+  - API token auth modes (`required|optional|off`)
+  - secret redaction in API payloads
+  - run lock, bot healthcheck, structured logs, Docker runtime option
 
-### Later
-- **X posts**
-  - MVP approach: user drops links into an “inbox” (Telegram message or file)
-  - Full automation: requires API/paid or aggregator
+## Product Requirements
 
----
+### Requirement: Multi-Source Ingestion
+The system SHALL ingest candidate items from configured RSS, YouTube, X inbox, and GitHub source groups in a single run.
 
-## Outputs (delivery)
-### Telegram (daily message)
-- Short + skimmable
-- Contains:
-  - **Must-read (Top 5)**
-  - **Skim (Next 10)**
-  - **Videos (Top 3–5)**
-  - **Themes today (optional, 3 bullets)**
+#### Scenario: Mixed source run
+- GIVEN configured RSS, YouTube, and GitHub sources
+- WHEN a digest run starts
+- THEN the run includes candidates from each reachable source type
+- AND unreachable sources are recorded as source errors without fully aborting healthy source processing
 
-### Obsidian (daily note)
-- Save as Markdown:
-  - `AI Digest/YYYY-MM-DD.md`
-- Same content as Telegram, plus:
-  - More detailed summaries
-  - Scores + tags (optional)
-  - “Discarded” section (optional, for audit)
+### Requirement: High-Signal Selection
+The system SHALL score and select digest content into `Must-read`, `Skim`, and `Videos` sections with quality and novelty controls.
 
----
+#### Scenario: Selection output
+- GIVEN candidate items are fetched and normalized
+- WHEN scoring and selection complete
+- THEN each selected item appears in the correct section
+- AND near-duplicate or low-signal items are deprioritized or excluded according to profile settings
 
-## Scheduling & execution
-- **Daily schedule**: e.g., 07:00 `America/Sao_Paulo`
-- **Manual command**: `digest run`
+### Requirement: Dual Output Delivery
+The system SHALL deliver digest output to Telegram and Obsidian for each successful live run.
 
----
+#### Scenario: Live run delivery
+- GIVEN Telegram and Obsidian output settings are valid
+- WHEN a run completes with selected items
+- THEN Telegram messages are rendered and sent
+- AND an Obsidian markdown note is written with stable frontmatter fields
 
-## Smartness (ranking system)
+### Requirement: Manual and Scheduled Execution
+The system SHALL support manual run execution and schedule-driven run execution.
 
-### Scoring overview
-Total score = **Relevance (0–60)** + **Quality (0–30)** + **Novelty (0–10)**
+#### Scenario: Scheduled execution
+- GIVEN scheduler is running with configured time and timezone
+- WHEN the configured schedule boundary is reached
+- THEN the digest run executes with incremental defaults
+- AND run metadata is persisted for audit and observability
 
-#### Relevance (0–60)
-- Matches AI topics/entities in:
-  - title / description (high weight)
-  - body / transcript (medium)
-- Boost:
-  - LLMs, agents, evals, RAG, tooling, infra, safety, product AI, research
-- Penalize:
-  - generic hype, low-signal “trend” content (configurable)
+### Requirement: Operability via Web Console
+The system SHALL provide a web console for configuration, onboarding, and run observability without direct file editing.
 
-#### Quality (0–30)
-- Boost:
-  - primary sources (docs/papers/official blogs)
-  - deep/technical analysis
-  - reputable authors/sites
-- Penalize:
-  - clickbait patterns (e.g., “insane”, “shocking”, “10x”, “secret”)
-  - thin content (very short, low info)
-  - low-reputation sources (configurable)
+#### Scenario: Setup to manage transition
+- GIVEN onboarding is incomplete
+- WHEN the operator runs preflight, applies sources, previews, and activates
+- THEN onboarding status reaches complete
+- AND manage surfaces become the primary operator path
 
-#### Novelty (0–10)
-- Dedupe exact duplicates by URL/hash
-- Cluster similar stories (semantic similarity)
-- Penalize near-duplicates covered recently
+### Requirement: Run Observability
+The system SHALL provide run status, live progress, source health, timeline events, and history records.
 
-### Selection policy
-- Max items per digest: **<= 20**
-  - Must-read: 5
-  - Skim: 10
-  - Videos: 3–5
+#### Scenario: Active run monitoring
+- GIVEN a run is active
+- WHEN the operator opens the dashboard or timeline views
+- THEN the UI shows current stage, elapsed progress details, and warning/error counters
+- AND the latest completed run remains available for post-run diagnostics
 
----
+### Requirement: Configuration Safety
+The system SHALL apply configuration via tracked base files plus local overlays, with validation and diff visibility.
 
-## Pipeline (end-to-end)
-1. **Fetch**
-   - Pull new items from RSS + YouTube since last run (or last 24h)
-2. **Extract**
-   - Articles: readable text extraction
-   - YouTube: transcript if available + description fallback
-3. **Normalize**
-   - Convert all items into a single schema
-4. **Dedupe + cluster**
-   - Remove duplicates; group similar items
-5. **Score**
-   - Compute relevance/quality/novelty + total
-6. **Summarize**
-   - TL;DR + bullets + “why it matters”
-7. **Deliver**
-   - Send Telegram message
-   - Write Obsidian Markdown note
-8. **Archive**
-   - Store items, scores, and run metadata for audit/debug
+#### Scenario: Profile editing workflow
+- GIVEN an operator edits profile JSON in the web console
+- WHEN validate/diff/save actions are performed
+- THEN only overlay deltas are persisted
+- AND redacted secret placeholders are preserved unless explicitly changed
 
----
+### Requirement: Access Control and Secret Hygiene
+The system SHALL enforce configurable API auth behavior and redact secrets in config responses.
 
-## Data model (minimal)
-Use SQLite (local) or Postgres (later).
+#### Scenario: Required auth mode
+- GIVEN `DIGEST_WEB_API_AUTH_MODE=required` and token is configured
+- WHEN a client calls a protected `/api/*` endpoint without a valid token
+- THEN the request is rejected with unauthorized status
+- AND health endpoint remains reachable for local diagnostics
 
-### Tables
-- `items`
-  - `id, url, title, source, author, published_at, type, raw_text, hash`
-- `runs`
-  - `run_id, started_at, window_start, window_end, status`
-- `scores`
-  - `run_id, item_id, relevance, quality, novelty, total, reason (optional)`
-- `seen`
-  - `hash/url, first_seen_at`
+## Constraints and Dependencies
+- External APIs and network quality directly affect run completeness.
+- `OPENAI_API_KEY` gates agent scoring/summarization capabilities.
+- `GITHUB_TOKEN` improves GitHub API reliability and rate limits.
+- Telegram and Obsidian outputs depend on valid credentials and writable paths.
 
----
+## Success Signals
+- Daily runs complete with low source and summary error counts.
+- Must-read section remains diverse and high quality over time.
+- Operators can complete onboarding and run management without shell-level config edits.
+- Timeline and source-health surfaces reduce mean time to diagnose failed sources.
 
-## Configuration
-### `sources.yaml`
-- RSS feed URLs
-- YouTube channel IDs/URLs
-- YouTube keyword searches (optional)
-
-### `profile.yaml`
-- Topics (positive)
-- Entities (positive)
-- Exclusions (negative keywords/topics)
-- Trusted sources (boost list)
-- Blocked sources (deny list)
-- Output settings:
-  - Telegram chat id
-  - Obsidian vault path + folder
-
----
-
-## Telegram message format (MVP)
-**AI Digest — YYYY-MM-DD**
-
-**Must-read**
-1. Title — TL;DR (link)
-2. ...
-3. ...
-
-**Skim**
-- Title (link)
-- ...
-
-**Videos**
-- Title — key takeaway (link)
-
-**Themes**
-- Bullet
-- Bullet
-- Bullet
-
----
-
-## Obsidian note format (MVP)
-```yaml
----
-date: YYYY-MM-DD
-tags: [ai, digest]
-source_count: N
----
-
+## Known Gaps and Future Enhancements
+- Native X API ingestion remains future scope.
+- More advanced personalization and feedback loops can be expanded beyond current profile controls.
+- Additional delivery destinations may be considered after core reliability and signal quality targets are stable.
