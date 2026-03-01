@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState } from "react"
-import { Activity, Clock3, Loader2, Play, RefreshCcw, Save, ShieldCheck, Undo2 } from "lucide-react"
+import {
+  Activity,
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  Loader2,
+  Play,
+  RefreshCcw,
+  Save,
+  ShieldCheck,
+  SlidersHorizontal,
+  Undo2,
+} from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -145,6 +157,17 @@ type PreviewResult = {
   obsidian_note: string
 }
 
+type SaveAction =
+  | ""
+  | "source-add"
+  | "source-remove"
+  | "onboarding-preflight"
+  | "source-pack"
+  | "profile-validate"
+  | "profile-diff"
+  | "profile-save"
+  | "rollback"
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8787"
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -208,14 +231,22 @@ export default function App() {
   const [previewLoading, setPreviewLoading] = useState(false)
   const [runNowLoading, setRunNowLoading] = useState(false)
   const [activateLoading, setActivateLoading] = useState(false)
+  const [saveAction, setSaveAction] = useState<SaveAction>("")
+  const [activeSourcePackId, setActiveSourcePackId] = useState("")
+  const [activeRollbackId, setActiveRollbackId] = useState("")
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null)
+  const [consoleModeOverride, setConsoleModeOverride] = useState<"setup" | "manage" | null>(null)
+  const [manageTab, setManageTab] = useState("sources")
 
   const sortedSourceRows = useMemo(
     () => Object.entries(sources).sort((a, b) => a[0].localeCompare(b[0])),
     [sources],
   )
 
-  const showRunActivity = Boolean(runProgress && (runProgress.is_active || runStatus?.active?.run_id))
+  const digestBusy = Boolean(
+    runNowLoading || activateLoading || previewLoading || runStatus?.active?.run_id || runProgress?.is_active,
+  )
+  const showRunActivity = Boolean(runProgress || digestBusy)
 
   const runActivityFacts = useMemo(() => {
     if (!runProgress) return [] as string[]
@@ -256,6 +287,53 @@ export default function App() {
 
     return facts.slice(0, 4)
   }, [runProgress])
+
+  const onboardingDone = Boolean(
+    onboarding && onboarding.progress.total > 0 && onboarding.progress.completed >= onboarding.progress.total,
+  )
+  const consoleMode = consoleModeOverride ?? (onboardingDone ? "manage" : "setup")
+  const setupPercent = onboarding?.progress.total
+    ? Math.round((onboarding.progress.completed / onboarding.progress.total) * 100)
+    : 0
+
+  const digestLoadingMessage = runProgress
+    ? `${runProgress.stage_label}: ${runProgress.stage_detail || runProgress.message}`
+    : previewLoading
+      ? "Preparing onboarding preview digest..."
+      : activateLoading
+        ? "Preparing live digest run..."
+        : runNowLoading
+          ? "Preparing digest run..."
+          : runStatus?.active?.run_id
+            ? "Digest run in progress. Waiting for progress details..."
+            : ""
+
+  const globalLoadingText =
+    saveAction === "source-add"
+      ? "Adding source..."
+      : saveAction === "source-remove"
+        ? "Removing source..."
+        : saveAction === "onboarding-preflight"
+          ? "Running preflight checks..."
+          : saveAction === "source-pack"
+            ? "Applying source pack..."
+            : saveAction === "profile-validate"
+              ? "Validating profile..."
+              : saveAction === "profile-diff"
+                ? "Computing profile diff..."
+                : saveAction === "profile-save"
+                  ? "Saving profile overlay..."
+                  : saveAction === "rollback"
+                    ? "Rolling back to snapshot..."
+                    : runNowLoading
+                      ? "Starting digest run..."
+                      : activateLoading
+                        ? "Starting live run..."
+                        : previewLoading
+                          ? "Running onboarding preview..."
+                          : loading
+                            ? "Loading configuration..."
+                            : ""
 
   useEffect(() => {
     void refreshAll()
@@ -378,6 +456,7 @@ export default function App() {
       setNotice({ kind: "error", text: "Select a source type and enter a value." })
       return
     }
+    setSaveAction(action === "add" ? "source-add" : "source-remove")
     setSaving(true)
     try {
       await api(`/api/config/sources/${action}`, {
@@ -390,6 +469,7 @@ export default function App() {
     } catch (error) {
       setNotice({ kind: "error", text: String(error) })
     } finally {
+      setSaveAction("")
       setSaving(false)
     }
   }
@@ -423,6 +503,7 @@ export default function App() {
   }
 
   async function runOnboardingPreflight() {
+    setSaveAction("onboarding-preflight")
     setSaving(true)
     try {
       const result = await api<PreflightReport>("/api/onboarding/preflight")
@@ -438,11 +519,14 @@ export default function App() {
     } catch (error) {
       setNotice({ kind: "error", text: String(error) })
     } finally {
+      setSaveAction("")
       setSaving(false)
     }
   }
 
   async function applySourcePack(packId: string) {
+    setSaveAction("source-pack")
+    setActiveSourcePackId(packId)
     setSaving(true)
     try {
       const result = await api<{ added_count: number; existing_count: number; error_count: number }>(
@@ -460,6 +544,8 @@ export default function App() {
     } catch (error) {
       setNotice({ kind: "error", text: String(error) })
     } finally {
+      setSaveAction("")
+      setActiveSourcePackId("")
       setSaving(false)
     }
   }
@@ -515,6 +601,7 @@ export default function App() {
 
   async function validateProfile() {
     if (!profile) return
+    setSaveAction("profile-validate")
     setSaving(true)
     try {
       const parsed = JSON.parse(profileJson) as Record<string, unknown>
@@ -528,11 +615,13 @@ export default function App() {
     } catch (error) {
       setNotice({ kind: "error", text: String(error) })
     } finally {
+      setSaveAction("")
       setSaving(false)
     }
   }
 
   async function computeProfileDiff() {
+    setSaveAction("profile-diff")
     setSaving(true)
     try {
       const parsed = JSON.parse(profileJson) as Record<string, unknown>
@@ -545,11 +634,13 @@ export default function App() {
     } catch (error) {
       setNotice({ kind: "error", text: String(error) })
     } finally {
+      setSaveAction("")
       setSaving(false)
     }
   }
 
   async function saveProfile() {
+    setSaveAction("profile-save")
     setSaving(true)
     try {
       const parsed = JSON.parse(profileJson) as Record<string, unknown>
@@ -562,11 +653,14 @@ export default function App() {
     } catch (error) {
       setNotice({ kind: "error", text: String(error) })
     } finally {
+      setSaveAction("")
       setSaving(false)
     }
   }
 
   async function rollback(snapshotId: string) {
+    setSaveAction("rollback")
+    setActiveRollbackId(snapshotId)
     setSaving(true)
     try {
       await api("/api/config/rollback", {
@@ -578,37 +672,128 @@ export default function App() {
     } catch (error) {
       setNotice({ kind: "error", text: String(error) })
     } finally {
+      setSaveAction("")
+      setActiveRollbackId("")
       setSaving(false)
     }
   }
 
+  function renderSetupStepAction(stepId: string) {
+    if (stepId === "preflight") {
+      return (
+        <Button variant="outline" size="sm" onClick={() => void runOnboardingPreflight()} disabled={saving}>
+          {saveAction === "onboarding-preflight" ? (
+            <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" />
+          ) : (
+            <ShieldCheck className="h-3.5 w-3.5" />
+          )}
+          {saveAction === "onboarding-preflight" ? "Running..." : "Run preflight"}
+        </Button>
+      )
+    }
+    if (stepId === "sources") {
+      const topPack = sourcePacks[0]
+      if (topPack) {
+        return (
+          <Button variant="outline" size="sm" onClick={() => void applySourcePack(topPack.id)} disabled={saving}>
+            {saveAction === "source-pack" && activeSourcePackId === topPack.id ? (
+              <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" />
+            ) : null}
+            {saveAction === "source-pack" && activeSourcePackId === topPack.id ? "Applying..." : `Apply ${topPack.name}`}
+          </Button>
+        )
+      }
+      return (
+        <Button variant="outline" size="sm" onClick={() => setConsoleModeOverride("manage")}>
+          Open sources
+        </Button>
+      )
+    }
+    if (stepId === "outputs" || stepId === "profile") {
+      return (
+        <Button variant="outline" size="sm" onClick={() => setConsoleModeOverride("manage")}>
+          Open profile
+        </Button>
+      )
+    }
+    if (stepId === "preview") {
+      return (
+        <Button variant="outline" size="sm" onClick={() => void runOnboardingPreview()} disabled={previewLoading || saving}>
+          {previewLoading ? (
+            <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" />
+          ) : (
+            <Play className="h-3.5 w-3.5" />
+          )}
+          {previewLoading ? "Running..." : "Run preview"}
+        </Button>
+      )
+    }
+    if (stepId === "activate") {
+      return (
+        <Button
+          size="sm"
+          onClick={() => void activateOnboarding()}
+          disabled={saving || previewLoading || activateLoading || Boolean(runStatus?.active?.run_id)}
+        >
+          {activateLoading ? (
+            <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" />
+          ) : (
+            <Play className="h-3.5 w-3.5" />
+          )}
+          {activateLoading ? "Starting..." : "Activate"}
+        </Button>
+      )
+    }
+    if (stepId === "health") {
+      return (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void runNow()}
+          disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}
+        >
+          {runNowLoading ? (
+            <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" />
+          ) : (
+            <RefreshCcw className="h-3.5 w-3.5" />
+          )}
+          Re-check with run
+        </Button>
+      )
+    }
+    return null
+  }
+
   return (
-    <main className="min-h-screen bg-soft-grid bg-grid-size">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-6 md:px-8">
-        <header className="rounded-xl border bg-card/95 p-4 shadow-sm backdrop-blur">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Digest Config Console</h1>
-              <p className="text-sm text-muted-foreground">
-                shadcn + Tailwind UI for source/profile management with overlay-safe writes.
+    <main className="min-h-screen bg-console-canvas">
+      <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-4 py-6 md:px-8 md:py-8">
+        <header className="rounded-2xl border border-border/80 bg-card/90 p-5 shadow-lg shadow-primary/5 backdrop-blur-sm">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/90">Digest Operations</p>
+              <h1 className="font-display text-3xl tracking-tight text-foreground md:text-4xl">Setup Journey + Manage Workspace</h1>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                Guide first-run operators to a healthy digest, then switch to maintenance controls without losing context.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
               {runStatus?.active ? (
                 <Badge variant="warning">Active: {runStatus.active.run_id}</Badge>
               ) : (
                 <Badge variant="success">No active run</Badge>
               )}
-              {runStatus?.latest ? (
-                <Badge variant="secondary">Last: {runStatus.latest.status}</Badge>
-              ) : null}
+              {runStatus?.latest ? <Badge variant="secondary">Last: {runStatus.latest.status}</Badge> : null}
               {runStatus?.latest_completed && runStatus.latest_completed.source_error_count > 0 ? (
-                <Badge variant="warning">
-                  Source errors: {runStatus.latest_completed.source_error_count}
-                </Badge>
+                <Badge variant="warning">Source errors: {runStatus.latest_completed.source_error_count}</Badge>
               ) : null}
               <Button variant="outline" onClick={() => void refreshAll()} disabled={loading || saving}>
-                <RefreshCcw className="h-4 w-4" /> Refresh
+                {loading ? (
+                  <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <RefreshCcw className="h-4 w-4" />
+                )}
+                {loading ? "Refreshing..." : "Refresh"}
               </Button>
               <Button onClick={() => void runNow()} disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}>
                 {runNowLoading ? (
@@ -622,27 +807,34 @@ export default function App() {
           </div>
         </header>
 
-        {showRunActivity && runProgress ? (
-          <Card aria-live="polite" aria-busy={runProgress.is_active}>
+        {globalLoadingText ? (
+          <Card aria-live="polite" aria-busy className="border-primary/20 bg-primary/5">
+            <CardContent className="flex items-center gap-2 py-3">
+              <Loader2 className="h-4 w-4 text-primary motion-safe:animate-spin motion-reduce:animate-none" />
+              <p className="text-sm font-medium text-foreground">{globalLoadingText}</p>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {showRunActivity ? (
+          <Card aria-live="polite" aria-busy={digestBusy} className="border-primary/25 bg-card/95">
             <CardHeader className="pb-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Activity className="h-4 w-4 text-primary" />
-                  <CardTitle className="text-base">Digest Activity</CardTitle>
+                  <CardTitle className="font-display text-base">Digest Activity</CardTitle>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={runProgress.is_active ? "warning" : "success"}>
-                    {runProgress.is_active ? "Running" : "Completed"}
+                  <Badge variant={digestBusy ? "warning" : "success"}>
+                    {digestBusy ? "Running" : "Completed"}
                   </Badge>
-                  <Badge variant="secondary">run_id: {runProgress.run_id}</Badge>
+                  <Badge variant="secondary">run_id: {runProgress?.run_id || runStatus?.active?.run_id || "-"}</Badge>
                 </div>
               </div>
-              <CardDescription className="text-xs">
-                {runProgress.stage_label}: {runProgress.stage_detail || runProgress.message}
-              </CardDescription>
+              <CardDescription className="text-xs">{digestLoadingMessage || "Digest activity is idle."}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {typeof runProgress.percent === "number" ? (
+              {runProgress && typeof runProgress.percent === "number" ? (
                 <div className="space-y-1">
                   <Progress value={runProgress.percent} />
                   <p className="text-xs text-muted-foreground">{Math.round(runProgress.percent)}% complete</p>
@@ -652,20 +844,22 @@ export default function App() {
                   <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                     <div className="h-full w-1/3 bg-primary motion-safe:animate-pulse motion-reduce:animate-none" />
                   </div>
-                  <p className="text-xs text-muted-foreground">Progress is active. Waiting for next stage update.</p>
+                  <p className="text-xs text-muted-foreground">{digestLoadingMessage || "Waiting for digest activity."}</p>
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1">
-                  <Clock3 className="h-3.5 w-3.5" /> Elapsed {formatElapsed(runProgress.elapsed_s)}
-                </span>
-                {runActivityFacts.map((fact) => (
-                  <Badge key={fact} variant="secondary" className="text-[11px]">
-                    {fact}
-                  </Badge>
-                ))}
-              </div>
+              {runProgress ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <Clock3 className="h-3.5 w-3.5" /> Elapsed {formatElapsed(runProgress.elapsed_s)}
+                  </span>
+                  {runActivityFacts.map((fact) => (
+                    <Badge key={fact} variant="secondary" className="text-[11px]">
+                      {fact}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         ) : null}
@@ -677,491 +871,581 @@ export default function App() {
           </Alert>
         ) : null}
 
-        {sourceHealth.length > 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Source Health</CardTitle>
-              <CardDescription>
-                Broken sources detected in recent runs. Fix these to improve source coverage.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Failures (20 runs)</TableHead>
-                    <TableHead>Last Error</TableHead>
-                    <TableHead>Suggested Fix</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sourceHealth.slice(0, 6).map((item) => (
-                    <TableRow key={`${item.kind}:${item.source}`}>
-                      <TableCell className="font-mono text-xs">{item.source}</TableCell>
-                      <TableCell>{item.count}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{item.last_error}</TableCell>
-                      <TableCell className="text-xs">{item.hint}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        ) : null}
+        <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <aside className="space-y-4">
+            <Card className="border-border/80 bg-card/95">
+              <CardHeader className="pb-3">
+                <CardTitle className="font-display text-base">Console Modes</CardTitle>
+                <CardDescription>Switch between guided setup and advanced maintenance.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button
+                  className="w-full justify-between"
+                  variant={consoleMode === "setup" ? "default" : "outline"}
+                  onClick={() => setConsoleModeOverride("setup")}
+                >
+                  Setup Journey
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  className="w-full justify-between"
+                  variant={consoleMode === "manage" ? "default" : "outline"}
+                  onClick={() => setConsoleModeOverride("manage")}
+                >
+                  Manage Workspace
+                  <SlidersHorizontal className="h-4 w-4" />
+                </Button>
 
-        {loading || !profile ? (
-          <Card>
-            <CardContent className="flex items-center gap-3 p-6">
-              <Loader2 className="h-5 w-5 animate-spin" /> Loading configuration...
-            </CardContent>
-          </Card>
-        ) : (
-          <Tabs defaultValue="onboarding" className="w-full">
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
-              <TabsTrigger value="sources">Sources</TabsTrigger>
-              <TabsTrigger value="profile">Profile</TabsTrigger>
-              <TabsTrigger value="review">Review</TabsTrigger>
-              <TabsTrigger value="history">History</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="onboarding" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Setup Progress</CardTitle>
-                  <CardDescription>
-                    Move from preflight to first healthy run with a guided checklist.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
+                <div className="space-y-2 rounded-xl border bg-muted/20 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Setup status</p>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={onboarding?.preflight.ok ? "success" : "warning"}>
-                      Preflight: {onboarding?.preflight.ok ? "ready" : "needs attention"}
+                    <Badge variant={onboardingDone ? "success" : "warning"}>
+                      {onboardingDone ? "Ready" : "In progress"}
                     </Badge>
                     <Badge variant="secondary">
-                      Steps: {onboarding?.progress.completed ?? 0}/{onboarding?.progress.total ?? 0}
+                      Steps {onboarding?.progress.completed ?? 0}/{onboarding?.progress.total ?? 0}
                     </Badge>
-                    <Button variant="outline" onClick={() => void runOnboardingPreflight()} disabled={saving}>
-                      <ShieldCheck className="h-4 w-4" /> Run preflight
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => void runOnboardingPreview()}
-                      disabled={previewLoading || saving}
-                    >
-                      {previewLoading ? (
-                        <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                      ) : (
-                        <Play className="h-4 w-4" />
-                      )}
-                      {previewLoading ? "Running preview..." : "Preview"}
-                    </Button>
-                    <Button
-                      onClick={() => void activateOnboarding()}
-                      disabled={saving || previewLoading || activateLoading || Boolean(runStatus?.active?.run_id)}
-                    >
-                      {activateLoading ? (
-                        <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                      ) : (
-                        <Play className="h-4 w-4" />
-                      )}
-                      {activateLoading ? "Starting live run..." : "Activate"}
-                    </Button>
                   </div>
+                  <Progress value={setupPercent} />
+                  <p className="text-xs text-muted-foreground">{setupPercent}% complete</p>
+                </div>
+              </CardContent>
+            </Card>
 
-                  {previewLoading ? (
-                    <p className="text-xs text-muted-foreground">
-                      Preview is running. The app is fetching sources, scoring items, and building output artifacts.
-                    </p>
-                  ) : null}
-
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Step</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Detail</TableHead>
-                        <TableHead>Completed At</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(onboarding?.steps ?? []).map((step) => (
-                        <TableRow key={step.id}>
-                          <TableCell className="font-medium">{step.label}</TableCell>
-                          <TableCell>
-                            <Badge variant={step.status === "complete" ? "success" : "warning"}>{step.status}</Badge>
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{step.detail}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{step.completed_at || "-"}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Preflight Checks</CardTitle>
-                  <CardDescription>
-                    Validate environment, config, and writable paths before activation.
-                  </CardDescription>
+            {sourceHealth.length > 0 ? (
+              <Card className="border-amber-300/50 bg-amber-50/40">
+                <CardHeader className="pb-3">
+                  <CardTitle className="font-display text-base">Source health alerts</CardTitle>
+                  <CardDescription>Recent ingestion failures that can reduce digest quality.</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  {preflight ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Check</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Detail</TableHead>
-                          <TableHead>Hint</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {preflight.checks.map((check) => (
-                          <TableRow key={check.id}>
-                            <TableCell className="font-medium">{check.label}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  check.status === "pass"
-                                    ? "success"
-                                    : check.status === "warn"
-                                      ? "warning"
-                                      : "secondary"
-                                }
-                              >
-                                {check.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{check.detail}</TableCell>
-                            <TableCell className="text-xs">{check.hint || "-"}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Run preflight to load checks for this environment.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Source Packs</CardTitle>
-                  <CardDescription>
-                    Apply curated source bundles to bootstrap ingestion quickly.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {sourcePacks.map((pack) => (
-                    <div key={pack.id} className="flex flex-col gap-2 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold">{pack.name}</p>
-                        <p className="text-xs text-muted-foreground">{pack.description}</p>
-                        <p className="text-xs text-muted-foreground">{pack.item_count} sources</p>
-                      </div>
-                      <Button variant="outline" onClick={() => void applySourcePack(pack.id)} disabled={saving}>
-                        Apply pack
-                      </Button>
+                <CardContent className="space-y-2">
+                  {sourceHealth.slice(0, 3).map((item) => (
+                    <div key={`${item.kind}:${item.source}`} className="rounded-lg border border-amber-300/40 bg-background/90 p-2.5">
+                      <p className="truncate font-mono text-[11px]">{item.source}</p>
+                      <p className="text-xs text-muted-foreground">{item.count} failures in recent runs</p>
                     </div>
                   ))}
+                  <p className="text-xs text-muted-foreground">Open Manage Workspace to inspect full diagnostics.</p>
                 </CardContent>
               </Card>
+            ) : null}
+          </aside>
 
-              {previewResult ? (
+          <section className="space-y-4">
+            {loading || !profile ? (
+              <Card>
+                <CardContent className="flex items-center gap-3 p-6">
+                  <Loader2 className="h-5 w-5 animate-spin" /> Loading configuration...
+                </CardContent>
+              </Card>
+            ) : consoleMode === "setup" ? (
+              <>
                 <Card>
                   <CardHeader>
-                    <CardTitle>Preview Result</CardTitle>
-                    <CardDescription>
-                      Non-delivering preview output from the latest onboarding preview run.
-                    </CardDescription>
+                    <CardTitle className="font-display">Setup Journey</CardTitle>
+                    <CardDescription>Move from preflight to first healthy run using guided actions.</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-3">
+                  <CardContent className="space-y-4">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary">run_id: {previewResult.run_id}</Badge>
-                      <Badge variant={previewResult.status === "success" ? "success" : "warning"}>
-                        status: {previewResult.status}
+                      <Badge variant={onboarding?.preflight.ok ? "success" : "warning"}>
+                        Preflight {onboarding?.preflight.ok ? "ready" : "needs attention"}
                       </Badge>
-                      <Badge variant="secondary">must-read: {previewResult.must_read_count}</Badge>
-                      <Badge variant="secondary">skim: {previewResult.skim_count}</Badge>
-                      <Badge variant="secondary">videos: {previewResult.video_count}</Badge>
+                      <Badge variant="secondary">
+                        Steps {onboarding?.progress.completed ?? 0}/{onboarding?.progress.total ?? 0}
+                      </Badge>
                     </div>
+                    <Progress value={setupPercent} />
                     <div className="grid gap-3 md:grid-cols-2">
-                      <div>
-                        <Label>Telegram Preview</Label>
-                        <pre className="max-h-[260px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
-                          {(previewResult.telegram_messages ?? []).join("\n\n") || "-"}
-                        </pre>
-                      </div>
-                      <div>
-                        <Label>Obsidian Preview</Label>
-                        <pre className="max-h-[260px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
-                          {previewResult.obsidian_note || "-"}
-                        </pre>
-                      </div>
+                      {(onboarding?.steps ?? []).map((step) => (
+                        <div key={step.id} className="space-y-2 rounded-xl border bg-muted/20 p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-semibold leading-tight">{step.label}</p>
+                            <Badge variant={step.status === "complete" ? "success" : "warning"}>
+                              {step.status === "complete" ? <CheckCircle2 className="h-3 w-3" /> : null}
+                              {step.status}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{step.detail}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {step.completed_at ? `Completed at ${step.completed_at}` : "Not completed yet"}
+                          </p>
+                          <div>{renderSetupStepAction(step.id)}</div>
+                        </div>
+                      ))}
                     </div>
                   </CardContent>
                 </Card>
-              ) : null}
-            </TabsContent>
 
-            <TabsContent value="sources" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Source Management</CardTitle>
-                  <CardDescription>
-                    Add or remove tracked sources using canonicalized values saved in overlay.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-[1fr,2fr,auto,auto]">
-                  <div className="space-y-2">
-                    <Label>Source Type</Label>
-                    <Select value={sourceType} onValueChange={setSourceType}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sourceTypes.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Value</Label>
-                    <Input
-                      placeholder="https://github.com/vercel-labs or owner/repo"
-                      value={sourceValue}
-                      onChange={(event) => setSourceValue(event.target.value)}
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <Button onClick={() => void handleSourceMutation("add")} disabled={saving}>
-                      Add
-                    </Button>
-                  </div>
-                  <div className="flex items-end">
-                    <Button variant="outline" onClick={() => void handleSourceMutation("remove")} disabled={saving}>
-                      Remove
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="font-display">Preflight Checks</CardTitle>
+                    <CardDescription>Validate environment, config, and writable paths before activation.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {preflight ? (
+                      <>
+                        <div className="mb-3 flex flex-wrap items-center gap-2">
+                          <Badge variant={preflight.ok ? "success" : "warning"}>
+                            {preflight.ok ? "Ready to activate" : "Fix required items"}
+                          </Badge>
+                          <Badge variant="secondary">pass: {preflight.pass_count}</Badge>
+                          <Badge variant="secondary">warn: {preflight.warn_count}</Badge>
+                          <Badge variant={preflight.fail_count > 0 ? "warning" : "secondary"}>fail: {preflight.fail_count}</Badge>
+                        </div>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Check</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Detail</TableHead>
+                              <TableHead>Hint</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {preflight.checks.map((check) => (
+                              <TableRow key={check.id}>
+                                <TableCell className="font-medium">{check.label}</TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      check.status === "pass"
+                                        ? "success"
+                                        : check.status === "warn"
+                                          ? "warning"
+                                          : "secondary"
+                                    }
+                                  >
+                                    {check.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-xs text-muted-foreground">{check.detail}</TableCell>
+                                <TableCell className="text-xs">{check.hint || "-"}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <p className="text-sm text-muted-foreground">Run preflight to load checks for this environment.</p>
+                        <Button variant="outline" onClick={() => void runOnboardingPreflight()} disabled={saving}>
+                          {saveAction === "onboarding-preflight" ? (
+                            <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                          ) : (
+                            <ShieldCheck className="h-4 w-4" />
+                          )}
+                          {saveAction === "onboarding-preflight" ? "Running..." : "Run preflight"}
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Effective Sources</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Count</TableHead>
-                        <TableHead>Values</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sortedSourceRows.map(([type, values]) => (
-                        <TableRow key={type}>
-                          <TableCell className="font-semibold">{type}</TableCell>
-                          <TableCell>{values.length}</TableCell>
-                          <TableCell className="font-mono text-xs text-muted-foreground">
-                            {values.slice(0, 5).join("\n") || "-"}
-                            {values.length > 5 ? `\n... (+${values.length - 5})` : ""}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="font-display">Source Packs</CardTitle>
+                    <CardDescription>Apply curated source bundles to bootstrap ingestion quickly.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {sourcePacks.map((pack) => (
+                      <div
+                        key={pack.id}
+                        className="flex flex-col gap-2 rounded-xl border bg-muted/15 p-3 md:flex-row md:items-center md:justify-between"
+                      >
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold">{pack.name}</p>
+                          <p className="text-xs text-muted-foreground">{pack.description}</p>
+                          <p className="text-xs text-muted-foreground">{pack.item_count} sources</p>
+                        </div>
+                        <Button variant="outline" onClick={() => void applySourcePack(pack.id)} disabled={saving}>
+                          {saveAction === "source-pack" && activeSourcePackId === pack.id ? (
+                            <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                          ) : null}
+                          {saveAction === "source-pack" && activeSourcePackId === pack.id ? "Applying..." : "Apply pack"}
+                        </Button>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
 
-            <TabsContent value="profile" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Core Runtime Controls</CardTitle>
-                  <CardDescription>Adjust scoring and online quality-repair behavior.</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-6 md:grid-cols-2">
-                  <ToggleField
-                    label="LLM Summaries Enabled"
-                    checked={Boolean(profile.llm_enabled)}
-                    onChange={(value) => updateProfileField("llm_enabled", value)}
-                  />
-                  <ToggleField
-                    label="Agent Scoring Enabled"
-                    checked={Boolean(profile.agent_scoring_enabled)}
-                    onChange={(value) => updateProfileField("agent_scoring_enabled", value)}
-                  />
-                  <NumberField
-                    label="Max Agent Items Per Run"
-                    value={Number(profile.max_agent_items_per_run ?? 40)}
-                    onChange={(value) => updateProfileField("max_agent_items_per_run", value)}
-                  />
-                  <NumberField
-                    label="Must-read Max Per Source"
-                    value={Number(profile.must_read_max_per_source ?? 2)}
-                    onChange={(value) => updateProfileField("must_read_max_per_source", value)}
-                  />
-                  <NumberField
-                    label="Quality Repair Threshold"
-                    value={Number(profile.quality_repair_threshold ?? 80)}
-                    onChange={(value) => updateProfileField("quality_repair_threshold", value)}
-                  />
-                  <ToggleField
-                    label="Quality Repair Enabled"
-                    checked={Boolean(profile.quality_repair_enabled)}
-                    onChange={(value) => updateProfileField("quality_repair_enabled", value)}
-                  />
-                  <ToggleField
-                    label="Quality Learning Enabled"
-                    checked={Boolean(profile.quality_learning_enabled)}
-                    onChange={(value) => updateProfileField("quality_learning_enabled", value)}
-                  />
-                </CardContent>
-              </Card>
+                {previewResult ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="font-display">Preview Result</CardTitle>
+                      <CardDescription>Non-delivering output from the latest onboarding preview run.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary">run_id: {previewResult.run_id}</Badge>
+                        <Badge variant={previewResult.status === "success" ? "success" : "warning"}>
+                          status: {previewResult.status}
+                        </Badge>
+                        <Badge variant="secondary">must-read: {previewResult.must_read_count}</Badge>
+                        <Badge variant="secondary">skim: {previewResult.skim_count}</Badge>
+                        <Badge variant="secondary">videos: {previewResult.video_count}</Badge>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div>
+                          <Label>Telegram Preview</Label>
+                          <pre className="max-h-[260px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
+                            {(previewResult.telegram_messages ?? []).join("\n\n") || "-"}
+                          </pre>
+                        </div>
+                        <div>
+                          <Label>Obsidian Preview</Label>
+                          <pre className="max-h-[260px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
+                            {previewResult.obsidian_note || "-"}
+                          </pre>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="font-display">Manage Workspace</CardTitle>
+                    <CardDescription>Advanced controls for source, profile, review, and rollback operations.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap items-center gap-2">
+                    <Badge variant={onboardingDone ? "success" : "warning"}>
+                      {onboardingDone ? "Setup complete" : "Setup incomplete"}
+                    </Badge>
+                    <Badge variant="secondary">
+                      Steps {onboarding?.progress.completed ?? 0}/{onboarding?.progress.total ?? 0}
+                    </Badge>
+                    {!onboardingDone ? (
+                      <Button variant="outline" size="sm" onClick={() => setConsoleModeOverride("setup")}>
+                        Return to setup journey
+                      </Button>
+                    ) : null}
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Lists and Output</CardTitle>
-                  <CardDescription>Manage list fields and output settings.</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-5 md:grid-cols-2">
-                  <ListField
-                    label="Topics"
-                    value={toLines(profile.topics as string[])}
-                    onChange={(value) => updateProfileField("topics", fromLines(value))}
-                  />
-                  <ListField
-                    label="Trusted Sources"
-                    value={toLines(profile.trusted_sources as string[])}
-                    onChange={(value) => updateProfileField("trusted_sources", fromLines(value))}
-                  />
-                  <ListField
-                    label="Exclusions"
-                    value={toLines(profile.exclusions as string[])}
-                    onChange={(value) => updateProfileField("exclusions", fromLines(value))}
-                  />
-                  <div className="space-y-2">
-                    <Label>Obsidian Folder</Label>
-                    <Input
-                      value={String(((profile.output as Record<string, unknown>)?.obsidian_folder as string) ?? "")}
-                      onChange={(event) => updateProfileField("output.obsidian_folder", event.target.value)}
-                    />
-                    <Label className="pt-2">Render Mode</Label>
-                    <Select
-                      value={String(((profile.output as Record<string, unknown>)?.render_mode as string) ?? "sectioned")}
-                      onValueChange={(value) => updateProfileField("output.render_mode", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="sectioned">sectioned</SelectItem>
-                        <SelectItem value="source_segmented">source_segmented</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardContent>
-              </Card>
+                <Tabs value={manageTab} onValueChange={setManageTab} className="w-full">
+                  <TabsList className="grid w-full grid-cols-4">
+                    <TabsTrigger value="sources">Sources</TabsTrigger>
+                    <TabsTrigger value="profile">Profile</TabsTrigger>
+                    <TabsTrigger value="review">Review</TabsTrigger>
+                    <TabsTrigger value="history">History</TabsTrigger>
+                  </TabsList>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Advanced Profile JSON</CardTitle>
-                  <CardDescription>Fine-tune full profile payload before validation and apply.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Textarea
-                    className="min-h-[280px] font-mono text-xs"
-                    value={profileJson}
-                    onChange={(event) => setProfileJson(event.target.value)}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
+                  <TabsContent value="sources" className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Source Management</CardTitle>
+                        <CardDescription>
+                          Add or remove tracked sources using canonicalized values saved in overlay.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="grid gap-4 md:grid-cols-[1fr,2fr,auto,auto]">
+                        <div className="space-y-2">
+                          <Label>Source Type</Label>
+                          <Select value={sourceType} onValueChange={setSourceType}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {sourceTypes.map((type) => (
+                                <SelectItem key={type} value={type}>
+                                  {type}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Value</Label>
+                          <Input
+                            placeholder="https://github.com/vercel-labs or owner/repo"
+                            value={sourceValue}
+                            onChange={(event) => setSourceValue(event.target.value)}
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <Button onClick={() => void handleSourceMutation("add")} disabled={saving}>
+                            {saveAction === "source-add" ? (
+                              <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                            ) : null}
+                            {saveAction === "source-add" ? "Adding..." : "Add"}
+                          </Button>
+                        </div>
+                        <div className="flex items-end">
+                          <Button variant="outline" onClick={() => void handleSourceMutation("remove")} disabled={saving}>
+                            {saveAction === "source-remove" ? (
+                              <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                            ) : null}
+                            {saveAction === "source-remove" ? "Removing..." : "Remove"}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
 
-            <TabsContent value="review" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Review and Apply</CardTitle>
-                  <CardDescription>
-                    Validate changes, inspect diff, and apply overlay updates atomically.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-2">
-                  <Button variant="outline" onClick={() => void validateProfile()} disabled={saving}>
-                    <ShieldCheck className="h-4 w-4" /> Validate
-                  </Button>
-                  <Button variant="outline" onClick={() => void computeProfileDiff()} disabled={saving}>
-                    <RefreshCcw className="h-4 w-4" /> Compute Diff
-                  </Button>
-                  <Button onClick={() => void saveProfile()} disabled={saving}>
-                    <Save className="h-4 w-4" /> Save Overlay
-                  </Button>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Profile Diff</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <pre className="max-h-[340px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
-                    {JSON.stringify(profileDiff, null, 2)}
-                  </pre>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Effective Sources</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Count</TableHead>
+                              <TableHead>Values</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sortedSourceRows.map(([type, values]) => (
+                              <TableRow key={type}>
+                                <TableCell className="font-semibold">{type}</TableCell>
+                                <TableCell>{values.length}</TableCell>
+                                <TableCell className="font-mono text-xs text-muted-foreground">
+                                  {values.slice(0, 5).join("\n") || "-"}
+                                  {values.length > 5 ? `\n... (+${values.length - 5})` : ""}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
 
-            <TabsContent value="history">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Snapshot History</CardTitle>
-                  <CardDescription>Rollback overlay state to a previous snapshot when needed.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Created</TableHead>
-                        <TableHead>Action</TableHead>
-                        <TableHead>Snapshot</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {history.map((row) => (
-                        <TableRow key={row.id}>
-                          <TableCell>{row.created_at}</TableCell>
-                          <TableCell>{row.action}</TableCell>
-                          <TableCell className="font-mono text-xs">{row.id}</TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => void rollback(row.id)}
-                              disabled={saving}
-                            >
-                              <Undo2 className="h-3.5 w-3.5" /> Rollback
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        )}
+                    {sourceHealth.length > 0 ? (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="font-display">Source Health</CardTitle>
+                          <CardDescription>
+                            Broken sources detected in recent runs. Fix these to improve source coverage.
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Source</TableHead>
+                                <TableHead>Failures (20 runs)</TableHead>
+                                <TableHead>Last Error</TableHead>
+                                <TableHead>Suggested Fix</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {sourceHealth.slice(0, 12).map((item) => (
+                                <TableRow key={`${item.kind}:${item.source}`}>
+                                  <TableCell className="font-mono text-xs">{item.source}</TableCell>
+                                  <TableCell>{item.count}</TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">{item.last_error}</TableCell>
+                                  <TableCell className="text-xs">{item.hint}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </CardContent>
+                      </Card>
+                    ) : null}
+                  </TabsContent>
+
+                  <TabsContent value="profile" className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Core Runtime Controls</CardTitle>
+                        <CardDescription>Adjust scoring and online quality-repair behavior.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="grid gap-6 md:grid-cols-2">
+                        <ToggleField
+                          label="LLM Summaries Enabled"
+                          checked={Boolean(profile.llm_enabled)}
+                          onChange={(value) => updateProfileField("llm_enabled", value)}
+                        />
+                        <ToggleField
+                          label="Agent Scoring Enabled"
+                          checked={Boolean(profile.agent_scoring_enabled)}
+                          onChange={(value) => updateProfileField("agent_scoring_enabled", value)}
+                        />
+                        <NumberField
+                          label="Max Agent Items Per Run"
+                          value={Number(profile.max_agent_items_per_run ?? 40)}
+                          onChange={(value) => updateProfileField("max_agent_items_per_run", value)}
+                        />
+                        <NumberField
+                          label="Must-read Max Per Source"
+                          value={Number(profile.must_read_max_per_source ?? 2)}
+                          onChange={(value) => updateProfileField("must_read_max_per_source", value)}
+                        />
+                        <NumberField
+                          label="Quality Repair Threshold"
+                          value={Number(profile.quality_repair_threshold ?? 80)}
+                          onChange={(value) => updateProfileField("quality_repair_threshold", value)}
+                        />
+                        <ToggleField
+                          label="Quality Repair Enabled"
+                          checked={Boolean(profile.quality_repair_enabled)}
+                          onChange={(value) => updateProfileField("quality_repair_enabled", value)}
+                        />
+                        <ToggleField
+                          label="Quality Learning Enabled"
+                          checked={Boolean(profile.quality_learning_enabled)}
+                          onChange={(value) => updateProfileField("quality_learning_enabled", value)}
+                        />
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Lists and Output</CardTitle>
+                        <CardDescription>Manage list fields and output settings.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="grid gap-5 md:grid-cols-2">
+                        <ListField
+                          label="Topics"
+                          value={toLines(profile.topics as string[])}
+                          onChange={(value) => updateProfileField("topics", fromLines(value))}
+                        />
+                        <ListField
+                          label="Trusted Sources"
+                          value={toLines(profile.trusted_sources as string[])}
+                          onChange={(value) => updateProfileField("trusted_sources", fromLines(value))}
+                        />
+                        <ListField
+                          label="Exclusions"
+                          value={toLines(profile.exclusions as string[])}
+                          onChange={(value) => updateProfileField("exclusions", fromLines(value))}
+                        />
+                        <div className="space-y-2">
+                          <Label>Obsidian Folder</Label>
+                          <Input
+                            value={String(((profile.output as Record<string, unknown>)?.obsidian_folder as string) ?? "")}
+                            onChange={(event) => updateProfileField("output.obsidian_folder", event.target.value)}
+                          />
+                          <Label className="pt-2">Render Mode</Label>
+                          <Select
+                            value={String(((profile.output as Record<string, unknown>)?.render_mode as string) ?? "sectioned")}
+                            onValueChange={(value) => updateProfileField("output.render_mode", value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="sectioned">sectioned</SelectItem>
+                              <SelectItem value="source_segmented">source_segmented</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Advanced Profile JSON</CardTitle>
+                        <CardDescription>Fine-tune full profile payload before validation and apply.</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <Textarea
+                          className="min-h-[280px] font-mono text-xs"
+                          value={profileJson}
+                          onChange={(event) => setProfileJson(event.target.value)}
+                        />
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  <TabsContent value="review" className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Review and Apply</CardTitle>
+                        <CardDescription>
+                          Validate changes, inspect diff, and apply overlay updates atomically.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={() => void validateProfile()} disabled={saving}>
+                          {saveAction === "profile-validate" ? (
+                            <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                          ) : (
+                            <ShieldCheck className="h-4 w-4" />
+                          )}
+                          {saveAction === "profile-validate" ? "Validating..." : "Validate"}
+                        </Button>
+                        <Button variant="outline" onClick={() => void computeProfileDiff()} disabled={saving}>
+                          {saveAction === "profile-diff" ? (
+                            <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                          ) : (
+                            <RefreshCcw className="h-4 w-4" />
+                          )}
+                          {saveAction === "profile-diff" ? "Computing..." : "Compute Diff"}
+                        </Button>
+                        <Button onClick={() => void saveProfile()} disabled={saving}>
+                          {saveAction === "profile-save" ? (
+                            <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                          ) : (
+                            <Save className="h-4 w-4" />
+                          )}
+                          {saveAction === "profile-save" ? "Saving..." : "Save Overlay"}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Profile Diff</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <pre className="max-h-[340px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
+                          {JSON.stringify(profileDiff, null, 2)}
+                        </pre>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  <TabsContent value="history">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Snapshot History</CardTitle>
+                        <CardDescription>Rollback overlay state to a previous snapshot when needed.</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Created</TableHead>
+                              <TableHead>Action</TableHead>
+                              <TableHead>Snapshot</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {history.map((row) => (
+                              <TableRow key={row.id}>
+                                <TableCell>{row.created_at}</TableCell>
+                                <TableCell>{row.action}</TableCell>
+                                <TableCell className="font-mono text-xs">{row.id}</TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => void rollback(row.id)}
+                                    disabled={saving}
+                                  >
+                                    {saveAction === "rollback" && activeRollbackId === row.id ? (
+                                      <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" />
+                                    ) : (
+                                      <Undo2 className="h-3.5 w-3.5" />
+                                    )}
+                                    {saveAction === "rollback" && activeRollbackId === row.id ? "Rolling back..." : "Rollback"}
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                </Tabs>
+              </>
+            )}
+          </section>
+        </div>
       </div>
     </main>
   )

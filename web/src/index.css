@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -6,24 +6,24 @@
 
 @layer base {
   :root {
-    --background: 200 23% 97%;
-    --foreground: 216 18% 15%;
+    --background: 204 28% 96%;
+    --foreground: 213 28% 13%;
     --card: 0 0% 100%;
-    --card-foreground: 216 18% 15%;
-    --primary: 200 74% 34%;
+    --card-foreground: 213 28% 13%;
+    --primary: 191 85% 32%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 187 39% 92%;
-    --secondary-foreground: 200 74% 22%;
-    --muted: 200 20% 92%;
-    --muted-foreground: 220 9% 41%;
-    --accent: 25 90% 94%;
-    --accent-foreground: 24 80% 30%;
-    --destructive: 0 84% 47%;
+    --secondary: 194 34% 90%;
+    --secondary-foreground: 200 77% 22%;
+    --muted: 203 18% 90%;
+    --muted-foreground: 217 14% 38%;
+    --accent: 42 93% 92%;
+    --accent-foreground: 33 80% 30%;
+    --destructive: 1 74% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 200 14% 85%;
-    --input: 200 14% 85%;
-    --ring: 200 74% 34%;
-    --radius: 0.8rem;
+    --border: 205 19% 81%;
+    --input: 205 19% 81%;
+    --ring: 191 85% 32%;
+    --radius: 0.95rem;
   }
 
   * {
@@ -32,7 +32,16 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    background-image: radial-gradient(circle at 20% 0%, rgba(1, 114, 169, 0.08), transparent 35%),
-      radial-gradient(circle at 90% 10%, rgba(248, 147, 29, 0.08), transparent 30%);
+    background-image: radial-gradient(circle at 5% -5%, rgba(0, 128, 149, 0.16), transparent 34%),
+      radial-gradient(circle at 94% 2%, rgba(234, 170, 49, 0.2), transparent 32%),
+      linear-gradient(160deg, rgba(255, 255, 255, 0.72), rgba(240, 247, 250, 0.88));
+  }
+}
+
+@layer utilities {
+  .bg-console-canvas {
+    background-image: linear-gradient(to right, rgba(15, 23, 42, 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
+    background-size: 28px 28px;
   }
 }

@@ -40,12 +40,14 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["Manrope", "ui-sans-serif", "system-ui"],
+        sans: ["IBM Plex Sans", "ui-sans-serif", "system-ui"],
+        display: ["Space Grotesk", "IBM Plex Sans", "ui-sans-serif", "system-ui"],
         mono: ["JetBrains Mono", "ui-monospace", "monospace"],
       },
       backgroundImage: {
         "soft-grid":
           "linear-gradient(to right, rgba(0,0,0,0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.03) 1px, transparent 1px)",
+        "console-radial": "radial-gradient(circle at top left, rgba(10, 132, 151, 0.18), transparent 38%)",
       },
       backgroundSize: {
         "grid-size": "24px 24px",
