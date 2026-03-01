@@ -24,7 +24,7 @@
 
 - [x] 6.1 Add/Update backend unit tests.
 - [x] 6.2 Add/Update API tests.
-- [ ] 6.3 Add/Update frontend tests for policy and transparency UI. (deferred: no frontend test harness in repo)
+- [x] 6.3 Add/Update frontend tests for policy and transparency UI. (implemented with zero-dependency `node --test` contract tests in `web/tests/`)
 - [x] 6.4 Run regression suite (`make test`, `npm --prefix web run build`).
 
 - [ ] 7.1 Move change to `.docs/done/` with completion summary after implementation and sign-off.
