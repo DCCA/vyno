@@ -38,10 +38,31 @@
   }
 }
 
+@keyframes surface-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @layer utilities {
   .bg-console-canvas {
     background-image: linear-gradient(to right, rgba(15, 23, 42, 0.04) 1px, transparent 1px),
       linear-gradient(to bottom, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
     background-size: 28px 28px;
+  }
+
+  .animate-surface-enter {
+    animation: surface-enter 320ms ease both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-surface-enter {
+    animation: none;
   }
 }

@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   Activity,
-  ArrowRight,
   CheckCircle2,
   Clock3,
+  Database,
+  History,
+  LayoutDashboard,
   Loader2,
+  Menu,
   Play,
   RefreshCcw,
+  Rocket,
   Save,
+  ScrollText,
   ShieldCheck,
   SlidersHorizontal,
   Undo2,
+  X,
 } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -251,6 +257,8 @@ type SaveAction =
   | "seen-reset-apply"
   | "rollback"
 
+type ConsoleSurface = "dashboard" | "run" | "onboarding" | "sources" | "profile" | "review" | "timeline" | "history"
+
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").trim().replace(/\/$/, "")
 const API_TOKEN = import.meta.env.VITE_WEB_API_TOKEN ?? ""
 const API_TOKEN_HEADER = import.meta.env.VITE_WEB_API_TOKEN_HEADER ?? "X-Digest-Api-Token"
@@ -384,6 +392,8 @@ export default function App() {
   const [timelineNoteAuthor, setTimelineNoteAuthor] = useState("admin")
   const [timelineNoteText, setTimelineNoteText] = useState("")
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null)
+  const [surface, setSurface] = useState<ConsoleSurface>("dashboard")
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [consoleModeOverride, setConsoleModeOverride] = useState<"setup" | "manage" | null>(null)
   const [manageTab, setManageTab] = useState("sources")
 
@@ -474,6 +484,14 @@ export default function App() {
     onboarding && onboarding.progress.total > 0 && onboarding.progress.completed >= onboarding.progress.total,
   )
   const consoleMode = consoleModeOverride ?? (onboardingDone ? "manage" : "setup")
+  const manageSurfaceToTab: Partial<Record<ConsoleSurface, string>> = {
+    sources: "sources",
+    profile: "profile",
+    review: "review",
+    timeline: "timeline",
+    history: "history",
+  }
+  const activeManageTab = manageSurfaceToTab[surface] ?? "sources"
   const setupPercent = onboarding?.progress.total
     ? Math.round((onboarding.progress.completed / onboarding.progress.total) * 100)
     : 0
@@ -1043,6 +1061,22 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (surface === "onboarding") {
+      setConsoleModeOverride("setup")
+      return
+    }
+    if (surface === "dashboard" || surface === "run") {
+      return
+    }
+    setConsoleModeOverride("manage")
+    setManageTab(activeManageTab)
+  }, [activeManageTab, surface])
+
+  useEffect(() => {
+    setMobileNavOpen(false)
+  }, [surface])
+
+  useEffect(() => {
     if (!timelineRunId) return
     void refreshTimeline({ silent: true })
   }, [timelineRunId, timelineStageFilter, timelineSeverityFilter, timelineOrder])
@@ -1071,7 +1105,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (consoleMode !== "manage" || manageTab !== "timeline" || !timelineRunId) return
+    if (surface !== "timeline" || !timelineRunId) return
     if (timelineLivePaused) return
     const activeRunId = runStatus?.active?.run_id ?? ""
     const isLive = activeRunId !== "" && activeRunId === timelineRunId
@@ -1080,7 +1114,7 @@ export default function App() {
       void refreshTimeline({ silent: true })
     }, 2500)
     return () => clearInterval(timer)
-  }, [consoleMode, manageTab, runStatus?.active?.run_id, timelineRunId, timelineStageFilter, timelineSeverityFilter, timelineOrder, timelineLivePaused])
+  }, [runStatus?.active?.run_id, surface, timelineLivePaused, timelineOrder, timelineRunId, timelineSeverityFilter, timelineStageFilter])
 
   function renderSetupStepAction(stepId: string) {
     if (stepId === "preflight") {
@@ -1108,14 +1142,14 @@ export default function App() {
         )
       }
       return (
-        <Button variant="outline" size="sm" onClick={() => setConsoleModeOverride("manage")}>
+        <Button variant="outline" size="sm" onClick={() => setSurface("sources")}>
           Open sources
         </Button>
       )
     }
     if (stepId === "outputs" || stepId === "profile") {
       return (
-        <Button variant="outline" size="sm" onClick={() => setConsoleModeOverride("manage")}>
+        <Button variant="outline" size="sm" onClick={() => setSurface("profile")}>
           Open profile
         </Button>
       )
@@ -1168,20 +1202,57 @@ export default function App() {
     return null
   }
 
+  const navItems: Array<{
+    id: ConsoleSurface
+    label: string
+    hint: string
+    icon: typeof LayoutDashboard
+    badge?: string
+  }> = [
+    { id: "dashboard", label: "Dashboard", hint: "status and alerts", icon: LayoutDashboard },
+    { id: "run", label: "Run Center", hint: "manual run control", icon: Rocket },
+    {
+      id: "onboarding",
+      label: "Onboarding",
+      hint: "preflight and activation",
+      icon: SlidersHorizontal,
+      badge: onboardingDone ? "Ready" : `${onboarding?.progress.completed ?? 0}/${onboarding?.progress.total ?? 0}`,
+    },
+    { id: "sources", label: "Sources", hint: "inputs and health", icon: Database },
+    { id: "profile", label: "Profile", hint: "policy and runtime", icon: ShieldCheck },
+    { id: "review", label: "Review", hint: "validate and apply", icon: ScrollText },
+    { id: "timeline", label: "Timeline", hint: "events and notes", icon: Activity },
+    { id: "history", label: "History", hint: "snapshots and rollback", icon: History },
+  ]
+
+  const isManageSurface = surface === "sources" || surface === "profile" || surface === "review" || surface === "timeline" || surface === "history"
+
   return (
     <main className="min-h-screen bg-console-canvas">
-      <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-4 py-6 md:px-8 md:py-8">
+      <div className="mx-auto flex w-full max-w-[1380px] flex-col gap-5 px-4 py-6 md:px-6 lg:px-8 lg:py-8">
         <header className="rounded-2xl border border-border/80 bg-card/90 p-5 shadow-lg shadow-primary/5 backdrop-blur-sm">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/90">Digest Operations</p>
-              <h1 className="font-display text-3xl tracking-tight text-foreground md:text-4xl">Setup Journey + Manage Workspace</h1>
-              <p className="max-w-2xl text-sm text-muted-foreground">
-                Guide first-run operators to a healthy digest, then switch to maintenance controls without losing context.
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="lg:hidden"
+                  onClick={() => setMobileNavOpen((prev) => !prev)}
+                  aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
+                >
+                  {mobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+                  {mobileNavOpen ? "Close" : "Menu"}
+                </Button>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/90">Digest Operations</p>
+              </div>
+              <h1 className="font-display text-3xl tracking-tight text-foreground md:text-4xl">Control Center</h1>
+              <p className="max-w-3xl text-sm text-muted-foreground">
+                Status-first workspace for daily operations, onboarding, and advanced maintenance without losing feature coverage.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               {runStatus?.active ? (
                 <Badge variant="warning">Active: {runStatus.active.run_id}</Badge>
               ) : (
@@ -1294,73 +1365,216 @@ export default function App() {
         ) : null}
 
         <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <aside className="space-y-4">
-            <Card className="border-border/80 bg-card/95">
+          <aside className={`${mobileNavOpen ? "block" : "hidden"} space-y-4 lg:block`}>
+            <Card className="border-border/80 bg-card/95 animate-surface-enter">
               <CardHeader className="pb-3">
-                <CardTitle className="font-display text-base">Console Modes</CardTitle>
-                <CardDescription>Switch between guided setup and advanced maintenance.</CardDescription>
+                <CardTitle className="font-display text-base">Workspace Navigation</CardTitle>
+                <CardDescription>Focused surfaces for daily operations and advanced controls.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <Button
-                  className="w-full justify-between"
-                  variant={consoleMode === "setup" ? "default" : "outline"}
-                  onClick={() => setConsoleModeOverride("setup")}
-                >
-                  Setup Journey
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-                <Button
-                  className="w-full justify-between"
-                  variant={consoleMode === "manage" ? "default" : "outline"}
-                  onClick={() => setConsoleModeOverride("manage")}
-                >
-                  Manage Workspace
-                  <SlidersHorizontal className="h-4 w-4" />
-                </Button>
-
-                <div className="space-y-2 rounded-xl border bg-muted/20 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Setup status</p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={onboardingDone ? "success" : "warning"}>
-                      {onboardingDone ? "Ready" : "In progress"}
-                    </Badge>
-                    <Badge variant="secondary">
-                      Steps {onboarding?.progress.completed ?? 0}/{onboarding?.progress.total ?? 0}
-                    </Badge>
-                  </div>
-                  <Progress value={setupPercent} />
-                  <p className="text-xs text-muted-foreground">{setupPercent}% complete</p>
-                </div>
+              <CardContent className="space-y-2">
+                {navItems.map((item, index) => {
+                  const Icon = item.icon
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSurface(item.id)}
+                      className={`group flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-all duration-200 ${
+                        surface === item.id
+                          ? "border-primary/40 bg-primary/10 shadow-sm"
+                          : "border-border/70 bg-background/60 hover:border-primary/20 hover:bg-primary/5"
+                      }`}
+                      style={{ animationDelay: `${index * 35}ms` }}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-primary" />
+                        <span>
+                          <span className="block text-sm font-semibold">{item.label}</span>
+                          <span className="block text-[11px] text-muted-foreground">{item.hint}</span>
+                        </span>
+                      </span>
+                      {item.badge ? (
+                        <Badge variant={item.id === "onboarding" && !onboardingDone ? "warning" : "secondary"}>{item.badge}</Badge>
+                      ) : null}
+                    </button>
+                  )
+                })}
               </CardContent>
             </Card>
 
-            {sourceHealth.length > 0 ? (
-              <Card className="border-amber-300/50 bg-amber-50/40">
-                <CardHeader className="pb-3">
-                  <CardTitle className="font-display text-base">Source health alerts</CardTitle>
-                  <CardDescription>Recent ingestion failures that can reduce digest quality.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {sourceHealth.slice(0, 3).map((item) => (
-                    <div key={`${item.kind}:${item.source}`} className="rounded-lg border border-amber-300/40 bg-background/90 p-2.5">
-                      <p className="truncate font-mono text-[11px]">{item.source}</p>
-                      <p className="text-xs text-muted-foreground">{item.count} failures in recent runs</p>
-                    </div>
-                  ))}
-                  <p className="text-xs text-muted-foreground">Open Manage Workspace to inspect full diagnostics.</p>
-                </CardContent>
-              </Card>
-            ) : null}
+            <Card className="border-border/80 bg-card/95 animate-surface-enter [animation-delay:80ms]">
+              <CardHeader className="pb-2">
+                <CardTitle className="font-display text-base">Digest Health</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="space-y-1 rounded-lg border border-border/70 bg-muted/15 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Setup status</p>
+                  <div className="flex items-center justify-between">
+                    <Badge variant={onboardingDone ? "success" : "warning"}>{onboardingDone ? "Ready" : "In progress"}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {onboarding?.progress.completed ?? 0}/{onboarding?.progress.total ?? 0}
+                    </span>
+                  </div>
+                  <Progress value={setupPercent} className="transition-all duration-500" />
+                </div>
+                {sourceHealth.length > 0 ? (
+                  <div className="rounded-lg border border-amber-300/50 bg-amber-50/60 p-3">
+                    <p className="text-xs font-semibold text-amber-900">Source health alerts: {sourceHealth.length}</p>
+                    <p className="mt-1 text-xs text-amber-800">Open Sources page to inspect diagnostics and apply fixes.</p>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-emerald-300/50 bg-emerald-50/60 p-3">
+                    <p className="text-xs font-semibold text-emerald-900">No source alerts in recent runs.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </aside>
 
-          <section className="space-y-4">
+          <section className="space-y-4 animate-surface-enter">
             {loading || !profile ? (
               <Card>
                 <CardContent className="flex items-center gap-3 p-6">
                   <Loader2 className="h-5 w-5 animate-spin" /> Loading configuration...
                 </CardContent>
               </Card>
-            ) : consoleMode === "setup" ? (
+            ) : surface === "dashboard" ? (
+              <>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <Card className="border-border/80 bg-card/95">
+                    <CardHeader className="pb-2">
+                      <CardDescription>Latest run</CardDescription>
+                      <CardTitle className="font-display text-2xl">{runStatus?.latest?.status ?? "n/a"}</CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card className="border-border/80 bg-card/95">
+                    <CardHeader className="pb-2">
+                      <CardDescription>Source alerts</CardDescription>
+                      <CardTitle className="font-display text-2xl">{sourceHealth.length}</CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card className="border-border/80 bg-card/95">
+                    <CardHeader className="pb-2">
+                      <CardDescription>Setup completion</CardDescription>
+                      <CardTitle className="font-display text-2xl">{setupPercent}%</CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card className="border-border/80 bg-card/95">
+                    <CardHeader className="pb-2">
+                      <CardDescription>Timeline runs</CardDescription>
+                      <CardTitle className="font-display text-2xl">{timelineRuns.length}</CardTitle>
+                    </CardHeader>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="font-display">Operational Focus</CardTitle>
+                    <CardDescription>Start with status and move into focused workflows.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <Button className="justify-between" onClick={() => setSurface("run")}>
+                      Open Run Center
+                      <Rocket className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" className="justify-between" onClick={() => setSurface("sources")}>
+                      Open Sources
+                      <Database className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" className="justify-between" onClick={() => setSurface("timeline")}>
+                      Open Timeline
+                      <Activity className="h-4 w-4" />
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {sourceHealth.length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="font-display">Source health alerts</CardTitle>
+                      <CardDescription>Recent ingestion failures that can reduce digest quality.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {sourceHealth.slice(0, 6).map((item) => (
+                        <div key={`${item.kind}:${item.source}`} className="rounded-lg border border-amber-300/40 bg-amber-50/30 p-2.5">
+                          <p className="truncate font-mono text-[11px]">{item.source}</p>
+                          <p className="text-xs text-muted-foreground">{item.count} failures in recent runs</p>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                ) : null}
+              </>
+            ) : surface === "run" ? (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="font-display">Run Center</CardTitle>
+                    <CardDescription>Manual runs, mode overrides, and live progress visibility.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 md:grid-cols-[1fr,auto,auto]">
+                    <div className="space-y-2">
+                      <Label>One-time mode override</Label>
+                      <Select
+                        value={runNowModeOverride}
+                        onValueChange={setRunNowModeOverride}
+                        disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id) || !runPolicy.allow_run_override}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default">Run now: default ({runPolicy.default_mode})</SelectItem>
+                          <SelectItem value="fresh_only">Run now: fresh_only</SelectItem>
+                          <SelectItem value="balanced">Run now: balanced</SelectItem>
+                          <SelectItem value="replay_recent">Run now: replay_recent</SelectItem>
+                          <SelectItem value="backfill">Run now: backfill</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-end">
+                      <Button variant="outline" onClick={() => void refreshAll()} disabled={loading || saving}>
+                        {loading ? (
+                          <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                        ) : (
+                          <RefreshCcw className="h-4 w-4" />
+                        )}
+                        {loading ? "Refreshing..." : "Refresh"}
+                      </Button>
+                    </div>
+                    <div className="flex items-end">
+                      <Button onClick={() => void runNow()} disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}>
+                        {runNowLoading ? (
+                          <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                        ) : (
+                          <Play className="h-4 w-4" />
+                        )}
+                        {runNowLoading ? "Starting..." : "Run now"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="font-display">Latest Completion Snapshot</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">run_id: {runStatus?.latest_completed?.run_id ?? "-"}</Badge>
+                    <Badge variant="secondary">status: {runStatus?.latest_completed?.status ?? "-"}</Badge>
+                    <Badge variant="secondary">
+                      source errors: {runStatus?.latest_completed?.source_error_count ?? 0}
+                    </Badge>
+                    <Badge variant="secondary">
+                      summary errors: {runStatus?.latest_completed?.summary_error_count ?? 0}
+                    </Badge>
+                    <Button variant="outline" size="sm" onClick={() => setSurface("timeline")}>
+                      Open timeline details
+                    </Button>
+                  </CardContent>
+                </Card>
+              </>
+            ) : surface === "onboarding" ? (
               <>
                 <Card>
                   <CardHeader>
@@ -1524,12 +1738,32 @@ export default function App() {
                   </Card>
                 ) : null}
               </>
-            ) : (
+            ) : isManageSurface ? (
               <>
                 <Card>
                   <CardHeader>
-                    <CardTitle className="font-display">Manage Workspace</CardTitle>
-                    <CardDescription>Advanced controls for source, profile, review, and rollback operations.</CardDescription>
+                    <CardTitle className="font-display">
+                      {surface === "sources"
+                        ? "Sources"
+                        : surface === "profile"
+                          ? "Profile"
+                          : surface === "review"
+                            ? "Review"
+                            : surface === "timeline"
+                              ? "Timeline"
+                              : "History"}
+                    </CardTitle>
+                    <CardDescription>
+                      {surface === "sources"
+                        ? "Manage ingestion inputs and inspect source health."
+                        : surface === "profile"
+                          ? "Tune policy and runtime behavior with full parity."
+                          : surface === "review"
+                            ? "Validate, diff, and apply profile payload changes."
+                            : surface === "timeline"
+                              ? "Inspect live and historical run events."
+                              : "Review and rollback saved snapshots."}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="flex flex-wrap items-center gap-2">
                     <Badge variant={onboardingDone ? "success" : "warning"}>
@@ -1538,22 +1772,20 @@ export default function App() {
                     <Badge variant="secondary">
                       Steps {onboarding?.progress.completed ?? 0}/{onboarding?.progress.total ?? 0}
                     </Badge>
-                    {!onboardingDone ? (
-                      <Button variant="outline" size="sm" onClick={() => setConsoleModeOverride("setup")}>
-                        Return to setup journey
-                      </Button>
-                    ) : null}
+                    {!onboardingDone ? <Button variant="outline" size="sm" onClick={() => setSurface("onboarding")}>Return to setup journey</Button> : null}
                   </CardContent>
                 </Card>
 
                 <Tabs value={manageTab} onValueChange={setManageTab} className="w-full">
-                  <TabsList className="grid w-full grid-cols-5">
-                    <TabsTrigger value="sources">Sources</TabsTrigger>
-                    <TabsTrigger value="profile">Profile</TabsTrigger>
-                    <TabsTrigger value="review">Review</TabsTrigger>
-                    <TabsTrigger value="timeline">Timeline</TabsTrigger>
-                    <TabsTrigger value="history">History</TabsTrigger>
-                  </TabsList>
+                  <div className="sr-only">
+                    <TabsList>
+                      <TabsTrigger value="sources">Sources</TabsTrigger>
+                      <TabsTrigger value="profile">Profile</TabsTrigger>
+                      <TabsTrigger value="review">Review</TabsTrigger>
+                      <TabsTrigger value="timeline">Timeline</TabsTrigger>
+                      <TabsTrigger value="history">History</TabsTrigger>
+                    </TabsList>
+                  </div>
 
                   <TabsContent value="sources" className="space-y-4">
                     <Card>
@@ -2361,7 +2593,7 @@ export default function App() {
                   </TabsContent>
                 </Tabs>
               </>
-            )}
+            ) : null}
           </section>
         </div>
       </div>
