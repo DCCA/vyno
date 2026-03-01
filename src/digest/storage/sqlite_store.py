@@ -265,6 +265,41 @@ class SQLiteStore:
             rows = conn.execute("SELECT key FROM seen").fetchall()
         return {r[0] for r in rows}
 
+    def preview_seen_reset(self, *, older_than_days: int | None = None) -> int:
+        with self._conn() as conn:
+            if older_than_days is None:
+                row = conn.execute("SELECT COUNT(*) FROM seen").fetchone()
+                return int(row[0] or 0) if row else 0
+            cutoff = datetime.now(tz=timezone.utc) - timedelta(
+                days=max(1, int(older_than_days))
+            )
+            row = conn.execute(
+                "SELECT COUNT(*) FROM seen WHERE first_seen_at <= ?",
+                (cutoff.isoformat(),),
+            ).fetchone()
+            return int(row[0] or 0) if row else 0
+
+    def reset_seen(self, *, older_than_days: int | None = None) -> int:
+        with self._conn() as conn:
+            if older_than_days is None:
+                row = conn.execute("SELECT COUNT(*) FROM seen").fetchone()
+                count = int(row[0] or 0) if row else 0
+                conn.execute("DELETE FROM seen")
+                return count
+            cutoff = datetime.now(tz=timezone.utc) - timedelta(
+                days=max(1, int(older_than_days))
+            )
+            row = conn.execute(
+                "SELECT COUNT(*) FROM seen WHERE first_seen_at <= ?",
+                (cutoff.isoformat(),),
+            ).fetchone()
+            count = int(row[0] or 0) if row else 0
+            conn.execute(
+                "DELETE FROM seen WHERE first_seen_at <= ?",
+                (cutoff.isoformat(),),
+            )
+            return count
+
     def last_completed_window_end(self) -> str | None:
         with self._conn() as conn:
             row = conn.execute(
@@ -823,6 +858,9 @@ class SQLiteStore:
             if summary_errors
             else max(0, int(details.get("summary_error_count") or 0))
         )
+        events = self.list_timeline_events(run_id=rid, limit=5000, order="asc")
+        restriction = _timeline_restriction_details(events)
+        mode = _timeline_run_mode(events)
         return {
             "run_id": rid,
             "status": status or "unknown",
@@ -839,6 +877,12 @@ class SQLiteStore:
             "video_count": int(details.get("video_count") or 0),
             "source_error_count": source_error_count,
             "summary_error_count": summary_error_count,
+            "mode": mode,
+            "filter_funnel": restriction["filter_funnel"],
+            "strictness_score": restriction["strictness_score"],
+            "strictness_level": restriction["strictness_level"],
+            "restriction_reasons": restriction["restriction_reasons"],
+            "recommendations": restriction["recommendations"],
         }
 
     def add_timeline_note(
@@ -1035,3 +1079,171 @@ def _json_dict(raw: object) -> dict[str, object]:
     if not isinstance(payload, dict):
         return {}
     return payload
+
+
+def _timeline_run_mode(events: list[dict[str, object]]) -> dict[str, object]:
+    mode_name = ""
+    use_last = False
+    only_new = False
+    allow_seen_fallback = False
+    for event in events:
+        stage = str(event.get("stage", "") or "").strip()
+        details = event.get("details", {})
+        payload = details if isinstance(details, dict) else {}
+        if stage == "queued":
+            queued_mode = str(payload.get("mode", "") or "").strip().lower()
+            if queued_mode in {"fresh_only", "balanced", "replay_recent", "backfill"}:
+                mode_name = queued_mode
+        if stage != "run_start":
+            continue
+        if "use_last_completed_window" in payload:
+            use_last = bool(payload.get("use_last_completed_window"))
+        if "only_new" in payload:
+            only_new = bool(payload.get("only_new"))
+        if "allow_seen_fallback" in payload:
+            allow_seen_fallback = bool(payload.get("allow_seen_fallback"))
+        mode_name = _mode_from_flags(
+            use_last_completed_window=use_last,
+            only_new=only_new,
+            allow_seen_fallback=allow_seen_fallback,
+        )
+    if not mode_name:
+        mode_name = "unknown"
+    return {
+        "name": mode_name,
+        "use_last_completed_window": use_last,
+        "only_new": only_new,
+        "allow_seen_fallback": allow_seen_fallback,
+    }
+
+
+def _mode_from_flags(
+    *,
+    use_last_completed_window: bool,
+    only_new: bool,
+    allow_seen_fallback: bool,
+) -> str:
+    if use_last_completed_window and only_new and not allow_seen_fallback:
+        return "fresh_only"
+    if use_last_completed_window and only_new and allow_seen_fallback:
+        return "balanced"
+    if use_last_completed_window and not only_new:
+        return "replay_recent"
+    if not use_last_completed_window and not only_new:
+        return "backfill"
+    return "custom"
+
+
+def _timeline_restriction_details(
+    events: list[dict[str, object]],
+) -> dict[str, object]:
+    fetched: int | None = None
+    post_window: int | None = None
+    post_seen: int | None = None
+    post_block: int | None = None
+    selected: int | None = None
+
+    for event in events:
+        stage = str(event.get("stage", "") or "").strip()
+        details = event.get("details", {})
+        payload = details if isinstance(details, dict) else {}
+        if stage == "normalize_filter":
+            raw_count = _as_int_or_none(payload.get("raw_count"))
+            unique_count = _as_int_or_none(payload.get("unique_count"))
+            if raw_count is not None:
+                fetched = raw_count
+            if unique_count is not None:
+                post_window = unique_count
+        elif stage == "candidate_select":
+            candidate_count = _as_int_or_none(payload.get("candidate_count"))
+            if candidate_count is not None:
+                post_seen = candidate_count
+        elif stage == "score":
+            scored_count = _as_int_or_none(payload.get("scored_item_count"))
+            if scored_count is not None:
+                post_block = scored_count
+        elif stage == "run_finish":
+            final_count = _as_int_or_none(payload.get("final_item_count"))
+            if final_count is not None:
+                selected = final_count
+
+    values = [v for v in [fetched, post_window, post_seen, post_block, selected] if v is not None]
+    baseline = max(values) if values else 0
+    fetched_count = max(0, fetched if fetched is not None else baseline)
+    post_window_count = max(
+        0, post_window if post_window is not None else fetched_count
+    )
+    post_seen_count = max(0, post_seen if post_seen is not None else post_window_count)
+    post_block_count = max(0, post_block if post_block is not None else post_seen_count)
+    selected_count = max(0, selected if selected is not None else post_block_count)
+
+    funnel = {
+        "fetched": fetched_count,
+        "post_window": post_window_count,
+        "post_seen": post_seen_count,
+        "post_block": post_block_count,
+        "selected": selected_count,
+    }
+    drops = [
+        ("window", "Window filter", max(0, fetched_count - post_window_count)),
+        ("seen", "Seen filter", max(0, post_window_count - post_seen_count)),
+        ("blocked", "Blocked filter", max(0, post_seen_count - post_block_count)),
+        ("ranking", "Ranking/selection", max(0, post_block_count - selected_count)),
+    ]
+    reasons: list[dict[str, object]] = []
+    for key, label, dropped in sorted(drops, key=lambda row: row[2], reverse=True):
+        if dropped <= 0:
+            continue
+        ratio = (dropped / fetched_count) if fetched_count > 0 else 0.0
+        reasons.append(
+            {
+                "key": key,
+                "label": label,
+                "dropped": int(dropped),
+                "ratio_pct": round(ratio * 100.0, 1),
+            }
+        )
+
+    if fetched_count <= 0:
+        strictness_score = 0.0
+    else:
+        strictness_score = round(
+            max(0.0, min(100.0, (1.0 - (selected_count / max(1, fetched_count))) * 100.0)),
+            1,
+        )
+    if strictness_score >= 70:
+        strictness_level = "high"
+    elif strictness_score >= 35:
+        strictness_level = "medium"
+    else:
+        strictness_level = "low"
+
+    recommendations: list[str] = []
+    top_key = str(reasons[0]["key"]) if reasons else ""
+    if top_key == "seen":
+        recommendations.append("Use Balanced mode or reset seen history for older items.")
+    elif top_key == "window":
+        recommendations.append("Use Replay Recent mode to widen the run window.")
+    elif top_key == "blocked":
+        recommendations.append("Review blocked sources and exclusion keywords.")
+    elif top_key == "ranking":
+        recommendations.append("Adjust topics, trusted sources, or must-read source cap.")
+    if strictness_level == "high":
+        recommendations.append("Run once with Replay Recent to compare output volume.")
+    if not recommendations:
+        recommendations.append("No major restrictions detected in this run.")
+
+    return {
+        "filter_funnel": funnel,
+        "strictness_score": strictness_score,
+        "strictness_level": strictness_level,
+        "restriction_reasons": reasons[:3],
+        "recommendations": recommendations,
+    }
+
+
+def _as_int_or_none(value: object) -> int | None:
+    try:
+        return int(value)
+    except Exception:
+        return None

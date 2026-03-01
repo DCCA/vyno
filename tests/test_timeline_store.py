@@ -85,6 +85,9 @@ class TestTimelineStore(unittest.TestCase):
             self.assertEqual(summary["skim_count"], 2)
             self.assertEqual(summary["video_count"], 0)
             self.assertEqual(summary["source_error_count"], 1)
+            self.assertIn(summary["strictness_level"], {"low", "medium", "high"})
+            self.assertIn("filter_funnel", summary)
+            self.assertIn("recommendations", summary)
 
             export_payload = store.export_timeline(run_id=run_id)
             self.assertEqual(export_payload["run_id"], run_id)
@@ -160,6 +163,17 @@ class TestTimelineStore(unittest.TestCase):
             new_notes = store.list_timeline_notes(run_id=new_run_id, limit=10)
             self.assertEqual(len(old_notes), 0)
             self.assertEqual(len(new_notes), 1)
+
+    def test_seen_reset_preview_and_apply(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            store = SQLiteStore(str(db))
+            store.mark_seen(["a", "b", "c"])
+            preview_all = store.preview_seen_reset()
+            self.assertEqual(preview_all, 3)
+            deleted = store.reset_seen()
+            self.assertEqual(deleted, 3)
+            self.assertEqual(store.preview_seen_reset(), 0)
 
 
 if __name__ == "__main__":

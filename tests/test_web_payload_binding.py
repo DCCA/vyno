@@ -30,7 +30,10 @@ class TestWebPayloadBinding(unittest.TestCase):
             "/api/config/profile/validate",
             "/api/config/profile/diff",
             "/api/config/profile/save",
+            "/api/config/run-policy",
             "/api/config/rollback",
+            "/api/seen/reset/preview",
+            "/api/seen/reset/apply",
             "/api/onboarding/source-packs/apply",
             "/api/timeline/notes",
         ]:

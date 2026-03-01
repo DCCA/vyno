@@ -167,6 +167,33 @@ class TestConfig(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_profile(path)
 
+    def test_profile_loads_run_policy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                (
+                    "run_policy:\n"
+                    "  default_mode: balanced\n"
+                    "  allow_run_override: false\n"
+                    "  seen_reset_guard: disabled\n"
+                ),
+                encoding="utf-8",
+            )
+            profile = load_profile(path)
+            self.assertEqual(profile.run_policy.default_mode, "balanced")
+            self.assertFalse(profile.run_policy.allow_run_override)
+            self.assertEqual(profile.run_policy.seen_reset_guard, "disabled")
+
+    def test_profile_rejects_invalid_run_policy_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                "run_policy:\n  default_mode: invalid\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError):
+                load_profile(path)
+
 
 if __name__ == "__main__":
     unittest.main()

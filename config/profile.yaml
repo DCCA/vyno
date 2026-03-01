@@ -44,6 +44,10 @@ quality_learning_enabled: true
 quality_learning_max_offset: 8.0
 quality_learning_half_life_days: 14
 must_read_max_per_source: 2
+run_policy:
+  default_mode: fresh_only
+  allow_run_override: true
+  seen_reset_guard: confirm
 output:
   telegram_chat_id: ""
   telegram_bot_token: ""

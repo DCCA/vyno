@@ -182,13 +182,68 @@ def _rehydrate_redacted_value(candidate: Any, current: Any) -> Any:
     return candidate
 
 
-def _web_live_run_options(*, trigger: str) -> dict[str, bool]:
+RUN_MODE_OPTIONS: dict[str, dict[str, bool]] = {
+    "fresh_only": {
+        "use_last_completed_window": True,
+        "only_new": True,
+        "allow_seen_fallback": False,
+    },
+    "balanced": {
+        "use_last_completed_window": True,
+        "only_new": True,
+        "allow_seen_fallback": True,
+    },
+    "replay_recent": {
+        "use_last_completed_window": True,
+        "only_new": False,
+        "allow_seen_fallback": True,
+    },
+    "backfill": {
+        "use_last_completed_window": False,
+        "only_new": False,
+        "allow_seen_fallback": True,
+    },
+}
+DEFAULT_WEB_RUN_MODE = "fresh_only"
+
+
+def _resolve_run_mode(mode: str, *, fallback: str = DEFAULT_WEB_RUN_MODE) -> str:
+    candidate = (mode or "").strip().lower()
+    if candidate in RUN_MODE_OPTIONS:
+        return candidate
+    return fallback
+
+
+def _resolve_profile_run_mode(profile_cfg: Any) -> str:
+    run_policy = getattr(profile_cfg, "run_policy", None)
+    default_mode = getattr(run_policy, "default_mode", "")
+    return _resolve_run_mode(str(default_mode or ""), fallback=DEFAULT_WEB_RUN_MODE)
+
+
+def _resolve_run_mode_for_request(
+    *,
+    profile_cfg: Any,
+    requested_mode: str,
+) -> str:
+    default_mode = _resolve_profile_run_mode(profile_cfg)
+    run_policy = getattr(profile_cfg, "run_policy", None)
+    allow_override = bool(getattr(run_policy, "allow_run_override", True))
+    if not allow_override:
+        return default_mode
+    resolved_requested = _resolve_run_mode(requested_mode, fallback="")
+    if resolved_requested:
+        return resolved_requested
+    return default_mode
+
+
+def _run_mode_options(mode: str) -> dict[str, bool]:
+    resolved_mode = _resolve_run_mode(mode, fallback=DEFAULT_WEB_RUN_MODE)
+    return dict(RUN_MODE_OPTIONS[resolved_mode])
+
+
+def _web_live_run_options(*, trigger: str, mode: str = "") -> dict[str, bool]:
     if trigger == "web":
-        return {
-            "use_last_completed_window": True,
-            "only_new": True,
-            "allow_seen_fallback": False,
-        }
+        return _run_mode_options(_resolve_run_mode(mode, fallback=DEFAULT_WEB_RUN_MODE))
     return {
         "use_last_completed_window": False,
         "only_new": False,
@@ -581,6 +636,78 @@ def create_app(settings: WebSettings):
         )
         return {"profile": _redact_secrets(profile_to_dict(effective))}
 
+    @app.get("/api/config/run-policy")
+    def get_run_policy() -> dict[str, Any]:
+        effective = load_effective_profile(
+            settings.profile_path, settings.profile_overlay_path
+        )
+        run_policy = getattr(effective, "run_policy", None)
+        default_mode = _resolve_profile_run_mode(effective)
+        return {
+            "run_policy": {
+                "default_mode": default_mode,
+                "allow_run_override": bool(
+                    getattr(run_policy, "allow_run_override", True)
+                ),
+                "seen_reset_guard": str(
+                    getattr(run_policy, "seen_reset_guard", "confirm")
+                ),
+            },
+            "available_modes": sorted(RUN_MODE_OPTIONS.keys()),
+            "recommended_mode": "balanced",
+            "effective_default_mode": default_mode,
+        }
+
+    @app.post("/api/config/run-policy")
+    def post_run_policy(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        effective = load_effective_profile_dict(
+            settings.profile_path, settings.profile_overlay_path
+        )
+        current_policy_raw = effective.get("run_policy", {})
+        current_policy = (
+            dict(current_policy_raw) if isinstance(current_policy_raw, dict) else {}
+        )
+        if "default_mode" in payload:
+            current_policy["default_mode"] = str(
+                payload.get("default_mode", "")
+            ).strip()
+        if "allow_run_override" in payload:
+            current_policy["allow_run_override"] = bool(
+                payload.get("allow_run_override")
+            )
+        if "seen_reset_guard" in payload:
+            current_policy["seen_reset_guard"] = str(
+                payload.get("seen_reset_guard", "")
+            ).strip()
+        next_profile = dict(effective)
+        next_profile["run_policy"] = current_policy
+        save_profile_overlay(
+            settings.profile_path,
+            settings.profile_overlay_path,
+            next_profile,
+        )
+        _save_snapshot(
+            settings,
+            action="run_policy_save",
+            details={"run_policy": current_policy},
+        )
+        profile_cfg = load_effective_profile(
+            settings.profile_path, settings.profile_overlay_path
+        )
+        policy = getattr(profile_cfg, "run_policy", None)
+        return {
+            "saved": True,
+            "run_policy": {
+                "default_mode": _resolve_profile_run_mode(profile_cfg),
+                "allow_run_override": bool(
+                    getattr(policy, "allow_run_override", True)
+                ),
+                "seen_reset_guard": str(
+                    getattr(policy, "seen_reset_guard", "confirm")
+                ),
+            },
+        }
+
     @app.post("/api/config/profile/validate")
     def post_profile_validate(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         profile_data = payload.get("profile")
@@ -720,7 +847,7 @@ def create_app(settings: WebSettings):
         )
         return {"rolled_back": True}
 
-    def _start_live_run() -> dict[str, Any]:
+    def _start_live_run(*, mode_override: str = "") -> dict[str, Any]:
         run_request_id = uuid.uuid4().hex[:DEFAULT_RUN_ID_LENGTH]
         acquired, current = lock.acquire(run_request_id)
         if not acquired and current is not None:
@@ -729,8 +856,17 @@ def create_app(settings: WebSettings):
                 "active_run_id": current.run_id,
                 "started_at": current.started_at,
             }
+        profile = load_effective_profile(
+            settings.profile_path,
+            settings.profile_overlay_path,
+        )
+        resolved_mode = _resolve_run_mode_for_request(
+            profile_cfg=profile,
+            requested_mode=mode_override,
+        )
+        run_options = _web_live_run_options(trigger="web", mode=resolved_mode)
 
-        _init_run_progress(run_id=run_request_id, mode="live")
+        _init_run_progress(run_id=run_request_id, mode=resolved_mode)
 
         def worker() -> None:
             worker_logger = get_run_logger(run_request_id)
@@ -740,16 +876,12 @@ def create_app(settings: WebSettings):
                     settings.sources_overlay_path,
                 )
                 _set_fetch_plan(run_request_id, sources)
-                profile = load_effective_profile(
-                    settings.profile_path,
-                    settings.profile_overlay_path,
-                )
                 store = SQLiteStore(settings.db_path)
                 run_digest(
                     sources,
                     profile,
                     store,
-                    **_web_live_run_options(trigger="web"),
+                    **run_options,
                     logger=worker_logger,
                     progress_cb=lambda event: _record_run_progress(
                         run_request_id, event
@@ -769,11 +901,13 @@ def create_app(settings: WebSettings):
 
         thread = threading.Thread(target=worker, daemon=True)
         thread.start()
-        return {"started": True, "run_id": run_request_id}
+        return {"started": True, "run_id": run_request_id, "mode": resolved_mode}
 
     @app.post("/api/run-now")
-    def post_run_now() -> dict[str, Any]:
-        return _start_live_run()
+    def post_run_now(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
+        body = payload if isinstance(payload, dict) else {}
+        mode_override = str(body.get("mode", "") or "").strip()
+        return _start_live_run(mode_override=mode_override)
 
     @app.get("/api/onboarding/preflight")
     def get_onboarding_preflight() -> dict[str, Any]:
@@ -1043,6 +1177,58 @@ def create_app(settings: WebSettings):
         payload["exported_at_utc"] = datetime.now(timezone.utc).isoformat()
         return payload
 
+    @app.post("/api/seen/reset/preview")
+    def post_seen_reset_preview(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        older_than_days = _parse_seen_reset_days(payload)
+        store = SQLiteStore(settings.db_path)
+        affected_count = store.preview_seen_reset(older_than_days=older_than_days)
+        return {
+            "scope": "older_than_days" if older_than_days is not None else "all",
+            "older_than_days": older_than_days,
+            "affected_count": affected_count,
+        }
+
+    @app.post("/api/seen/reset/apply")
+    def post_seen_reset_apply(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        effective = load_effective_profile(
+            settings.profile_path, settings.profile_overlay_path
+        )
+        run_policy = getattr(effective, "run_policy", None)
+        guard = str(getattr(run_policy, "seen_reset_guard", "confirm")).strip().lower()
+        confirmed = bool(payload.get("confirm", False))
+        if guard == "confirm" and not confirmed:
+            raise HTTPException(
+                status_code=400,
+                detail="confirm=true is required for seen reset",
+            )
+        older_than_days = _parse_seen_reset_days(payload)
+        store = SQLiteStore(settings.db_path)
+        deleted_count = store.reset_seen(older_than_days=older_than_days)
+        actor = str(payload.get("actor", "web-admin") or "").strip() or "web-admin"
+        store.log_admin_action(
+            actor=actor,
+            action="seen_reset",
+            target="seen",
+            details=json.dumps(
+                {
+                    "scope": (
+                        "older_than_days"
+                        if older_than_days is not None
+                        else "all"
+                    ),
+                    "older_than_days": older_than_days,
+                    "deleted_count": deleted_count,
+                },
+                ensure_ascii=True,
+            ),
+        )
+        return {
+            "applied": True,
+            "scope": "older_than_days" if older_than_days is not None else "all",
+            "older_than_days": older_than_days,
+            "deleted_count": deleted_count,
+        }
+
     @app.get("/api/source-health")
     def get_source_health() -> dict[str, Any]:
         store = SQLiteStore(settings.db_path)
@@ -1101,6 +1287,15 @@ def _as_int(value: Any) -> int | None:
         return int(value)
     except Exception:
         return None
+
+
+def _parse_seen_reset_days(payload: dict[str, Any]) -> int | None:
+    days_value = _as_int(payload.get("older_than_days"))
+    if days_value is None:
+        return None
+    if days_value <= 0:
+        return None
+    return days_value
 
 
 def _timeline_event_severity(stage: str, details: dict[str, Any]) -> str:

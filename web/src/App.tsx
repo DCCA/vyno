@@ -194,6 +194,28 @@ type TimelineSummary = {
   video_count: number
   source_error_count: number
   summary_error_count: number
+  mode?: {
+    name: string
+    use_last_completed_window: boolean
+    only_new: boolean
+    allow_seen_fallback: boolean
+  }
+  filter_funnel?: {
+    fetched: number
+    post_window: number
+    post_seen: number
+    post_block: number
+    selected: number
+  }
+  strictness_score?: number
+  strictness_level?: "low" | "medium" | "high" | string
+  restriction_reasons?: Array<{
+    key: string
+    label: string
+    dropped: number
+    ratio_pct: number
+  }>
+  recommendations?: string[]
 }
 
 type TimelineNote = {
@@ -206,6 +228,12 @@ type TimelineNote = {
   actions: string[]
 }
 
+type RunPolicy = {
+  default_mode: "fresh_only" | "balanced" | "replay_recent" | "backfill"
+  allow_run_override: boolean
+  seen_reset_guard: "confirm" | "disabled"
+}
+
 type SaveAction =
   | ""
   | "source-add"
@@ -215,9 +243,12 @@ type SaveAction =
   | "profile-validate"
   | "profile-diff"
   | "profile-save"
+  | "run-policy-save"
   | "timeline-refresh"
   | "timeline-export"
   | "timeline-note"
+  | "seen-reset-preview"
+  | "seen-reset-apply"
   | "rollback"
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").trim().replace(/\/$/, "")
@@ -331,6 +362,15 @@ export default function App() {
   const [saveAction, setSaveAction] = useState<SaveAction>("")
   const [activeSourcePackId, setActiveSourcePackId] = useState("")
   const [activeRollbackId, setActiveRollbackId] = useState("")
+  const [runPolicy, setRunPolicy] = useState<RunPolicy>({
+    default_mode: "fresh_only",
+    allow_run_override: true,
+    seen_reset_guard: "confirm",
+  })
+  const [runNowModeOverride, setRunNowModeOverride] = useState("default")
+  const [seenResetDays, setSeenResetDays] = useState("30")
+  const [seenResetPreviewCount, setSeenResetPreviewCount] = useState<number | null>(null)
+  const [seenResetConfirm, setSeenResetConfirm] = useState(false)
   const [timelineRuns, setTimelineRuns] = useState<TimelineRun[]>([])
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([])
   const [timelineSummary, setTimelineSummary] = useState<TimelineSummary | null>(null)
@@ -465,12 +505,18 @@ export default function App() {
                 ? "Computing profile diff..."
                 : saveAction === "profile-save"
                   ? "Saving profile overlay..."
+                  : saveAction === "run-policy-save"
+                    ? "Saving run policy..."
                   : saveAction === "timeline-refresh"
                     ? "Refreshing timeline..."
                     : saveAction === "timeline-export"
                       ? "Exporting timeline..."
                     : saveAction === "timeline-note"
                       ? "Saving timeline note..."
+                      : saveAction === "seen-reset-preview"
+                        ? "Previewing seen reset..."
+                        : saveAction === "seen-reset-apply"
+                          ? "Resetting seen history..."
                     : saveAction === "rollback"
                       ? "Rolling back to snapshot..."
                     : runNowLoading
@@ -492,13 +538,15 @@ export default function App() {
         api<{ items: SourceHealthItem[] }>("/api/source-health"),
         api<OnboardingStatus>("/api/onboarding/status"),
         api<{ runs: TimelineRun[] }>("/api/timeline/runs?limit=50"),
+        api<{ run_policy: RunPolicy }>("/api/config/run-policy"),
       ])
-        .then(([status, progress, health, onboardingStatus, timelineData]) => {
+        .then(([status, progress, health, onboardingStatus, timelineData, policyData]) => {
           setRunStatus(status)
           setRunProgress(progress.available ? progress : null)
           setSourceHealth(health.items)
           setOnboarding(onboardingStatus)
           setTimelineRuns(timelineData.runs)
+          setRunPolicy(policyData.run_policy)
           if (!timelineRunId && timelineData.runs.length > 0) {
             setTimelineRunId(timelineData.runs[0].run_id)
           }
@@ -553,6 +601,7 @@ export default function App() {
         onboardingData,
         sourcePackData,
         timelineData,
+        policyData,
       ] =
         await Promise.all([
         api<{ types: string[] }>("/api/config/source-types"),
@@ -565,6 +614,7 @@ export default function App() {
         api<OnboardingStatus>("/api/onboarding/status"),
         api<{ packs: SourcePack[] }>("/api/onboarding/source-packs"),
         api<{ runs: TimelineRun[] }>("/api/timeline/runs?limit=50"),
+        api<{ run_policy: RunPolicy }>("/api/config/run-policy"),
       ])
       setSourceTypes(typeData.types)
       setSources(sourceData.sources)
@@ -579,6 +629,7 @@ export default function App() {
       setSourceHealth(healthData.items)
       setOnboarding(onboardingData)
       setSourcePacks(sourcePackData.packs)
+      setRunPolicy(policyData.run_policy)
       setTimelineRuns(timelineData.runs)
       if (timelineData.runs.length > 0) {
         const preferred = timelineRunId && timelineData.runs.some((row) => row.run_id === timelineRunId)
@@ -644,11 +695,14 @@ export default function App() {
     setRunNowLoading(true)
     setSaving(true)
     try {
-      const result = await api<{ started: boolean; run_id?: string; active_run_id?: string }>("/api/run-now", {
+      const selectedMode = runNowModeOverride === "default" ? "" : runNowModeOverride
+      const result = await api<{ started: boolean; run_id?: string; active_run_id?: string; mode?: string }>("/api/run-now", {
         method: "POST",
+        body: JSON.stringify(selectedMode ? { mode: selectedMode } : {}),
       })
       if (result.started) {
-        setNotice({ kind: "ok", text: `Run started: ${result.run_id}` })
+        const modeText = result.mode ? ` (${result.mode})` : ""
+        setNotice({ kind: "ok", text: `Run started: ${result.run_id}${modeText}` })
       } else {
         setNotice({ kind: "error", text: `Run already active: ${result.active_run_id}` })
       }
@@ -817,6 +871,76 @@ export default function App() {
       })
       await refreshAll()
       setNotice({ kind: "ok", text: "Profile overlay saved." })
+    } catch (error) {
+      setNotice({ kind: "error", text: String(error) })
+    } finally {
+      setSaveAction("")
+      setSaving(false)
+    }
+  }
+
+  async function saveRunPolicy() {
+    setSaveAction("run-policy-save")
+    setSaving(true)
+    try {
+      const result = await api<{ run_policy: RunPolicy }>("/api/config/run-policy", {
+        method: "POST",
+        body: JSON.stringify({
+          default_mode: runPolicy.default_mode,
+          allow_run_override: runPolicy.allow_run_override,
+          seen_reset_guard: runPolicy.seen_reset_guard,
+        }),
+      })
+      setRunPolicy(result.run_policy)
+      setNotice({ kind: "ok", text: "Run policy saved." })
+    } catch (error) {
+      setNotice({ kind: "error", text: String(error) })
+    } finally {
+      setSaveAction("")
+      setSaving(false)
+    }
+  }
+
+  async function previewSeenReset() {
+    setSaveAction("seen-reset-preview")
+    setSaving(true)
+    try {
+      const days = Number.parseInt(seenResetDays, 10)
+      const payload = Number.isFinite(days) && days > 0 ? { older_than_days: days } : {}
+      const result = await api<{ affected_count: number; scope: string; older_than_days: number | null }>(
+        "/api/seen/reset/preview",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      )
+      setSeenResetPreviewCount(result.affected_count)
+      setNotice({ kind: "ok", text: `Preview complete: ${result.affected_count} seen keys affected.` })
+    } catch (error) {
+      setNotice({ kind: "error", text: String(error) })
+    } finally {
+      setSaveAction("")
+      setSaving(false)
+    }
+  }
+
+  async function applySeenReset() {
+    setSaveAction("seen-reset-apply")
+    setSaving(true)
+    try {
+      const days = Number.parseInt(seenResetDays, 10)
+      const payload: Record<string, unknown> = { confirm: seenResetConfirm }
+      if (Number.isFinite(days) && days > 0) {
+        payload.older_than_days = days
+      }
+      const result = await api<{ deleted_count: number }>("/api/seen/reset/apply", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      })
+      setSeenResetPreviewCount(null)
+      setSeenResetConfirm(false)
+      setNotice({ kind: "ok", text: `Seen reset applied: ${result.deleted_count} keys removed.` })
+      await refreshAll()
     } catch (error) {
       setNotice({ kind: "error", text: String(error) })
     } finally {
@@ -1075,6 +1199,24 @@ export default function App() {
                 )}
                 {loading ? "Refreshing..." : "Refresh"}
               </Button>
+              <div className="min-w-[190px]">
+                <Select
+                  value={runNowModeOverride}
+                  onValueChange={setRunNowModeOverride}
+                  disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id) || !runPolicy.allow_run_override}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Run now: default ({runPolicy.default_mode})</SelectItem>
+                    <SelectItem value="fresh_only">Run now: fresh_only</SelectItem>
+                    <SelectItem value="balanced">Run now: balanced</SelectItem>
+                    <SelectItem value="replay_recent">Run now: replay_recent</SelectItem>
+                    <SelectItem value="backfill">Run now: backfill</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <Button onClick={() => void runNow()} disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}>
                 {runNowLoading ? (
                   <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
@@ -1530,6 +1672,145 @@ export default function App() {
                   <TabsContent value="profile" className="space-y-4">
                     <Card>
                       <CardHeader>
+                        <CardTitle className="font-display">Digest Policy</CardTitle>
+                        <CardDescription>
+                          Configure digest strictness and seen-item behavior without editing YAML.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Default Mode</Label>
+                          <Select
+                            value={runPolicy.default_mode}
+                            onValueChange={(value) =>
+                              setRunPolicy((prev) => ({
+                                ...prev,
+                                default_mode: (value as RunPolicy["default_mode"]) || "fresh_only",
+                              }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="fresh_only">fresh_only (strict new)</SelectItem>
+                              <SelectItem value="balanced">balanced (recommended)</SelectItem>
+                              <SelectItem value="replay_recent">replay_recent</SelectItem>
+                              <SelectItem value="backfill">backfill (advanced)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            Current default for web-triggered runs. You can still override per run if enabled.
+                          </p>
+                        </div>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between rounded-md border bg-muted/20 p-3">
+                            <div>
+                              <p className="text-sm font-medium">Allow run override</p>
+                              <p className="text-xs text-muted-foreground">
+                                Enables one-time mode selection in the Run now control.
+                              </p>
+                            </div>
+                            <Switch
+                              checked={runPolicy.allow_run_override}
+                              onCheckedChange={(checked) =>
+                                setRunPolicy((prev) => ({ ...prev, allow_run_override: checked }))
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between rounded-md border bg-muted/20 p-3">
+                            <div>
+                              <p className="text-sm font-medium">Seen reset guard</p>
+                              <p className="text-xs text-muted-foreground">
+                                Require explicit confirmation before clearing seen history.
+                              </p>
+                            </div>
+                            <Select
+                              value={runPolicy.seen_reset_guard}
+                              onValueChange={(value) =>
+                                setRunPolicy((prev) => ({
+                                  ...prev,
+                                  seen_reset_guard: (value as RunPolicy["seen_reset_guard"]) || "confirm",
+                                }))
+                              }
+                            >
+                              <SelectTrigger className="w-[150px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="confirm">confirm</SelectItem>
+                                <SelectItem value="disabled">disabled</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex justify-end">
+                            <Button onClick={() => void saveRunPolicy()} disabled={saving}>
+                              {saveAction === "run-policy-save" ? (
+                                <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                              ) : (
+                                <Save className="h-4 w-4" />
+                              )}
+                              {saveAction === "run-policy-save" ? "Saving..." : "Save Policy"}
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Seen History Maintenance</CardTitle>
+                        <CardDescription>
+                          Preview and reset seen keys to reduce over-restrictive runs when content recycles.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="grid gap-3 md:grid-cols-[200px,auto,auto,1fr]">
+                          <div className="space-y-2">
+                            <Label>Older Than (days)</Label>
+                            <Input value={seenResetDays} onChange={(event) => setSeenResetDays(event.target.value)} />
+                          </div>
+                          <div className="flex items-end">
+                            <Button variant="outline" onClick={() => void previewSeenReset()} disabled={saving}>
+                              {saveAction === "seen-reset-preview" ? (
+                                <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                              ) : (
+                                <RefreshCcw className="h-4 w-4" />
+                              )}
+                              {saveAction === "seen-reset-preview" ? "Previewing..." : "Preview Reset"}
+                            </Button>
+                          </div>
+                          <div className="flex items-end">
+                            <Button
+                              variant="outline"
+                              onClick={() => void applySeenReset()}
+                              disabled={saving || runPolicy.seen_reset_guard === "confirm" && !seenResetConfirm}
+                            >
+                              {saveAction === "seen-reset-apply" ? (
+                                <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                              ) : (
+                                <Save className="h-4 w-4" />
+                              )}
+                              {saveAction === "seen-reset-apply" ? "Applying..." : "Apply Reset"}
+                            </Button>
+                          </div>
+                          <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3">
+                            <Switch checked={seenResetConfirm} onCheckedChange={setSeenResetConfirm} />
+                            <span className="text-xs text-muted-foreground">
+                              Confirm seen reset
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {seenResetPreviewCount === null
+                            ? "No preview yet."
+                            : `Preview affected keys: ${seenResetPreviewCount}`}
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
                         <CardTitle className="font-display">Core Runtime Controls</CardTitle>
                         <CardDescription>Adjust scoring and online quality-repair behavior.</CardDescription>
                       </CardHeader>
@@ -1832,28 +2113,84 @@ export default function App() {
                       <CardHeader>
                         <CardTitle className="font-display">Timeline Summary</CardTitle>
                       </CardHeader>
-                      <CardContent className="flex flex-wrap gap-2">
+                      <CardContent className="space-y-3">
                         {timelineSummary ? (
-                          <>
-                            <Badge
-                              variant={
-                                timelineSummary.status === "success"
-                                  ? "success"
-                                  : timelineSummary.status === "partial"
-                                    ? "warning"
-                                    : "outline"
-                              }
-                            >
-                              status: {timelineSummary.status}
-                            </Badge>
-                            <Badge variant="secondary">events: {timelineSummary.event_count}</Badge>
-                            <Badge variant="secondary">errors: {timelineSummary.error_event_count}</Badge>
-                            <Badge variant="secondary">warnings: {timelineSummary.warn_event_count}</Badge>
-                            <Badge variant="secondary">duration: {formatElapsed(timelineSummary.duration_s)}</Badge>
-                            <Badge variant="secondary">
-                              M/S/V: {timelineSummary.must_read_count}/{timelineSummary.skim_count}/{timelineSummary.video_count}
-                            </Badge>
-                          </>
+                          <div className="space-y-3">
+                            <div className="flex flex-wrap gap-2">
+                              <Badge
+                                variant={
+                                  timelineSummary.status === "success"
+                                    ? "success"
+                                    : timelineSummary.status === "partial"
+                                      ? "warning"
+                                      : "outline"
+                                }
+                              >
+                                status: {timelineSummary.status}
+                              </Badge>
+                              <Badge variant="secondary">events: {timelineSummary.event_count}</Badge>
+                              <Badge variant="secondary">errors: {timelineSummary.error_event_count}</Badge>
+                              <Badge variant="secondary">warnings: {timelineSummary.warn_event_count}</Badge>
+                              <Badge variant="secondary">duration: {formatElapsed(timelineSummary.duration_s)}</Badge>
+                              <Badge variant="secondary">
+                                M/S/V: {timelineSummary.must_read_count}/{timelineSummary.skim_count}/{timelineSummary.video_count}
+                              </Badge>
+                              {timelineSummary.mode?.name ? (
+                                <Badge variant="secondary">mode: {timelineSummary.mode.name}</Badge>
+                              ) : null}
+                              {timelineSummary.strictness_level ? (
+                                <Badge
+                                  variant={
+                                    timelineSummary.strictness_level === "high"
+                                      ? "warning"
+                                      : timelineSummary.strictness_level === "medium"
+                                        ? "outline"
+                                        : "success"
+                                  }
+                                >
+                                  strictness: {timelineSummary.strictness_level}
+                                  {typeof timelineSummary.strictness_score === "number"
+                                    ? ` (${timelineSummary.strictness_score})`
+                                    : ""}
+                                </Badge>
+                              ) : null}
+                            </div>
+
+                            {timelineSummary.filter_funnel ? (
+                              <div className="rounded-md border bg-muted/20 p-3 text-xs">
+                                <p className="mb-1 font-semibold text-foreground">Filter funnel</p>
+                                <p className="font-mono text-muted-foreground">
+                                  fetched={timelineSummary.filter_funnel.fetched} -{" "}
+                                  post_window={timelineSummary.filter_funnel.post_window} -{" "}
+                                  post_seen={timelineSummary.filter_funnel.post_seen} -{" "}
+                                  post_block={timelineSummary.filter_funnel.post_block} -{" "}
+                                  selected={timelineSummary.filter_funnel.selected}
+                                </p>
+                              </div>
+                            ) : null}
+
+                            {(timelineSummary.restriction_reasons ?? []).length > 0 ? (
+                              <div className="space-y-1 text-xs">
+                                <p className="font-semibold text-foreground">Top restriction reasons</p>
+                                {(timelineSummary.restriction_reasons ?? []).map((reason) => (
+                                  <p key={`${reason.key}:${reason.dropped}`} className="text-muted-foreground">
+                                    {reason.label}: dropped {reason.dropped} ({reason.ratio_pct}%)
+                                  </p>
+                                ))}
+                              </div>
+                            ) : null}
+
+                            {(timelineSummary.recommendations ?? []).length > 0 ? (
+                              <div className="space-y-1 text-xs">
+                                <p className="font-semibold text-foreground">Recommended actions</p>
+                                {(timelineSummary.recommendations ?? []).map((line) => (
+                                  <p key={line} className="text-muted-foreground">
+                                    {line}
+                                  </p>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
                         ) : (
                           <p className="text-sm text-muted-foreground">No summary available for this run.</p>
                         )}

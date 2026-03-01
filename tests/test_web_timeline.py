@@ -50,6 +50,7 @@ class TestWebTimeline(unittest.TestCase):
                 },
             )
             store.finish_run(run_id, "success", [], [])
+            store.mark_seen(["seen-a", "seen-b"])
             yield create_app(settings), run_id
 
     def test_timeline_endpoints_return_expected_shapes(self):
@@ -108,6 +109,26 @@ class TestWebTimeline(unittest.TestCase):
             self.assertEqual(export_payload["run_id"], run_id)
             self.assertIn("events", export_payload)
             self.assertIn("notes", export_payload)
+            self.assertIn("strictness_level", summary["summary"])
+
+            policy = _route("/api/config/run-policy", "GET").endpoint()
+            self.assertIn("run_policy", policy)
+            saved_policy = _route("/api/config/run-policy", "POST").endpoint(
+                payload={"default_mode": "balanced", "allow_run_override": False}
+            )
+            self.assertTrue(saved_policy["saved"])
+            self.assertEqual(saved_policy["run_policy"]["default_mode"], "balanced")
+            self.assertFalse(saved_policy["run_policy"]["allow_run_override"])
+
+            preview = _route("/api/seen/reset/preview", "POST").endpoint(
+                payload={"older_than_days": 1}
+            )
+            self.assertIn("affected_count", preview)
+            applied = _route("/api/seen/reset/apply", "POST").endpoint(
+                payload={"confirm": True, "older_than_days": 1}
+            )
+            self.assertTrue(applied["applied"])
+            self.assertIn("deleted_count", applied)
 
 
 if __name__ == "__main__":

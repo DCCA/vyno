@@ -103,6 +103,9 @@ def run_digest(
         window_start=window_start,
         window_end=window_end,
         preview_mode=preview_mode,
+        use_last_completed_window=use_last_completed_window,
+        only_new=only_new,
+        allow_seen_fallback=allow_seen_fallback,
     )
 
     source_errors: list[str] = []

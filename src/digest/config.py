@@ -37,6 +37,13 @@ class OutputSettings:
 
 
 @dataclass(slots=True)
+class RunPolicySettings:
+    default_mode: str = "fresh_only"
+    allow_run_override: bool = True
+    seen_reset_guard: str = "confirm"
+
+
+@dataclass(slots=True)
 class ProfileConfig:
     topics: list[str] = field(default_factory=list)
     entities: list[str] = field(default_factory=list)
@@ -74,6 +81,7 @@ class ProfileConfig:
     quality_learning_max_offset: float = 8.0
     quality_learning_half_life_days: int = 14
     must_read_max_per_source: int = 2
+    run_policy: RunPolicySettings = field(default_factory=RunPolicySettings)
 
 
 def _read_yaml(path: str | Path) -> dict:
@@ -183,6 +191,26 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
     )
     if quality_learning_max_offset < 0:
         raise ValueError("quality_learning_max_offset must be >= 0")
+    policy_raw = data.get("run_policy", {})
+    if policy_raw is None:
+        policy_raw = {}
+    if not isinstance(policy_raw, dict):
+        raise ValueError("run_policy must be an object")
+    default_mode = str(policy_raw.get("default_mode", "fresh_only")).strip().lower()
+    if default_mode not in {"fresh_only", "balanced", "replay_recent", "backfill"}:
+        raise ValueError(
+            "run_policy.default_mode must be one of: fresh_only, balanced, replay_recent, backfill"
+        )
+    seen_reset_guard = (
+        str(policy_raw.get("seen_reset_guard", "confirm")).strip().lower()
+    )
+    if seen_reset_guard not in {"confirm", "disabled"}:
+        raise ValueError("run_policy.seen_reset_guard must be 'confirm' or 'disabled'")
+    run_policy = RunPolicySettings(
+        default_mode=default_mode,
+        allow_run_override=bool(policy_raw.get("allow_run_override", True)),
+        seen_reset_guard=seen_reset_guard,
+    )
     return ProfileConfig(
         topics=_as_str_list(data, "topics"),
         entities=_as_str_list(data, "entities"),
@@ -244,6 +272,7 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         must_read_max_per_source=max(
             1, int(data.get("must_read_max_per_source", 2) or 2)
         ),
+        run_policy=run_policy,
     )
 
 
