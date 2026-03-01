@@ -15,7 +15,14 @@ class TestWebPayloadBinding(unittest.TestCase):
                 run_lock_path=".runtime/run.lock",
             )
         )
-        by_path = {route.path: route for route in app.routes if hasattr(route, "path")}
+        routes = [route for route in app.routes if hasattr(route, "path")]
+
+        def _post_route(path: str):
+            for route in routes:
+                methods = set(getattr(route, "methods", set()) or set())
+                if str(getattr(route, "path")) == path and "POST" in methods:
+                    return route
+            raise KeyError(path)
 
         for path in [
             "/api/config/sources/add",
@@ -25,8 +32,9 @@ class TestWebPayloadBinding(unittest.TestCase):
             "/api/config/profile/save",
             "/api/config/rollback",
             "/api/onboarding/source-packs/apply",
+            "/api/timeline/notes",
         ]:
-            dependant = by_path[path].dependant
+            dependant = _post_route(path).dependant
             self.assertIn("payload", [field.name for field in dependant.body_params])
             self.assertNotIn(
                 "payload", [field.name for field in dependant.query_params]

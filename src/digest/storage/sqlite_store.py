@@ -136,6 +136,37 @@ class SQLiteStore:
                     updated_at TEXT,
                     PRIMARY KEY (feature_type, feature_key)
                 );
+
+                CREATE TABLE IF NOT EXISTS run_timeline_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    event_index INTEGER NOT NULL,
+                    ts_utc TEXT NOT NULL,
+                    stage TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    elapsed_s REAL NOT NULL,
+                    details_json TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS run_timeline_notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    created_at_utc TEXT NOT NULL,
+                    author TEXT,
+                    note TEXT NOT NULL,
+                    labels_json TEXT NOT NULL,
+                    actions_json TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_timeline_events_run_idx
+                    ON run_timeline_events(run_id, event_index);
+                CREATE INDEX IF NOT EXISTS idx_timeline_events_run_stage
+                    ON run_timeline_events(run_id, stage);
+                CREATE INDEX IF NOT EXISTS idx_timeline_events_run_severity
+                    ON run_timeline_events(run_id, severity);
+                CREATE INDEX IF NOT EXISTS idx_timeline_notes_run_created
+                    ON run_timeline_notes(run_id, created_at_utc DESC);
                 """
             )
             self._ensure_column(conn, "scores", "tags_json", "TEXT")
@@ -611,6 +642,272 @@ class SQLiteStore:
             ).fetchall()
         return [tuple(r) for r in rows]
 
+    def insert_timeline_event(
+        self,
+        *,
+        run_id: str,
+        event_index: int,
+        stage: str,
+        severity: str,
+        message: str,
+        elapsed_s: float,
+        details: dict[str, object] | None = None,
+        ts_utc: str = "",
+    ) -> None:
+        rid = run_id.strip()
+        if not rid:
+            return
+        sev = (severity or "").strip().lower() or "info"
+        if sev not in {"info", "warn", "error"}:
+            sev = "info"
+        now = ts_utc.strip() or datetime.now(tz=timezone.utc).isoformat()
+        payload = details if isinstance(details, dict) else {}
+        with self._conn() as conn:
+            conn.execute(
+                (
+                    "INSERT INTO run_timeline_events "
+                    "(run_id, event_index, ts_utc, stage, severity, message, elapsed_s, details_json) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                ),
+                (
+                    rid,
+                    max(0, int(event_index)),
+                    now,
+                    (stage or "").strip() or "unknown",
+                    sev,
+                    (message or "").strip() or "event",
+                    float(elapsed_s or 0.0),
+                    json.dumps(payload, ensure_ascii=True),
+                ),
+            )
+
+    def list_timeline_events(
+        self,
+        *,
+        run_id: str,
+        limit: int = 200,
+        after_event_index: int = 0,
+        stage: str = "",
+        severity: str = "",
+        order: str = "asc",
+    ) -> list[dict[str, object]]:
+        rid = run_id.strip()
+        if not rid:
+            return []
+        where = ["run_id = ?", "event_index > ?"]
+        params: list[object] = [rid, max(0, int(after_event_index))]
+        stage_filter = stage.strip()
+        severity_filter = severity.strip().lower()
+        if stage_filter:
+            where.append("stage = ?")
+            params.append(stage_filter)
+        if severity_filter:
+            where.append("severity = ?")
+            params.append(severity_filter)
+        order_sql = "DESC" if order.strip().lower() == "desc" else "ASC"
+        params.append(max(1, min(1000, int(limit))))
+        query = (
+            "SELECT id, run_id, event_index, ts_utc, stage, severity, message, elapsed_s, details_json "
+            "FROM run_timeline_events "
+            f"WHERE {' AND '.join(where)} "
+            f"ORDER BY event_index {order_sql} LIMIT ?"
+        )
+        with self._conn() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+        out: list[dict[str, object]] = []
+        for row in rows:
+            out.append(
+                {
+                    "id": int(row[0]),
+                    "run_id": str(row[1]),
+                    "event_index": int(row[2]),
+                    "ts_utc": str(row[3]),
+                    "stage": str(row[4]),
+                    "severity": str(row[5]),
+                    "message": str(row[6]),
+                    "elapsed_s": float(row[7] or 0.0),
+                    "details": _json_dict(row[8]),
+                }
+            )
+        return out
+
+    def list_timeline_runs(self, limit: int = 50) -> list[dict[str, object]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                (
+                    "SELECT r.run_id, r.status, r.started_at, r.window_start, r.window_end, "
+                    "(SELECT COUNT(*) FROM run_timeline_events e WHERE e.run_id = r.run_id) AS event_count "
+                    "FROM runs r ORDER BY r.started_at DESC LIMIT ?"
+                ),
+                (max(1, min(500, int(limit))),),
+            ).fetchall()
+        out: list[dict[str, object]] = []
+        for row in rows:
+            out.append(
+                {
+                    "run_id": str(row[0]),
+                    "status": str(row[1]),
+                    "started_at": str(row[2]),
+                    "window_start": str(row[3]),
+                    "window_end": str(row[4]),
+                    "event_count": int(row[5] or 0),
+                }
+            )
+        return out
+
+    def timeline_summary(self, *, run_id: str) -> dict[str, object]:
+        rid = run_id.strip()
+        if not rid:
+            return {}
+        with self._conn() as conn:
+            run_row = conn.execute(
+                (
+                    "SELECT run_id, status, started_at, source_errors, summary_errors "
+                    "FROM runs WHERE run_id = ?"
+                ),
+                (rid,),
+            ).fetchone()
+            if run_row is None:
+                return {}
+            counts_row = conn.execute(
+                (
+                    "SELECT COUNT(*), "
+                    "SUM(CASE WHEN severity = 'error' THEN 1 ELSE 0 END), "
+                    "SUM(CASE WHEN severity = 'warn' THEN 1 ELSE 0 END), "
+                    "MAX(elapsed_s) "
+                    "FROM run_timeline_events WHERE run_id = ?"
+                ),
+                (rid,),
+            ).fetchone()
+            last_row = conn.execute(
+                (
+                    "SELECT stage, message, details_json "
+                    "FROM run_timeline_events WHERE run_id = ? "
+                    "ORDER BY event_index DESC LIMIT 1"
+                ),
+                (rid,),
+            ).fetchone()
+
+        details = _json_dict(last_row[2]) if last_row is not None else {}
+        source_errors = [
+            line.strip() for line in str(run_row[3] or "").splitlines() if line.strip()
+        ]
+        summary_errors = [
+            line.strip() for line in str(run_row[4] or "").splitlines() if line.strip()
+        ]
+        return {
+            "run_id": str(run_row[0]),
+            "status": str(run_row[1]),
+            "started_at": str(run_row[2]),
+            "event_count": int((counts_row[0] or 0) if counts_row else 0),
+            "error_event_count": int((counts_row[1] or 0) if counts_row else 0),
+            "warn_event_count": int((counts_row[2] or 0) if counts_row else 0),
+            "duration_s": float((counts_row[3] or 0.0) if counts_row else 0.0),
+            "last_stage": str(last_row[0]) if last_row is not None else "",
+            "last_message": str(last_row[1]) if last_row is not None else "",
+            "final_item_count": int(details.get("final_item_count") or 0),
+            "must_read_count": int(details.get("must_read_count") or 0),
+            "skim_count": int(details.get("skim_count") or 0),
+            "video_count": int(details.get("video_count") or 0),
+            "source_error_count": len(source_errors),
+            "summary_error_count": len(summary_errors),
+        }
+
+    def add_timeline_note(
+        self,
+        *,
+        run_id: str,
+        note: str,
+        author: str = "",
+        labels: list[str] | None = None,
+        actions: list[str] | None = None,
+    ) -> int:
+        rid = run_id.strip()
+        text = note.strip()
+        if not rid or not text:
+            return 0
+        now = datetime.now(tz=timezone.utc).isoformat()
+        clean_labels = [str(v).strip() for v in (labels or []) if str(v).strip()]
+        clean_actions = [str(v).strip() for v in (actions or []) if str(v).strip()]
+        with self._conn() as conn:
+            cur = conn.execute(
+                (
+                    "INSERT INTO run_timeline_notes "
+                    "(run_id, created_at_utc, author, note, labels_json, actions_json) "
+                    "VALUES (?, ?, ?, ?, ?, ?)"
+                ),
+                (
+                    rid,
+                    now,
+                    author.strip(),
+                    text,
+                    json.dumps(clean_labels, ensure_ascii=True),
+                    json.dumps(clean_actions, ensure_ascii=True),
+                ),
+            )
+            row_id = int(cur.lastrowid or 0)
+        return row_id
+
+    def list_timeline_notes(
+        self,
+        *,
+        run_id: str,
+        limit: int = 100,
+    ) -> list[dict[str, object]]:
+        rid = run_id.strip()
+        if not rid:
+            return []
+        with self._conn() as conn:
+            rows = conn.execute(
+                (
+                    "SELECT id, run_id, created_at_utc, author, note, labels_json, actions_json "
+                    "FROM run_timeline_notes "
+                    "WHERE run_id = ? ORDER BY created_at_utc DESC LIMIT ?"
+                ),
+                (rid, max(1, min(500, int(limit)))),
+            ).fetchall()
+        out: list[dict[str, object]] = []
+        for row in rows:
+            out.append(
+                {
+                    "id": int(row[0]),
+                    "run_id": str(row[1]),
+                    "created_at_utc": str(row[2]),
+                    "author": str(row[3] or ""),
+                    "note": str(row[4] or ""),
+                    "labels": _json_list(row[5]),
+                    "actions": _json_list(row[6]),
+                }
+            )
+        return out
+
+    def export_timeline(
+        self,
+        *,
+        run_id: str,
+        limit_events: int = 2000,
+        limit_notes: int = 500,
+    ) -> dict[str, object]:
+        rid = run_id.strip()
+        if not rid:
+            return {}
+        summary = self.timeline_summary(run_id=rid)
+        if not summary:
+            return {}
+        return {
+            "run_id": rid,
+            "summary": summary,
+            "events": self.list_timeline_events(
+                run_id=rid,
+                limit=max(1, min(10000, int(limit_events))),
+                order="asc",
+            ),
+            "notes": self.list_timeline_notes(
+                run_id=rid,
+                limit=max(1, min(2000, int(limit_notes))),
+            ),
+        }
+
 
 def _parse_dt(value: str) -> datetime | None:
     raw = (value or "").strip()
@@ -643,3 +940,19 @@ def _json_list(raw: object) -> list[str]:
         if isinstance(value, str) and value.strip():
             out.append(value.strip())
     return out
+
+
+def _json_dict(raw: object) -> dict[str, object]:
+    if raw is None:
+        return {}
+    if isinstance(raw, (bytes, bytearray)):
+        text = raw.decode("utf-8", errors="ignore")
+    else:
+        text = str(raw)
+    try:
+        payload = json.loads(text)
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return payload

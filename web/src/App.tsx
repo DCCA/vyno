@@ -157,6 +157,55 @@ type PreviewResult = {
   obsidian_note: string
 }
 
+type TimelineRun = {
+  run_id: string
+  status: string
+  started_at: string
+  window_start: string
+  window_end: string
+  event_count: number
+}
+
+type TimelineEvent = {
+  id: number
+  run_id: string
+  event_index: number
+  ts_utc: string
+  stage: string
+  severity: "info" | "warn" | "error"
+  message: string
+  elapsed_s: number
+  details: Record<string, unknown>
+}
+
+type TimelineSummary = {
+  run_id: string
+  status: string
+  started_at: string
+  event_count: number
+  error_event_count: number
+  warn_event_count: number
+  duration_s: number
+  last_stage: string
+  last_message: string
+  final_item_count: number
+  must_read_count: number
+  skim_count: number
+  video_count: number
+  source_error_count: number
+  summary_error_count: number
+}
+
+type TimelineNote = {
+  id: number
+  run_id: string
+  created_at_utc: string
+  author: string
+  note: string
+  labels: string[]
+  actions: string[]
+}
+
 type SaveAction =
   | ""
   | "source-add"
@@ -166,6 +215,9 @@ type SaveAction =
   | "profile-validate"
   | "profile-diff"
   | "profile-save"
+  | "timeline-refresh"
+  | "timeline-export"
+  | "timeline-note"
   | "rollback"
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").trim().replace(/\/$/, "")
@@ -279,6 +331,18 @@ export default function App() {
   const [saveAction, setSaveAction] = useState<SaveAction>("")
   const [activeSourcePackId, setActiveSourcePackId] = useState("")
   const [activeRollbackId, setActiveRollbackId] = useState("")
+  const [timelineRuns, setTimelineRuns] = useState<TimelineRun[]>([])
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([])
+  const [timelineSummary, setTimelineSummary] = useState<TimelineSummary | null>(null)
+  const [timelineNotes, setTimelineNotes] = useState<TimelineNote[]>([])
+  const [timelineRunId, setTimelineRunId] = useState("")
+  const [timelineStageFilter, setTimelineStageFilter] = useState("all")
+  const [timelineSeverityFilter, setTimelineSeverityFilter] = useState("all")
+  const [timelineOrder, setTimelineOrder] = useState<"asc" | "desc">("desc")
+  const [timelineLivePaused, setTimelineLivePaused] = useState(false)
+  const [timelineSelectedEventId, setTimelineSelectedEventId] = useState(0)
+  const [timelineNoteAuthor, setTimelineNoteAuthor] = useState("admin")
+  const [timelineNoteText, setTimelineNoteText] = useState("")
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null)
   const [consoleModeOverride, setConsoleModeOverride] = useState<"setup" | "manage" | null>(null)
   const [manageTab, setManageTab] = useState("sources")
@@ -309,6 +373,17 @@ export default function App() {
 
   const localDiffCount = useMemo(() => Object.keys(localProfileDiff).length, [localProfileDiff])
   const serverDiffCount = useMemo(() => Object.keys(profileDiff).length, [profileDiff])
+  const selectedTimelineEvent = useMemo(
+    () => timelineEvents.find((row) => row.id === timelineSelectedEventId) ?? null,
+    [timelineEvents, timelineSelectedEventId],
+  )
+  const timelineStageOptions = useMemo(() => {
+    const values = [...new Set(timelineEvents.map((row) => row.stage).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+    if (timelineStageFilter !== "all" && !values.includes(timelineStageFilter)) {
+      values.push(timelineStageFilter)
+    }
+    return values
+  }, [timelineEvents, timelineStageFilter])
 
   const digestBusy = Boolean(
     runNowLoading || activateLoading || previewLoading || runStatus?.active?.run_id || runProgress?.is_active,
@@ -390,8 +465,14 @@ export default function App() {
                 ? "Computing profile diff..."
                 : saveAction === "profile-save"
                   ? "Saving profile overlay..."
-                  : saveAction === "rollback"
-                    ? "Rolling back to snapshot..."
+                  : saveAction === "timeline-refresh"
+                    ? "Refreshing timeline..."
+                    : saveAction === "timeline-export"
+                      ? "Exporting timeline..."
+                    : saveAction === "timeline-note"
+                      ? "Saving timeline note..."
+                    : saveAction === "rollback"
+                      ? "Rolling back to snapshot..."
                     : runNowLoading
                       ? "Starting digest run..."
                       : activateLoading
@@ -410,17 +491,22 @@ export default function App() {
         api<RunProgress>("/api/run-progress"),
         api<{ items: SourceHealthItem[] }>("/api/source-health"),
         api<OnboardingStatus>("/api/onboarding/status"),
+        api<{ runs: TimelineRun[] }>("/api/timeline/runs?limit=50"),
       ])
-        .then(([status, progress, health, onboardingStatus]) => {
+        .then(([status, progress, health, onboardingStatus, timelineData]) => {
           setRunStatus(status)
           setRunProgress(progress.available ? progress : null)
           setSourceHealth(health.items)
           setOnboarding(onboardingStatus)
+          setTimelineRuns(timelineData.runs)
+          if (!timelineRunId && timelineData.runs.length > 0) {
+            setTimelineRunId(timelineData.runs[0].run_id)
+          }
         })
         .catch(() => undefined)
     }, 8000)
     return () => clearInterval(timer)
-  }, [])
+  }, [timelineRunId])
 
   useEffect(() => {
     const activeRunId = runStatus?.active?.run_id || runProgress?.run_id
@@ -466,6 +552,7 @@ export default function App() {
         healthData,
         onboardingData,
         sourcePackData,
+        timelineData,
       ] =
         await Promise.all([
         api<{ types: string[] }>("/api/config/source-types"),
@@ -477,6 +564,7 @@ export default function App() {
         api<{ items: SourceHealthItem[] }>("/api/source-health"),
         api<OnboardingStatus>("/api/onboarding/status"),
         api<{ packs: SourcePack[] }>("/api/onboarding/source-packs"),
+        api<{ runs: TimelineRun[] }>("/api/timeline/runs?limit=50"),
       ])
       setSourceTypes(typeData.types)
       setSources(sourceData.sources)
@@ -491,6 +579,14 @@ export default function App() {
       setSourceHealth(healthData.items)
       setOnboarding(onboardingData)
       setSourcePacks(sourcePackData.packs)
+      setTimelineRuns(timelineData.runs)
+      if (timelineData.runs.length > 0) {
+        const preferred = timelineRunId && timelineData.runs.some((row) => row.run_id === timelineRunId)
+        const nextRunId = preferred ? timelineRunId : timelineData.runs[0].run_id
+        setTimelineRunId(nextRunId)
+      } else {
+        setTimelineRunId("")
+      }
       if (typeData.types.length > 0 && !typeData.types.includes(sourceType)) {
         setSourceType(typeData.types[0])
       }
@@ -748,6 +844,119 @@ export default function App() {
       setSaving(false)
     }
   }
+
+  async function refreshTimeline(options?: { silent?: boolean }) {
+    if (!timelineRunId) {
+      setTimelineEvents([])
+      setTimelineSummary(null)
+      setTimelineNotes([])
+      setTimelineSelectedEventId(0)
+      return
+    }
+    if (!options?.silent) {
+      setSaveAction("timeline-refresh")
+      setSaving(true)
+    }
+    try {
+      const runIdQuery = encodeURIComponent(timelineRunId)
+      const stageQuery = timelineStageFilter === "all" ? "" : `&stage=${encodeURIComponent(timelineStageFilter)}`
+      const severityQuery =
+        timelineSeverityFilter === "all" ? "" : `&severity=${encodeURIComponent(timelineSeverityFilter)}`
+      const orderQuery = `&order=${encodeURIComponent(timelineOrder)}`
+
+      const [eventsResult, notesResult, summaryResult] = await Promise.all([
+        api<{ events: TimelineEvent[] }>(
+          `/api/timeline/events?run_id=${runIdQuery}&limit=400${stageQuery}${severityQuery}${orderQuery}`,
+        ),
+        api<{ notes: TimelineNote[] }>(`/api/timeline/notes?run_id=${runIdQuery}&limit=200`),
+        api<{ summary: TimelineSummary }>(`/api/timeline/summary?run_id=${runIdQuery}`).catch(() => ({ summary: null })),
+      ])
+
+      const nextEvents = eventsResult.events ?? []
+      setTimelineEvents(nextEvents)
+      setTimelineSelectedEventId((current) => {
+        if (nextEvents.length === 0) return 0
+        if (current > 0 && nextEvents.some((row) => row.id === current)) return current
+        return nextEvents[0].id
+      })
+      setTimelineNotes(notesResult.notes ?? [])
+      setTimelineSummary(summaryResult.summary ?? null)
+    } catch (error) {
+      setNotice({ kind: "error", text: String(error) })
+    } finally {
+      if (!options?.silent) {
+        setSaveAction("")
+        setSaving(false)
+      }
+    }
+  }
+
+  async function addTimelineNote() {
+    if (!timelineRunId || !timelineNoteText.trim()) {
+      setNotice({ kind: "error", text: "Select a run and enter a note." })
+      return
+    }
+    setSaveAction("timeline-note")
+    setSaving(true)
+    try {
+      await api("/api/timeline/notes", {
+        method: "POST",
+        body: JSON.stringify({
+          run_id: timelineRunId,
+          author: timelineNoteAuthor.trim() || "admin",
+          note: timelineNoteText.trim(),
+        }),
+      })
+      setTimelineNoteText("")
+      await refreshTimeline({ silent: true })
+      setNotice({ kind: "ok", text: "Timeline note saved." })
+    } catch (error) {
+      setNotice({ kind: "error", text: String(error) })
+    } finally {
+      setSaveAction("")
+      setSaving(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!timelineRunId) return
+    void refreshTimeline({ silent: true })
+  }, [timelineRunId, timelineStageFilter, timelineSeverityFilter, timelineOrder])
+
+  async function exportTimeline() {
+    if (!timelineRunId) return
+    setSaveAction("timeline-export")
+    setSaving(true)
+    try {
+      const runIdQuery = encodeURIComponent(timelineRunId)
+      const payload = await api<Record<string, unknown>>(`/api/timeline/export?run_id=${runIdQuery}`)
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = `timeline-${timelineRunId}.json`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      setNotice({ kind: "ok", text: "Timeline JSON exported." })
+    } catch (error) {
+      setNotice({ kind: "error", text: String(error) })
+    } finally {
+      setSaveAction("")
+      setSaving(false)
+    }
+  }
+
+  useEffect(() => {
+    if (consoleMode !== "manage" || manageTab !== "timeline" || !timelineRunId) return
+    if (timelineLivePaused) return
+    const activeRunId = runStatus?.active?.run_id ?? ""
+    const isLive = activeRunId !== "" && activeRunId === timelineRunId
+    if (!isLive) return
+    const timer = setInterval(() => {
+      void refreshTimeline({ silent: true })
+    }, 2500)
+    return () => clearInterval(timer)
+  }, [consoleMode, manageTab, runStatus?.active?.run_id, timelineRunId, timelineStageFilter, timelineSeverityFilter, timelineOrder, timelineLivePaused])
 
   function renderSetupStepAction(stepId: string) {
     if (stepId === "preflight") {
@@ -1196,10 +1405,11 @@ export default function App() {
                 </Card>
 
                 <Tabs value={manageTab} onValueChange={setManageTab} className="w-full">
-                  <TabsList className="grid w-full grid-cols-4">
+                  <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="sources">Sources</TabsTrigger>
                     <TabsTrigger value="profile">Profile</TabsTrigger>
                     <TabsTrigger value="review">Review</TabsTrigger>
+                    <TabsTrigger value="timeline">Timeline</TabsTrigger>
                     <TabsTrigger value="history">History</TabsTrigger>
                   </TabsList>
 
@@ -1512,6 +1722,258 @@ export default function App() {
                             {JSON.stringify(profileDiff, null, 2)}
                           </pre>
                         )}
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  <TabsContent value="timeline" className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Run Timeline</CardTitle>
+                        <CardDescription>
+                          Monitor active run events and review historical timeline details after completion.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="grid gap-3 md:grid-cols-[2fr,1fr,1fr,1fr,auto]">
+                        <div className="space-y-2">
+                          <Label>Run</Label>
+                          <Select value={timelineRunId} onValueChange={setTimelineRunId}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select run" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {timelineRuns.map((row) => (
+                                <SelectItem key={row.run_id} value={row.run_id}>
+                                  {row.run_id} ({row.status})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Stage</Label>
+                          <Select value={timelineStageFilter} onValueChange={setTimelineStageFilter}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">all</SelectItem>
+                              {timelineStageOptions.map((stage) => (
+                                <SelectItem key={stage} value={stage}>
+                                  {stage}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Severity</Label>
+                          <Select value={timelineSeverityFilter} onValueChange={setTimelineSeverityFilter}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">all</SelectItem>
+                              <SelectItem value="info">info</SelectItem>
+                              <SelectItem value="warn">warn</SelectItem>
+                              <SelectItem value="error">error</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Order</Label>
+                          <Select
+                            value={timelineOrder}
+                            onValueChange={(value) => setTimelineOrder(value === "asc" ? "asc" : "desc")}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="desc">newest first</SelectItem>
+                              <SelectItem value="asc">oldest first</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <Button variant="outline" onClick={() => void refreshTimeline()} disabled={saving || !timelineRunId}>
+                            {saveAction === "timeline-refresh" ? (
+                              <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                            ) : (
+                              <RefreshCcw className="h-4 w-4" />
+                            )}
+                            {saveAction === "timeline-refresh" ? "Refreshing..." : "Refresh"}
+                          </Button>
+                          <Button variant="outline" onClick={() => void exportTimeline()} disabled={saving || !timelineRunId}>
+                            {saveAction === "timeline-export" ? (
+                              <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                            ) : (
+                              <Save className="h-4 w-4" />
+                            )}
+                            {saveAction === "timeline-export" ? "Exporting..." : "Export JSON"}
+                          </Button>
+                        </div>
+                        <div className="col-span-full flex items-center justify-between rounded-md border bg-muted/20 p-3">
+                          <div>
+                            <p className="text-sm font-medium">Live polling</p>
+                            <p className="text-xs text-muted-foreground">
+                              Automatic refresh for active runs while Timeline is open.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">{timelineLivePaused ? "Paused" : "Live"}</span>
+                            <Switch checked={!timelineLivePaused} onCheckedChange={(checked) => setTimelineLivePaused(!checked)} />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Timeline Summary</CardTitle>
+                      </CardHeader>
+                      <CardContent className="flex flex-wrap gap-2">
+                        {timelineSummary ? (
+                          <>
+                            <Badge
+                              variant={
+                                timelineSummary.status === "success"
+                                  ? "success"
+                                  : timelineSummary.status === "partial"
+                                    ? "warning"
+                                    : "outline"
+                              }
+                            >
+                              status: {timelineSummary.status}
+                            </Badge>
+                            <Badge variant="secondary">events: {timelineSummary.event_count}</Badge>
+                            <Badge variant="secondary">errors: {timelineSummary.error_event_count}</Badge>
+                            <Badge variant="secondary">warnings: {timelineSummary.warn_event_count}</Badge>
+                            <Badge variant="secondary">duration: {formatElapsed(timelineSummary.duration_s)}</Badge>
+                            <Badge variant="secondary">
+                              M/S/V: {timelineSummary.must_read_count}/{timelineSummary.skim_count}/{timelineSummary.video_count}
+                            </Badge>
+                          </>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No summary available for this run.</p>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Timeline Events</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>#</TableHead>
+                              <TableHead>Time (UTC)</TableHead>
+                              <TableHead>Stage</TableHead>
+                              <TableHead>Severity</TableHead>
+                              <TableHead>Message</TableHead>
+                              <TableHead>Elapsed</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {timelineEvents.length > 0 ? (
+                              timelineEvents.map((row) => (
+                                <TableRow
+                                  key={`${row.run_id}:${row.id}`}
+                                  className="cursor-pointer"
+                                  data-state={row.id === timelineSelectedEventId ? "selected" : undefined}
+                                  onClick={() => setTimelineSelectedEventId(row.id)}
+                                >
+                                  <TableCell>{row.event_index}</TableCell>
+                                  <TableCell className="font-mono text-xs">{row.ts_utc}</TableCell>
+                                  <TableCell className="font-mono text-xs">{row.stage}</TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant={
+                                        row.severity === "error"
+                                          ? "warning"
+                                          : row.severity === "warn"
+                                            ? "outline"
+                                            : "secondary"
+                                      }
+                                    >
+                                      {row.severity}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-xs">{row.message}</TableCell>
+                                  <TableCell>{formatElapsed(row.elapsed_s)}</TableCell>
+                                </TableRow>
+                              ))
+                            ) : (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                                  No events for selected filters/run.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Event Details</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {selectedTimelineEvent ? (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                              #{selectedTimelineEvent.event_index} {selectedTimelineEvent.stage} at {selectedTimelineEvent.ts_utc}
+                            </p>
+                            <pre className="max-h-[280px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
+                              {JSON.stringify(selectedTimelineEvent.details ?? {}, null, 2)}
+                            </pre>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">Select an event row to inspect details.</p>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Review Notes</CardTitle>
+                        <CardDescription>Capture run observations and follow-up actions for future improvements.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="grid gap-3 md:grid-cols-[180px,1fr,auto]">
+                          <Input value={timelineNoteAuthor} onChange={(event) => setTimelineNoteAuthor(event.target.value)} />
+                          <Input
+                            placeholder="Add note about this run..."
+                            value={timelineNoteText}
+                            onChange={(event) => setTimelineNoteText(event.target.value)}
+                          />
+                          <Button onClick={() => void addTimelineNote()} disabled={saving || !timelineRunId || !timelineNoteText.trim()}>
+                            {saveAction === "timeline-note" ? (
+                              <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                            ) : (
+                              <Save className="h-4 w-4" />
+                            )}
+                            {saveAction === "timeline-note" ? "Saving..." : "Add Note"}
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          {timelineNotes.length > 0 ? (
+                            timelineNotes.map((row) => (
+                              <div key={row.id} className="rounded-md border bg-muted/20 p-3">
+                                <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                  <span className="font-semibold text-foreground">{row.author || "admin"}</span>
+                                  <span>{row.created_at_utc}</span>
+                                </div>
+                                <p className="text-sm">{row.note}</p>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No notes for this run yet.</p>
+                          )}
+                        </div>
                       </CardContent>
                     </Card>
                   </TabsContent>

@@ -248,6 +248,7 @@ def create_app(settings: WebSettings):
     lock = RunLock(
         settings.run_lock_path, stale_seconds=settings.run_lock_stale_seconds
     )
+    timeline_store = SQLiteStore(settings.db_path)
 
     onboarding_settings = OnboardingSettings(
         sources_path=settings.sources_path,
@@ -298,6 +299,16 @@ def create_app(settings: WebSettings):
                 "_fetch_total": 0,
                 "_fetch_done": 0,
             }
+        timeline_store.insert_timeline_event(
+            run_id=run_id,
+            event_index=0,
+            stage="queued",
+            severity="info",
+            message="Queued digest run",
+            elapsed_s=0.0,
+            details={"mode": mode},
+            ts_utc=now_iso,
+        )
 
     def _set_fetch_plan(run_id: str, sources_cfg: Any) -> None:
         fetch_total = _count_fetch_targets(sources_cfg)
@@ -321,6 +332,7 @@ def create_app(settings: WebSettings):
             if key not in {"run_id", "stage", "message", "elapsed_s"}
         }
 
+        persist_payload: dict[str, Any] | None = None
         with progress_lock:
             state = run_progress.get(run_id)
             if state is None:
@@ -358,6 +370,8 @@ def create_app(settings: WebSettings):
                 status = str(state.get("status") or "running")
                 is_active = bool(state.get("is_active", True))
 
+            next_event_index = int(state.get("event_index", 0) or 0) + 1
+            updated_at = datetime.now(timezone.utc).isoformat()
             state.update(
                 {
                     "pipeline_run_id": pipeline_run_id
@@ -370,10 +384,30 @@ def create_app(settings: WebSettings):
                     "percent": percent,
                     "status": status,
                     "is_active": is_active,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": updated_at,
                     "details": details,
-                    "event_index": int(state.get("event_index", 0) or 0) + 1,
+                    "event_index": next_event_index,
                 }
+            )
+            persist_payload = {
+                "event_index": next_event_index,
+                "ts_utc": updated_at,
+                "stage": stage,
+                "severity": _timeline_event_severity(stage, details),
+                "message": message,
+                "elapsed_s": round(elapsed_s, 1),
+                "details": details,
+            }
+        if persist_payload is not None:
+            timeline_store.insert_timeline_event(
+                run_id=run_id,
+                event_index=int(persist_payload["event_index"]),
+                ts_utc=str(persist_payload["ts_utc"]),
+                stage=str(persist_payload["stage"]),
+                severity=str(persist_payload["severity"]),
+                message=str(persist_payload["message"]),
+                elapsed_s=float(persist_payload["elapsed_s"]),
+                details=dict(persist_payload["details"]),
             )
 
     def _mark_run_progress_terminal(
@@ -385,6 +419,7 @@ def create_app(settings: WebSettings):
         error: str = "",
     ) -> None:
         now_iso = datetime.now(timezone.utc).isoformat()
+        persist_payload: dict[str, Any] | None = None
         with progress_lock:
             state = run_progress.get(run_id)
             if state is None:
@@ -392,6 +427,7 @@ def create_app(settings: WebSettings):
             details = dict(state.get("details", {}))
             if error:
                 details["error"] = error
+            next_event_index = int(state.get("event_index", 0) or 0) + 1
             state.update(
                 {
                     "stage": stage,
@@ -403,8 +439,28 @@ def create_app(settings: WebSettings):
                     "percent": 100.0,
                     "updated_at": now_iso,
                     "details": details,
-                    "event_index": int(state.get("event_index", 0) or 0) + 1,
+                    "event_index": next_event_index,
                 }
+            )
+            persist_payload = {
+                "event_index": next_event_index,
+                "ts_utc": now_iso,
+                "stage": stage,
+                "severity": _timeline_event_severity(stage, details),
+                "message": message,
+                "elapsed_s": float(state.get("elapsed_s") or 0.0),
+                "details": details,
+            }
+        if persist_payload is not None:
+            timeline_store.insert_timeline_event(
+                run_id=run_id,
+                event_index=int(persist_payload["event_index"]),
+                ts_utc=str(persist_payload["ts_utc"]),
+                stage=str(persist_payload["stage"]),
+                severity=str(persist_payload["severity"]),
+                message=str(persist_payload["message"]),
+                elapsed_s=float(persist_payload["elapsed_s"]),
+                details=dict(persist_payload["details"]),
             )
 
     def _resolve_run_progress_snapshot(
@@ -876,6 +932,102 @@ def create_app(settings: WebSettings):
             ),
         }
 
+    @app.get("/api/timeline/runs")
+    def get_timeline_runs(limit: int = 50) -> dict[str, Any]:
+        return {"runs": timeline_store.list_timeline_runs(limit=limit)}
+
+    @app.get("/api/timeline/events")
+    def get_timeline_events(
+        run_id: str,
+        limit: int = 200,
+        after_event_index: int = 0,
+        stage: str = "",
+        severity: str = "",
+        order: str = "asc",
+    ) -> dict[str, Any]:
+        rows = timeline_store.list_timeline_events(
+            run_id=run_id,
+            limit=limit,
+            after_event_index=after_event_index,
+            stage=stage,
+            severity=severity,
+            order=order,
+        )
+        return {"events": rows}
+
+    @app.get("/api/timeline/live")
+    def get_timeline_live(
+        run_id: str | None = None,
+        limit: int = 200,
+        after_event_index: int = 0,
+        order: str = "asc",
+    ) -> dict[str, Any]:
+        target_run_id = str(run_id or "").strip()
+        if not target_run_id:
+            active = lock.current()
+            if active is not None:
+                target_run_id = active.run_id
+        if not target_run_id:
+            rows = timeline_store.list_timeline_runs(limit=1)
+            if rows:
+                target_run_id = str(rows[0].get("run_id", "") or "").strip()
+        if not target_run_id:
+            return {"run_id": "", "events": []}
+        rows = timeline_store.list_timeline_events(
+            run_id=target_run_id,
+            limit=limit,
+            after_event_index=after_event_index,
+            order=order,
+        )
+        return {"run_id": target_run_id, "events": rows}
+
+    @app.get("/api/timeline/summary")
+    def get_timeline_summary(run_id: str) -> dict[str, Any]:
+        summary = timeline_store.timeline_summary(run_id=run_id)
+        if not summary:
+            raise HTTPException(status_code=404, detail="run timeline not found")
+        return {"summary": summary}
+
+    @app.get("/api/timeline/notes")
+    def get_timeline_notes(run_id: str, limit: int = 100) -> dict[str, Any]:
+        return {"notes": timeline_store.list_timeline_notes(run_id=run_id, limit=limit)}
+
+    @app.post("/api/timeline/notes")
+    def post_timeline_notes(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        run_id = str(payload.get("run_id", "") or "").strip()
+        note = str(payload.get("note", "") or "").strip()
+        author = str(payload.get("author", "") or "").strip()
+        labels_raw = payload.get("labels", [])
+        actions_raw = payload.get("actions", [])
+        labels = labels_raw if isinstance(labels_raw, list) else []
+        actions = actions_raw if isinstance(actions_raw, list) else []
+        if not run_id or not note:
+            raise HTTPException(status_code=400, detail="run_id and note are required")
+        note_id = timeline_store.add_timeline_note(
+            run_id=run_id,
+            note=note,
+            author=author,
+            labels=[str(v) for v in labels],
+            actions=[str(v) for v in actions],
+        )
+        return {"created": bool(note_id), "id": note_id}
+
+    @app.get("/api/timeline/export")
+    def get_timeline_export(
+        run_id: str,
+        limit_events: int = 2000,
+        limit_notes: int = 500,
+    ) -> dict[str, Any]:
+        payload = timeline_store.export_timeline(
+            run_id=run_id,
+            limit_events=limit_events,
+            limit_notes=limit_notes,
+        )
+        if not payload:
+            raise HTTPException(status_code=404, detail="run timeline not found")
+        payload["exported_at_utc"] = datetime.now(timezone.utc).isoformat()
+        return payload
+
     @app.get("/api/source-health")
     def get_source_health() -> dict[str, Any]:
         store = SQLiteStore(settings.db_path)
@@ -934,6 +1086,25 @@ def _as_int(value: Any) -> int | None:
         return int(value)
     except Exception:
         return None
+
+
+def _timeline_event_severity(stage: str, details: dict[str, Any]) -> str:
+    if stage == "run_failed":
+        return "error"
+    status = str(details.get("status", "")).strip().lower()
+    if stage == "run_finish":
+        if status == "failed":
+            return "error"
+        if status == "partial":
+            return "warn"
+    error_text = str(details.get("error", "")).strip()
+    if error_text:
+        return "error"
+    source_errors = _as_int(details.get("source_error_count"))
+    summary_errors = _as_int(details.get("summary_error_count"))
+    if (source_errors and source_errors > 0) or (summary_errors and summary_errors > 0):
+        return "warn"
+    return "info"
 
 
 def _run_stage_label(stage: str) -> str:

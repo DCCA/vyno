@@ -24,11 +24,14 @@ class TestWebPostFlows(unittest.TestCase):
 
     def test_post_payload_routes_use_plain_dict_body(self):
         for app in self._app():
-            by_path = {
-                str(getattr(route, "path")): route
-                for route in app.routes
-                if getattr(route, "path", None)
-            }
+            routes = [route for route in app.routes if getattr(route, "path", None)]
+
+            def _post_route(path: str):
+                for route in routes:
+                    methods = set(getattr(route, "methods", set()) or set())
+                    if str(getattr(route, "path")) == path and "POST" in methods:
+                        return route
+                raise KeyError(path)
 
             for path in [
                 "/api/config/sources/add",
@@ -38,8 +41,9 @@ class TestWebPostFlows(unittest.TestCase):
                 "/api/config/profile/save",
                 "/api/config/rollback",
                 "/api/onboarding/source-packs/apply",
+                "/api/timeline/notes",
             ]:
-                route = by_path[path]
+                route = _post_route(path)
                 dependant = getattr(route, "dependant")
                 self.assertEqual(len(dependant.body_params), 1)
                 body_param = dependant.body_params[0]
@@ -51,14 +55,17 @@ class TestWebPostFlows(unittest.TestCase):
 
     def test_source_pack_apply_endpoint_callable_with_dict_payload(self):
         for app in self._app():
-            by_path = {
-                str(getattr(route, "path")): route
-                for route in app.routes
-                if getattr(route, "path", None)
-            }
-            endpoint = getattr(
-                by_path["/api/onboarding/source-packs/apply"], "endpoint"
-            )
+            routes = [route for route in app.routes if getattr(route, "path", None)]
+            endpoint = None
+            for route in routes:
+                methods = set(getattr(route, "methods", set()) or set())
+                if (
+                    str(getattr(route, "path")) == "/api/onboarding/source-packs/apply"
+                    and "POST" in methods
+                ):
+                    endpoint = getattr(route, "endpoint")
+                    break
+            self.assertIsNotNone(endpoint)
             result = endpoint(payload={"pack_id": "quickstart-core"})
             self.assertIn("added_count", result)
             self.assertIn("existing_count", result)
