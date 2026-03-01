@@ -12,7 +12,7 @@
   - [x] 3.1 Execute onboarding/source/review/history actions via browser automation
   - [x] 3.2 Capture and document observed outcomes
 
-- [ ] 4.0 Verify and archive
+- [x] 4.0 Verify and archive
   - [x] 4.1 Run full test suite
   - [x] 4.2 Run web build
-  - [ ] 4.3 Move change to `.docs/done/` with completion summary
+  - [x] 4.3 Move change to `.docs/done/` with completion summary
