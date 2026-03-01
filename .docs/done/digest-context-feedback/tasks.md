@@ -12,6 +12,6 @@
   - [x] 2.3 Run full test suite
   - [x] 2.4 Run web build
 
-- [ ] 3.0 Archive change
-  - [ ] 3.1 Move change to `.docs/done/`
-  - [ ] 3.2 Add completion summary
+- [x] 3.0 Archive change
+  - [x] 3.1 Move change to `.docs/done/`
+  - [x] 3.2 Add completion summary
