@@ -45,6 +45,8 @@ youtube_queries: []
 
 # X (MVP): manual inbox file with one X URL per line
 x_inbox_path: "data/x_inbox.txt"
+x_authors: []
+x_themes: []
 
 # GitHub selectors
 github_repos:

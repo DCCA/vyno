@@ -19,6 +19,7 @@ from digest.config import ProfileConfig, SourceConfig
 from digest.connectors.github import fetch_github_items, normalize_github_org
 from digest.connectors.rss import fetch_rss_items
 from digest.connectors.x_inbox import fetch_x_inbox_items
+from digest.connectors.x_selectors import fetch_x_selector_items
 from digest.connectors.youtube import fetch_youtube_items
 from digest.delivery.obsidian import render_obsidian_note, write_obsidian_note
 from digest.delivery.telegram import render_telegram_messages, send_telegram_message
@@ -259,6 +260,36 @@ def run_digest(
                 inbox_path=sources.x_inbox_path,
                 error=str(exc),
             )
+
+    if sources.x_authors or sources.x_themes:
+        selector_fetched = 0
+        selector_errors: list[str] = []
+        try:
+            fetched, selector_errors = fetch_x_selector_items(sources, store)
+            raw_items.extend(fetched)
+            selector_fetched = len(fetched)
+            x_fetched_items += selector_fetched
+        except Exception as exc:
+            selector_errors.append(f"x_selector: {exc}")
+        source_errors.extend(selector_errors)
+        log_event(
+            run_logger,
+            "info" if not selector_errors else "warn",
+            "fetch_x_selectors",
+            "Fetched X selector items",
+            author_selector_count=len(sources.x_authors),
+            theme_selector_count=len(sources.x_themes),
+            item_count=selector_fetched,
+            error_count=len(selector_errors),
+        )
+        emit_progress(
+            "fetch_x_selectors",
+            "Fetched X selector items",
+            author_selector_count=len(sources.x_authors),
+            theme_selector_count=len(sources.x_themes),
+            item_count=selector_fetched,
+            error_count=len(selector_errors),
+        )
 
     if (
         sources.github_repos

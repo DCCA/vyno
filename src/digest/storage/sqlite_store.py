@@ -80,6 +80,15 @@ class SQLiteStore:
                     first_seen_at TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS x_selector_cursors (
+                    selector_type TEXT NOT NULL,
+                    selector_value TEXT NOT NULL,
+                    cursor TEXT,
+                    last_item_id TEXT,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (selector_type, selector_value)
+                );
+
                 CREATE TABLE IF NOT EXISTS feedback (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     run_id TEXT,
@@ -167,6 +176,8 @@ class SQLiteStore:
                     ON run_timeline_events(run_id, severity);
                 CREATE INDEX IF NOT EXISTS idx_timeline_notes_run_created
                     ON run_timeline_notes(run_id, created_at_utc DESC);
+                CREATE INDEX IF NOT EXISTS idx_x_selector_cursors_updated_at
+                    ON x_selector_cursors(updated_at DESC);
                 """
             )
             self._ensure_column(conn, "scores", "tags_json", "TEXT")
@@ -264,6 +275,49 @@ class SQLiteStore:
         with self._conn() as conn:
             rows = conn.execute("SELECT key FROM seen").fetchall()
         return {r[0] for r in rows}
+
+    def get_x_cursor(self, selector_type: str, selector_value: str) -> str | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                (
+                    "SELECT cursor FROM x_selector_cursors "
+                    "WHERE selector_type = ? AND selector_value = ?"
+                ),
+                (selector_type, selector_value),
+            ).fetchone()
+        if not row:
+            return None
+        value = str(row[0] or "").strip()
+        return value or None
+
+    def set_x_cursor(
+        self,
+        *,
+        selector_type: str,
+        selector_value: str,
+        cursor: str | None,
+        last_item_id: str | None = None,
+    ) -> None:
+        now = datetime.now(tz=timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                (
+                    "INSERT INTO x_selector_cursors "
+                    "(selector_type, selector_value, cursor, last_item_id, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?) "
+                    "ON CONFLICT(selector_type, selector_value) DO UPDATE SET "
+                    "cursor = excluded.cursor, "
+                    "last_item_id = excluded.last_item_id, "
+                    "updated_at = excluded.updated_at"
+                ),
+                (
+                    selector_type,
+                    selector_value,
+                    (cursor or "").strip() or None,
+                    (last_item_id or "").strip() or None,
+                    now,
+                ),
+            )
 
     def preview_seen_reset(self, *, older_than_days: int | None = None) -> int:
         with self._conn() as conn:

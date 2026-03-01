@@ -16,12 +16,14 @@ class TestWebRunProgress(unittest.TestCase):
             youtube_channels=["c1"],
             youtube_queries=["q1", "q2"],
             x_inbox_path="data/x_inbox.txt",
+            x_authors=["openai"],
+            x_themes=["ai agents"],
             github_repos=["owner/repo"],
             github_topics=[],
             github_search_queries=[],
             github_orgs=[],
         )
-        self.assertEqual(_count_fetch_targets(sources), 7)
+        self.assertEqual(_count_fetch_targets(sources), 9)
 
     def test_estimate_progress_for_fetch_and_score(self):
         self.assertAlmostEqual(

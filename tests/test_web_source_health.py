@@ -18,6 +18,17 @@ class TestWebSourceHealth(unittest.TestCase):
         self.assertEqual(parsed["source"], "https://news.ycombinator.com/rss")
         self.assertIn("Feed", parsed["hint"])
 
+    def test_parse_x_selector_errors(self):
+        author = _parse_source_error("x_author:openai: HTTP Error 401")
+        self.assertEqual(author["kind"], "x_author")
+        self.assertEqual(author["source"], "openai")
+        self.assertIn("X_BEARER_TOKEN", author["hint"])
+
+        theme = _parse_source_error("x_theme:ai agents: HTTP Error 429")
+        self.assertEqual(theme["kind"], "x_theme")
+        self.assertEqual(theme["source"], "ai agents")
+        self.assertIn("recent-search", theme["hint"])
+
 
 if __name__ == "__main__":
     unittest.main()

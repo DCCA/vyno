@@ -15,6 +15,8 @@ _SOURCE_FIELDS = {
     "rss": "rss_feeds",
     "youtube_channel": "youtube_channels",
     "youtube_query": "youtube_queries",
+    "x_author": "x_authors",
+    "x_theme": "x_themes",
     "github_repo": "github_repos",
     "github_topic": "github_topics",
     "github_query": "github_search_queries",
@@ -36,6 +38,8 @@ def load_effective_sources(base_path: str, overlay_path: str) -> SourceConfig:
         "rss_feeds": _merge_field("rss", base.rss_feeds, overlay),
         "youtube_channels": _merge_field("youtube_channel", base.youtube_channels, overlay),
         "youtube_queries": _merge_field("youtube_query", base.youtube_queries, overlay),
+        "x_authors": _merge_field("x_author", base.x_authors, overlay),
+        "x_themes": _merge_field("x_theme", base.x_themes, overlay),
         "github_repos": _merge_field("github_repo", base.github_repos, overlay),
         "github_topics": _merge_field("github_topic", base.github_topics, overlay),
         "github_search_queries": _merge_field("github_query", base.github_search_queries, overlay),
@@ -51,6 +55,8 @@ def list_sources(base_path: str, overlay_path: str) -> dict[str, list[str]]:
         "rss": s.rss_feeds,
         "youtube_channel": s.youtube_channels,
         "youtube_query": s.youtube_queries,
+        "x_author": s.x_authors,
+        "x_theme": s.x_themes,
         "github_repo": s.github_repos,
         "github_topic": s.github_topics,
         "github_query": s.github_search_queries,
@@ -129,6 +135,18 @@ def canonicalize_source_value(source_type: str, value: str) -> str:
 
     if st == "youtube_query":
         return " ".join(raw.split())
+
+    if st == "x_author":
+        handle = raw.lstrip("@").strip().lower()
+        if not re.fullmatch(r"[a-z0-9_]{1,15}", handle):
+            raise ValueError("x_author must be a valid X handle (without URL)")
+        return handle
+
+    if st == "x_theme":
+        theme = " ".join(raw.split())
+        if len(theme) < 2:
+            raise ValueError("x_theme must contain at least 2 characters")
+        return theme
 
     if st == "github_repo":
         repo = raw.lower().strip("/")

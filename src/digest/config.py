@@ -20,6 +20,8 @@ class SourceConfig:
     youtube_channels: list[str] = field(default_factory=list)
     youtube_queries: list[str] = field(default_factory=list)
     x_inbox_path: str = ""
+    x_authors: list[str] = field(default_factory=list)
+    x_themes: list[str] = field(default_factory=list)
     github_repos: list[str] = field(default_factory=list)
     github_topics: list[str] = field(default_factory=list)
     github_search_queries: list[str] = field(default_factory=list)
@@ -111,6 +113,8 @@ def load_sources(path: str | Path) -> SourceConfig:
     rss_feeds = _as_str_list(data, "rss_feeds")
     youtube_channels = _as_str_list(data, "youtube_channels")
     youtube_queries = _as_str_list(data, "youtube_queries")
+    x_authors = _as_str_list(data, "x_authors")
+    x_themes = _as_str_list(data, "x_themes")
     github_repos = _as_str_list(data, "github_repos")
     github_topics = _as_str_list(data, "github_topics")
     github_search_queries = _as_str_list(data, "github_search_queries")
@@ -126,6 +130,8 @@ def load_sources(path: str | Path) -> SourceConfig:
         or github_search_queries
         or github_orgs
         or x_inbox_path
+        or x_authors
+        or x_themes
     ):
         raise ValueError("At least one source must be configured in sources.yaml")
     return SourceConfig(
@@ -133,6 +139,8 @@ def load_sources(path: str | Path) -> SourceConfig:
         youtube_channels=youtube_channels,
         youtube_queries=youtube_queries,
         x_inbox_path=x_inbox_path,
+        x_authors=x_authors,
+        x_themes=x_themes,
         github_repos=github_repos,
         github_topics=github_topics,
         github_search_queries=github_search_queries,

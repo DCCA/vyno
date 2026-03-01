@@ -6,6 +6,40 @@ from digest.ops.source_registry import add_source, list_sources, load_effective_
 
 
 class TestSourceRegistry(unittest.TestCase):
+    def test_add_x_author_normalizes_handle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "sources.yaml"
+            overlay = Path(tmp) / "sources.local.yaml"
+            base.write_text("rss_feeds: ['https://example.com/rss.xml']\n", encoding="utf-8")
+
+            created, value = add_source(str(base), str(overlay), "x_author", "@OpenAI")
+            self.assertTrue(created)
+            self.assertEqual(value, "openai")
+
+            created2, value2 = add_source(str(base), str(overlay), "x_author", "openai")
+            self.assertFalse(created2)
+            self.assertEqual(value2, "openai")
+
+            effective = load_effective_sources(str(base), str(overlay))
+            self.assertEqual(effective.x_authors, ["openai"])
+
+    def test_add_x_theme_normalizes_whitespace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "sources.yaml"
+            overlay = Path(tmp) / "sources.local.yaml"
+            base.write_text("rss_feeds: ['https://example.com/rss.xml']\n", encoding="utf-8")
+
+            created, value = add_source(
+                str(base),
+                str(overlay),
+                "x_theme",
+                "  ai    agents   evals  ",
+            )
+            self.assertTrue(created)
+            self.assertEqual(value, "ai agents evals")
+            rows = list_sources(str(base), str(overlay))
+            self.assertIn("ai agents evals", rows["x_theme"])
+
     def test_add_github_org_normalizes_and_dedupes(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "sources.yaml"

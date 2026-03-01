@@ -174,6 +174,9 @@ Manual check example:
 ### `config/sources.yaml`
 - `rss_feeds`, `youtube_channels`, `youtube_queries`
 - `x_inbox_path`
+- `x_authors`, `x_themes`
+  - `x_authors` accepts X handles (for example `openai` or `@openai`)
+  - `x_themes` accepts free-text recent-search queries
 - `github_repos`, `github_topics`, `github_search_queries`, `github_orgs`
   - `github_orgs` accepts either `org-login` or `https://github.com/org-login`
   - Org ingestion includes repo updates + releases (not issues/PRs)
@@ -220,6 +223,10 @@ Most used:
 - `OPENAI_API_KEY`
 - `GITHUB_TOKEN` (recommended for GitHub API rate limits)
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+- X selector ingestion:
+  - `DIGEST_X_PROVIDER=inbox_only|x_api` (default: `inbox_only`)
+  - `X_BEARER_TOKEN` (required when `DIGEST_X_PROVIDER=x_api`)
+  - `DIGEST_X_MAX_ITEMS_PER_SELECTOR` (optional cap, default `25`, max `100`)
 - `DIGEST_WEB_API_AUTH_MODE`, `DIGEST_WEB_API_TOKEN` (web config API auth)
 - Bot admin controls:
   - `TELEGRAM_ADMIN_CHAT_IDS` (comma-separated)

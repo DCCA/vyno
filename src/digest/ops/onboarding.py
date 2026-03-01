@@ -373,6 +373,8 @@ def run_preflight(
         source_count += len(sources_cfg.rss_feeds)
         source_count += len(sources_cfg.youtube_channels)
         source_count += len(sources_cfg.youtube_queries)
+        source_count += len(sources_cfg.x_authors)
+        source_count += len(sources_cfg.x_themes)
         source_count += len(sources_cfg.github_repos)
         source_count += len(sources_cfg.github_topics)
         source_count += len(sources_cfg.github_search_queries)

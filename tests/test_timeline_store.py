@@ -175,6 +175,28 @@ class TestTimelineStore(unittest.TestCase):
             self.assertEqual(deleted, 3)
             self.assertEqual(store.preview_seen_reset(), 0)
 
+    def test_x_selector_cursor_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            store = SQLiteStore(str(db))
+            self.assertIsNone(store.get_x_cursor("x_author", "openai"))
+
+            store.set_x_cursor(
+                selector_type="x_author",
+                selector_value="openai",
+                cursor="abc-next",
+                last_item_id="12345",
+            )
+            self.assertEqual(store.get_x_cursor("x_author", "openai"), "abc-next")
+
+            store.set_x_cursor(
+                selector_type="x_author",
+                selector_value="openai",
+                cursor="def-next",
+                last_item_id="22222",
+            )
+            self.assertEqual(store.get_x_cursor("x_author", "openai"), "def-next")
+
 
 if __name__ == "__main__":
     unittest.main()

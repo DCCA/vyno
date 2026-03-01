@@ -284,6 +284,8 @@ class TestRuntimeIntegration(unittest.TestCase):
                 youtube_channels=["fixture-yt"],
                 youtube_queries=[],
                 x_inbox_path="data/x_inbox.txt",
+                x_authors=["openai"],
+                x_themes=["ai agents"],
                 github_repos=["openai/openai-cookbook"],
                 github_topics=["llm"],
                 github_search_queries=["repo:openai/openai-cookbook is:issue llm"],
@@ -337,6 +339,10 @@ class TestRuntimeIntegration(unittest.TestCase):
                 patch("digest.runtime.fetch_youtube_items", return_value=[]),
                 patch("digest.runtime.fetch_x_inbox_items", return_value=[x_item]),
                 patch(
+                    "digest.runtime.fetch_x_selector_items",
+                    return_value=([x_item], []),
+                ) as selector_mock,
+                patch(
                     "digest.runtime.fetch_github_items", return_value=[gh_item]
                 ) as gh_mock,
             ):
@@ -349,6 +355,7 @@ class TestRuntimeIntegration(unittest.TestCase):
                 )
 
             self.assertIn(report.status, {"success", "partial"})
+            selector_mock.assert_called_once()
             self.assertEqual(gh_mock.call_args.kwargs.get("orgs"), ["vercel-labs"])
             conn = sqlite3.connect(db)
             count = conn.execute(

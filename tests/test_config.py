@@ -21,11 +21,20 @@ class TestConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "sources.yaml"
             path.write_text(
-                "x_inbox_path: data/x.txt\ngithub_repos: ['openai/openai-cookbook']\ngithub_topics: ['llm']\ngithub_search_queries: ['is:issue llm']\n",
+                (
+                    "x_inbox_path: data/x.txt\n"
+                    "x_authors: ['@OpenAI', 'vercel']\n"
+                    "x_themes: ['ai agents', 'evals']\n"
+                    "github_repos: ['openai/openai-cookbook']\n"
+                    "github_topics: ['llm']\n"
+                    "github_search_queries: ['is:issue llm']\n"
+                ),
                 encoding="utf-8",
             )
             cfg = load_sources(path)
             self.assertEqual(cfg.x_inbox_path, "data/x.txt")
+            self.assertEqual(cfg.x_authors, ["@OpenAI", "vercel"])
+            self.assertEqual(cfg.x_themes, ["ai agents", "evals"])
             self.assertIn("openai/openai-cookbook", cfg.github_repos)
 
     def test_sources_loads_github_orgs(self):

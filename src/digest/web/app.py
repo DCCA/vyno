@@ -48,6 +48,7 @@ FETCH_STAGES = {
     "fetch_youtube_channel",
     "fetch_youtube_query",
     "fetch_x_inbox",
+    "fetch_x_selectors",
     "fetch_github",
 }
 
@@ -792,6 +793,8 @@ def create_app(settings: WebSettings):
                 "rss": list(sources_cfg.rss_feeds),
                 "youtube_channel": list(sources_cfg.youtube_channels),
                 "youtube_query": list(sources_cfg.youtube_queries),
+                "x_author": list(sources_cfg.x_authors),
+                "x_theme": list(sources_cfg.x_themes),
                 "github_repo": list(sources_cfg.github_repos),
                 "github_topic": list(sources_cfg.github_topics),
                 "github_query": list(sources_cfg.github_search_queries),
@@ -1267,6 +1270,8 @@ def _count_fetch_targets(sources_cfg: Any) -> int:
     total += len(getattr(sources_cfg, "rss_feeds", []) or [])
     total += len(getattr(sources_cfg, "youtube_channels", []) or [])
     total += len(getattr(sources_cfg, "youtube_queries", []) or [])
+    total += len(getattr(sources_cfg, "x_authors", []) or [])
+    total += len(getattr(sources_cfg, "x_themes", []) or [])
     if str(getattr(sources_cfg, "x_inbox_path", "") or "").strip():
         total += 1
     has_github = any(
@@ -1325,6 +1330,7 @@ def _run_stage_label(stage: str) -> str:
         "fetch_youtube_channel": "Fetching YouTube Channels",
         "fetch_youtube_query": "Fetching YouTube Queries",
         "fetch_x_inbox": "Fetching X Inbox",
+        "fetch_x_selectors": "Fetching X Selectors",
         "fetch_github": "Fetching GitHub",
         "normalize_filter": "Normalizing",
         "candidate_select": "Selecting Candidates",
@@ -1549,6 +1555,12 @@ def _parse_source_error(line: str) -> dict[str, str]:
     elif raw.startswith("x_inbox:"):
         kind = "x_inbox"
         source, error_text = _split_once(raw[len("x_inbox:") :], ": ")
+    elif raw.startswith("x_author:"):
+        kind = "x_author"
+        source, error_text = _split_once(raw[len("x_author:") :], ": ")
+    elif raw.startswith("x_theme:"):
+        kind = "x_theme"
+        source, error_text = _split_once(raw[len("x_theme:") :], ": ")
     elif raw.startswith("github:"):
         kind = "github"
         error_text = raw[len("github:") :].strip()
@@ -1580,6 +1592,14 @@ def _error_hint(kind: str, error_text: str) -> str:
         return "YouTube source may be invalid/rate-limited. Verify channel/query and retry."
     if kind == "x_inbox":
         return "Inbox file path/content issue. Check x_inbox_path and file permissions."
+    if kind == "x_author":
+        return (
+            "X author selector fetch failed. Verify DIGEST_X_PROVIDER=x_api, X_BEARER_TOKEN, and selector handle."
+        )
+    if kind == "x_theme":
+        return (
+            "X theme selector fetch failed. Verify provider auth, query syntax, and recent-search tier limits."
+        )
     if kind == "github" and "httperror: 403" in text:
         return (
             "GitHub API rate limit/auth issue. Set or refresh GITHUB_TOKEN and re-run."
