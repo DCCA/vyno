@@ -204,6 +204,38 @@ function fromLines(value: string): string[] {
     .filter(Boolean)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function diffObjects(base: Record<string, unknown>, target: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  const keys = new Set([...Object.keys(base), ...Object.keys(target)])
+  for (const key of keys) {
+    const left = base[key]
+    const right = target[key]
+    if (isRecord(left) && isRecord(right)) {
+      const nested = diffObjects(left, right)
+      if (Object.keys(nested).length > 0) {
+        out[key] = nested
+      }
+      continue
+    }
+    if (JSON.stringify(left) !== JSON.stringify(right)) {
+      out[key] = right
+    }
+  }
+  return out
+}
+
+function parseProfilePayload(value: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(value)
+  if (!isRecord(parsed)) {
+    throw new Error("Profile JSON must be an object.")
+  }
+  return parsed
+}
+
 function formatElapsed(seconds: number | undefined): string {
   const total = Math.max(0, Math.floor(seconds ?? 0))
   const mins = Math.floor(total / 60)
@@ -229,8 +261,10 @@ export default function App() {
   const [sourceType, setSourceType] = useState("rss")
   const [sourceValue, setSourceValue] = useState("")
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
+  const [profileBaseline, setProfileBaseline] = useState<Record<string, unknown> | null>(null)
   const [profileJson, setProfileJson] = useState("")
   const [profileDiff, setProfileDiff] = useState<Record<string, unknown>>({})
+  const [profileDiffComputedAt, setProfileDiffComputedAt] = useState("")
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [runStatus, setRunStatus] = useState<RunStatus | null>(null)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
@@ -253,6 +287,28 @@ export default function App() {
     () => Object.entries(sources).sort((a, b) => a[0].localeCompare(b[0])),
     [sources],
   )
+  const profileJsonParseError = useMemo(() => {
+    if (!profileJson.trim()) return ""
+    try {
+      parseProfilePayload(profileJson)
+      return ""
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error)
+    }
+  }, [profileJson])
+
+  const localProfileDiff = useMemo(() => {
+    if (!profileBaseline || profileJsonParseError) return {}
+    try {
+      const parsed = parseProfilePayload(profileJson)
+      return diffObjects(profileBaseline, parsed)
+    } catch {
+      return {}
+    }
+  }, [profileBaseline, profileJson, profileJsonParseError])
+
+  const localDiffCount = useMemo(() => Object.keys(localProfileDiff).length, [localProfileDiff])
+  const serverDiffCount = useMemo(() => Object.keys(profileDiff).length, [profileDiff])
 
   const digestBusy = Boolean(
     runNowLoading || activateLoading || previewLoading || runStatus?.active?.run_id || runProgress?.is_active,
@@ -425,7 +481,10 @@ export default function App() {
       setSourceTypes(typeData.types)
       setSources(sourceData.sources)
       setProfile(profileData.profile)
+      setProfileBaseline(profileData.profile)
       setProfileJson(JSON.stringify(profileData.profile, null, 2))
+      setProfileDiff({})
+      setProfileDiffComputedAt("")
       setHistory(historyData.snapshots)
       setRunStatus(statusData)
       setRunProgress(progressData.available ? progressData : null)
@@ -615,7 +674,7 @@ export default function App() {
     setSaveAction("profile-validate")
     setSaving(true)
     try {
-      const parsed = JSON.parse(profileJson) as Record<string, unknown>
+      const parsed = parseProfilePayload(profileJson)
       const result = await api<{ profile: Record<string, unknown> }>("/api/config/profile/validate", {
         method: "POST",
         body: JSON.stringify({ profile: parsed }),
@@ -635,12 +694,13 @@ export default function App() {
     setSaveAction("profile-diff")
     setSaving(true)
     try {
-      const parsed = JSON.parse(profileJson) as Record<string, unknown>
+      const parsed = parseProfilePayload(profileJson)
       const result = await api<{ diff: Record<string, unknown> }>("/api/config/profile/diff", {
         method: "POST",
         body: JSON.stringify({ profile: parsed }),
       })
       setProfileDiff(result.diff)
+      setProfileDiffComputedAt(new Date().toISOString())
       setNotice({ kind: "ok", text: "Diff updated." })
     } catch (error) {
       setNotice({ kind: "error", text: String(error) })
@@ -654,7 +714,7 @@ export default function App() {
     setSaveAction("profile-save")
     setSaving(true)
     try {
-      const parsed = JSON.parse(profileJson) as Record<string, unknown>
+      const parsed = parseProfilePayload(profileJson)
       await api("/api/config/profile/save", {
         method: "POST",
         body: JSON.stringify({ profile: parsed }),
@@ -1366,11 +1426,15 @@ export default function App() {
                       <CardHeader>
                         <CardTitle className="font-display">Review and Apply</CardTitle>
                         <CardDescription>
-                          Validate changes, inspect diff, and apply overlay updates atomically.
+                          Validate changes, inspect local/server diff views, and apply overlay updates atomically.
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="flex flex-wrap gap-2">
-                        <Button variant="outline" onClick={() => void validateProfile()} disabled={saving}>
+                        <Button
+                          variant="outline"
+                          onClick={() => void validateProfile()}
+                          disabled={saving || Boolean(profileJsonParseError)}
+                        >
                           {saveAction === "profile-validate" ? (
                             <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
                           ) : (
@@ -1378,7 +1442,11 @@ export default function App() {
                           )}
                           {saveAction === "profile-validate" ? "Validating..." : "Validate"}
                         </Button>
-                        <Button variant="outline" onClick={() => void computeProfileDiff()} disabled={saving}>
+                        <Button
+                          variant="outline"
+                          onClick={() => void computeProfileDiff()}
+                          disabled={saving || Boolean(profileJsonParseError)}
+                        >
                           {saveAction === "profile-diff" ? (
                             <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
                           ) : (
@@ -1386,7 +1454,7 @@ export default function App() {
                           )}
                           {saveAction === "profile-diff" ? "Computing..." : "Compute Diff"}
                         </Button>
-                        <Button onClick={() => void saveProfile()} disabled={saving}>
+                        <Button onClick={() => void saveProfile()} disabled={saving || Boolean(profileJsonParseError)}>
                           {saveAction === "profile-save" ? (
                             <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
                           ) : (
@@ -1398,12 +1466,52 @@ export default function App() {
                     </Card>
                     <Card>
                       <CardHeader>
-                        <CardTitle className="font-display">Profile Diff</CardTitle>
+                        <CardTitle className="font-display">Pending Local Diff</CardTitle>
+                        <CardDescription>
+                          Live diff between the editor payload and the last loaded effective profile.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={localDiffCount > 0 ? "warning" : "success"}>
+                            local changes: {localDiffCount}
+                          </Badge>
+                          {profileJsonParseError ? <Badge variant="warning">invalid JSON</Badge> : null}
+                        </div>
+                        {profileJsonParseError ? (
+                          <Alert variant="destructive">
+                            <AlertTitle>Profile JSON is invalid</AlertTitle>
+                            <AlertDescription>{profileJsonParseError}</AlertDescription>
+                          </Alert>
+                        ) : localDiffCount === 0 ? (
+                          <p className="text-sm text-muted-foreground">No pending local changes.</p>
+                        ) : (
+                          <pre className="max-h-[340px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
+                            {JSON.stringify(localProfileDiff, null, 2)}
+                          </pre>
+                        )}
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="font-display">Server Canonical Diff</CardTitle>
+                        <CardDescription>
+                          Result from <span className="font-semibold">Compute Diff</span> after server-side validation and
+                          redaction handling.
+                        </CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <pre className="max-h-[340px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
-                          {JSON.stringify(profileDiff, null, 2)}
-                        </pre>
+                        {serverDiffCount === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            {profileDiffComputedAt
+                              ? "No server-side diff. The editor payload matches the current effective profile."
+                              : "No computed diff yet. Click Compute Diff to generate a canonical server diff."}
+                          </p>
+                        ) : (
+                          <pre className="max-h-[340px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
+                            {JSON.stringify(profileDiff, null, 2)}
+                          </pre>
+                        )}
                       </CardContent>
                     </Card>
                   </TabsContent>
