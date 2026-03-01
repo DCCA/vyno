@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 ItemType = Literal[
     "article",
@@ -79,3 +79,4 @@ class RunReport:
     must_read_count: int = 0
     skim_count: int = 0
     video_count: int = 0
+    context: dict[str, Any] = field(default_factory=dict)

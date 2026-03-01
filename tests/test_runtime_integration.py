@@ -792,6 +792,47 @@ class TestRuntimeIntegration(unittest.TestCase):
             self.assertNotIn("issue-drop-keyword", scored_ids)
             self.assertNotIn("issue-drop-untrusted", scored_ids)
 
+    def test_run_report_includes_context_feedback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            store = SQLiteStore(str(db))
+            sources = SourceConfig(
+                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+            )
+            profile = ProfileConfig(llm_enabled=False, agent_scoring_enabled=False)
+
+            fixture_item = Item(
+                id="ctx-1",
+                url="https://example.com/ctx-1",
+                title="Context test item",
+                source="fixture-source",
+                author=None,
+                published_at=datetime.now(),
+                type="article",
+                raw_text="context test body",
+                hash="ctx-hash-1",
+            )
+
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]),
+                patch("digest.runtime.fetch_youtube_items", return_value=[]),
+            ):
+                report = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
+
+            self.assertIsInstance(report.context, dict)
+            self.assertIn("fetched", report.context)
+            self.assertIn("pipeline", report.context)
+            self.assertIn("selection", report.context)
+            self.assertEqual(report.context["selection"]["final_item_count"], 1)
+            self.assertGreaterEqual(report.context["fetched"]["raw_total"], 1)
+            self.assertIn("sparse_note", report.context)
+
 
 if __name__ == "__main__":
     unittest.main()

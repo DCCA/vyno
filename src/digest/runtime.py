@@ -101,12 +101,17 @@ def run_digest(
 
     source_errors: list[str] = []
     summary_errors: list[str] = []
+    rss_fetched_items = 0
+    youtube_fetched_items = 0
+    x_fetched_items = 0
+    github_fetched_items = 0
 
     raw_items = []
     for feed_url in sources.rss_feeds:
         try:
             fetched = fetch_rss_items([feed_url])
             raw_items.extend(fetched)
+            rss_fetched_items += len(fetched)
             log_event(
                 run_logger,
                 "info",
@@ -142,6 +147,7 @@ def run_digest(
         try:
             fetched = fetch_youtube_items([channel_id], [])
             raw_items.extend(fetched)
+            youtube_fetched_items += len(fetched)
             log_event(
                 run_logger,
                 "info",
@@ -177,6 +183,7 @@ def run_digest(
         try:
             fetched = fetch_youtube_items([], [query])
             raw_items.extend(fetched)
+            youtube_fetched_items += len(fetched)
             log_event(
                 run_logger,
                 "info",
@@ -212,6 +219,7 @@ def run_digest(
         try:
             fetched = fetch_x_inbox_items(sources.x_inbox_path)
             raw_items.extend(fetched)
+            x_fetched_items += len(fetched)
             log_event(
                 run_logger,
                 "info",
@@ -270,6 +278,7 @@ def run_digest(
                 },
             )
             raw_items.extend(fetched)
+            github_fetched_items += len(fetched)
             log_event(
                 run_logger,
                 "info",
@@ -352,6 +361,7 @@ def run_digest(
                     candidate_items.extend(supplements)
                     supplemental_seen_videos = len(supplements)
 
+    candidate_pre_issue_filter_count = len(candidate_items)
     filtered_candidates: list[Item] = []
     for item in candidate_items:
         if item.type != "github_issue":
@@ -371,6 +381,7 @@ def run_digest(
         "candidate_select",
         "Selected candidate items",
         seen_count=len(seen),
+        candidate_pre_issue_filter_count=candidate_pre_issue_filter_count,
         candidate_count=len(candidate_items),
         supplemental_seen_videos=supplemental_seen_videos,
         github_issue_kept_high_impact=github_issue_kept_high_impact,
@@ -379,6 +390,7 @@ def run_digest(
     emit_progress(
         "candidate_select",
         "Selected candidate items",
+        candidate_pre_issue_filter_count=candidate_pre_issue_filter_count,
         candidate_count=len(candidate_items),
         seen_count=len(seen),
         supplemental_seen_videos=supplemental_seen_videos,
@@ -886,6 +898,47 @@ def run_digest(
         budget_skip_count=llm_summary_budget_skips,
     )
 
+    final_item_count = len(selected_items)
+    context_payload: dict[str, Any] = {
+        "mode": {
+            "use_last_completed_window": use_last_completed_window,
+            "only_new": only_new,
+            "allow_seen_fallback": allow_seen_fallback,
+            "window_start": window_start,
+            "window_end": window_end,
+        },
+        "fetched": {
+            "rss_items": rss_fetched_items,
+            "youtube_items": youtube_fetched_items,
+            "x_items": x_fetched_items,
+            "github_items": github_fetched_items,
+            "raw_total": len(raw_items),
+        },
+        "pipeline": {
+            "unique_count": len(unique_items),
+            "seen_count": len(seen),
+            "candidate_pre_issue_filter_count": candidate_pre_issue_filter_count,
+            "candidate_count": len(candidate_items),
+            "supplemental_seen_videos": supplemental_seen_videos,
+            "github_issue_kept_high_impact": github_issue_kept_high_impact,
+            "github_issue_dropped_low_impact": github_issue_dropped_low_impact,
+        },
+        "selection": {
+            "must_read_count": len(sections.must_read),
+            "skim_count": len(sections.skim),
+            "video_count": len(sections.videos),
+            "final_item_count": final_item_count,
+        },
+    }
+    sparse_context_note = _build_sparse_context_note(
+        final_item_count=final_item_count,
+        only_new=only_new,
+        github_issue_dropped_low_impact=github_issue_dropped_low_impact,
+        candidate_count=len(candidate_items),
+    )
+    if sparse_context_note:
+        context_payload["sparse_note"] = sparse_context_note
+
     # Keep note naming aligned with run window timestamps (UTC) to avoid
     # local-time drift where repeated runs overwrite the previous-day note.
     date_str = now.date().isoformat()
@@ -894,6 +947,7 @@ def run_digest(
         date_str,
         sections,
         render_mode=profile.output.render_mode,
+        context=context_payload,
     )
     if not preview_mode:
         _write_latest_telegram_artifact(run_id, telegram_messages)
@@ -904,6 +958,7 @@ def run_digest(
         run_id=run_id,
         generated_at_utc=now.isoformat(),
         render_mode=profile.output.render_mode,
+        context=context_payload,
     )
 
     llm_coverage = (llm_scored_count / agent_scope_count) if agent_scope_count else 1.0
@@ -1069,6 +1124,8 @@ def run_digest(
         llm_summary_budget_skips=llm_summary_budget_skips,
         llm_requests_used=llm_requests_used,
         max_llm_requests_per_run=max_llm_requests_per_run,
+        github_issue_kept_high_impact=github_issue_kept_high_impact,
+        github_issue_dropped_low_impact=github_issue_dropped_low_impact,
     )
     emit_progress(
         "run_finish",
@@ -1080,6 +1137,8 @@ def run_digest(
         final_item_count=len(selected_items),
         llm_requests_used=llm_requests_used,
         max_llm_requests_per_run=max_llm_requests_per_run,
+        github_issue_kept_high_impact=github_issue_kept_high_impact,
+        github_issue_dropped_low_impact=github_issue_dropped_low_impact,
     )
 
     return RunReport(
@@ -1093,7 +1152,33 @@ def run_digest(
         must_read_count=len(sections.must_read),
         skim_count=len(sections.skim),
         video_count=len(sections.videos),
+        context=context_payload,
     )
+
+
+def _build_sparse_context_note(
+    *,
+    final_item_count: int,
+    only_new: bool,
+    github_issue_dropped_low_impact: int,
+    candidate_count: int,
+) -> str:
+    if final_item_count > 3:
+        return ""
+    parts: list[str] = [
+        "Sparse digest: strict quality filters kept only high-signal items.",
+    ]
+    if only_new:
+        parts.append(
+            "Run mode is incremental (only new items since last completed run)."
+        )
+    if github_issue_dropped_low_impact > 0:
+        parts.append(
+            f"Filtered out {github_issue_dropped_low_impact} low-impact GitHub issue candidates."
+        )
+    if candidate_count == 0:
+        parts.append("No candidates remained after filtering.")
+    return " ".join(parts)
 
 
 def _filter_window(items: list[Item], window_start_iso: str) -> list[Item]:

@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Any
 import urllib.parse
 import urllib.request
 
 from digest.delivery.source_buckets import build_source_buckets, top_highlights
 from digest.models import DigestSections
 
-NOISE_PHRASE_RE = re.compile(r"\b(check out|patreon|sponsor|support us|sign up)\b", re.IGNORECASE)
+NOISE_PHRASE_RE = re.compile(
+    r"\b(check out|patreon|sponsor|support us|sign up)\b", re.IGNORECASE
+)
 
 
 def _clean_text(value: str, *, max_len: int) -> str:
@@ -26,25 +29,49 @@ def render_telegram_messages(
     *,
     max_len: int = 4000,
     render_mode: str = "sectioned",
+    context: dict[str, Any] | None = None,
 ) -> list[str]:
     if max_len < 256:
         raise ValueError("max_len must be >= 256")
     if render_mode == "source_segmented":
-        lines = _build_source_segmented_lines(date_str, sections)
+        lines = _build_source_segmented_lines(date_str, sections, context=context)
     else:
-        lines = _build_digest_lines(date_str, sections)
+        lines = _build_digest_lines(date_str, sections, context=context)
     return _chunk_lines(lines, max_len=max_len)
 
 
-def render_telegram_message(date_str: str, sections: DigestSections) -> str:
-    return "\n\n".join(render_telegram_messages(date_str, sections, render_mode="sectioned"))
+def render_telegram_message(
+    date_str: str,
+    sections: DigestSections,
+    *,
+    context: dict[str, Any] | None = None,
+) -> str:
+    return "\n\n".join(
+        render_telegram_messages(
+            date_str,
+            sections,
+            render_mode="sectioned",
+            context=context,
+        )
+    )
 
 
-def _build_digest_lines(date_str: str, sections: DigestSections) -> list[str]:
-    lines = [f"AI Digest - {date_str}", "", "Must-read"]
+def _build_digest_lines(
+    date_str: str,
+    sections: DigestSections,
+    *,
+    context: dict[str, Any] | None,
+) -> list[str]:
+    lines = [f"AI Digest - {date_str}"]
+    context_lines = _build_context_lines(context)
+    if context_lines:
+        lines.extend(["", "Context", *context_lines])
+    lines.extend(["", "Must-read"])
     for idx, item in enumerate(sections.must_read, start=1):
         safe_title = _clean_text(item.item.title, max_len=120)
-        summary = _clean_text(item.summary.tldr if item.summary else item.item.title, max_len=220)
+        summary = _clean_text(
+            item.summary.tldr if item.summary else item.item.title, max_len=220
+        )
         lines.append(f"{idx}. {safe_title} - {summary} ({item.item.url})")
 
     lines.extend(["", "Skim"])
@@ -55,7 +82,11 @@ def _build_digest_lines(date_str: str, sections: DigestSections) -> list[str]:
     lines.extend(["", "Videos"])
     for item in sections.videos:
         safe_title = _clean_text(item.item.title, max_len=120)
-        takeaway = item.summary.key_points[0] if item.summary and item.summary.key_points else item.item.title
+        takeaway = (
+            item.summary.key_points[0]
+            if item.summary and item.summary.key_points
+            else item.item.title
+        )
         safe_takeaway = _clean_text(takeaway, max_len=180)
         lines.append(f"- {safe_title} - {safe_takeaway} ({item.item.url})")
 
@@ -66,11 +97,22 @@ def _build_digest_lines(date_str: str, sections: DigestSections) -> list[str]:
     return lines
 
 
-def _build_source_segmented_lines(date_str: str, sections: DigestSections) -> list[str]:
-    lines = [f"AI Digest - {date_str}", "", "Top Highlights"]
+def _build_source_segmented_lines(
+    date_str: str,
+    sections: DigestSections,
+    *,
+    context: dict[str, Any] | None,
+) -> list[str]:
+    lines = [f"AI Digest - {date_str}"]
+    context_lines = _build_context_lines(context)
+    if context_lines:
+        lines.extend(["", "Context", *context_lines])
+    lines.extend(["", "Top Highlights"])
     for idx, item in enumerate(top_highlights(sections, limit=3), start=1):
         safe_title = _clean_text(item.item.title, max_len=120)
-        summary = _clean_text(item.summary.tldr if item.summary else item.item.title, max_len=220)
+        summary = _clean_text(
+            item.summary.tldr if item.summary else item.item.title, max_len=220
+        )
         lines.append(f"{idx}. {safe_title} - {summary} ({item.item.url})")
 
     buckets = build_source_buckets(sections, per_bucket_limit=8)
@@ -79,6 +121,52 @@ def _build_source_segmented_lines(date_str: str, sections: DigestSections) -> li
         for item in rows:
             safe_title = _clean_text(item.item.title, max_len=120)
             lines.append(f"- {safe_title} ({item.item.url})")
+    return lines
+
+
+def _build_context_lines(context: dict[str, Any] | None) -> list[str]:
+    if not context:
+        return []
+    mode = context.get("mode") if isinstance(context.get("mode"), dict) else {}
+    fetched = context.get("fetched") if isinstance(context.get("fetched"), dict) else {}
+    pipeline = (
+        context.get("pipeline") if isinstance(context.get("pipeline"), dict) else {}
+    )
+    selection = (
+        context.get("selection") if isinstance(context.get("selection"), dict) else {}
+    )
+
+    only_new = bool(mode.get("only_new", False))
+    run_mode = "incremental" if only_new else "manual"
+    lines = [
+        f"- mode={run_mode}",
+        (
+            "- fetched "
+            f"rss={int(fetched.get('rss_items', 0) or 0)} "
+            f"yt={int(fetched.get('youtube_items', 0) or 0)} "
+            f"x={int(fetched.get('x_items', 0) or 0)} "
+            f"gh={int(fetched.get('github_items', 0) or 0)}"
+        ),
+        (
+            "- candidates "
+            f"unique={int(pipeline.get('unique_count', 0) or 0)} "
+            f"final={int(pipeline.get('candidate_count', 0) or 0)}"
+        ),
+        (
+            "- filters "
+            f"seen={int(pipeline.get('seen_count', 0) or 0)} "
+            f"low-impact-issues={int(pipeline.get('github_issue_dropped_low_impact', 0) or 0)}"
+        ),
+        (
+            "- selected "
+            f"M/S/V={int(selection.get('must_read_count', 0) or 0)}/"
+            f"{int(selection.get('skim_count', 0) or 0)}/"
+            f"{int(selection.get('video_count', 0) or 0)}"
+        ),
+    ]
+    sparse_note = str(context.get("sparse_note", "")).strip()
+    if sparse_note:
+        lines.append(f"- {sparse_note}")
     return lines
 
 
@@ -105,7 +193,9 @@ def _chunk_lines(lines: list[str], *, max_len: int) -> list[str]:
     return [c for c in chunks if c]
 
 
-def send_telegram_message(bot_token: str, chat_id: str, message: str, reply_markup: dict | None = None) -> None:
+def send_telegram_message(
+    bot_token: str, chat_id: str, message: str, reply_markup: dict | None = None
+) -> None:
     if not bot_token or not chat_id:
         raise ValueError("Telegram bot token and chat id are required")
     payload = {"chat_id": chat_id, "text": message, "disable_web_page_preview": "true"}
@@ -124,7 +214,9 @@ def send_telegram_message(bot_token: str, chat_id: str, message: str, reply_mark
         raise RuntimeError("Telegram send failed")
 
 
-def get_telegram_updates(bot_token: str, *, offset: int | None = None, timeout: int = 30) -> list[dict]:
+def get_telegram_updates(
+    bot_token: str, *, offset: int | None = None, timeout: int = 30
+) -> list[dict]:
     if not bot_token:
         raise ValueError("Telegram bot token is required")
     query = {"timeout": str(max(1, timeout))}
@@ -140,7 +232,9 @@ def get_telegram_updates(bot_token: str, *, offset: int | None = None, timeout: 
     return rows if isinstance(rows, list) else []
 
 
-def answer_telegram_callback(bot_token: str, callback_query_id: str, text: str = "") -> None:
+def answer_telegram_callback(
+    bot_token: str, callback_query_id: str, text: str = ""
+) -> None:
     if not bot_token or not callback_query_id:
         raise ValueError("Telegram bot token and callback_query_id are required")
     payload = {"callback_query_id": callback_query_id}

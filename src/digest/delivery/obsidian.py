@@ -3,13 +3,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 import re
+from typing import Any
 
 from digest.delivery.source_buckets import build_source_buckets, top_highlights
 from digest.models import DigestSections
 
 
 TAG_CLEAN_RE = re.compile(r"[^a-z0-9-]+")
-NOISE_PHRASE_RE = re.compile(r"\b(check out|patreon|sponsor|support us|sign up)\b", re.IGNORECASE)
+NOISE_PHRASE_RE = re.compile(
+    r"\b(check out|patreon|sponsor|support us|sign up)\b", re.IGNORECASE
+)
 
 
 def _normalize_tag(value: str) -> str:
@@ -42,6 +45,7 @@ def render_obsidian_note(
     run_id: str = "",
     generated_at_utc: str = "",
     render_mode: str = "sectioned",
+    context: dict[str, Any] | None = None,
 ) -> str:
     doc_tags = ["ai", "digest"]
     lines = [
@@ -56,6 +60,11 @@ def render_obsidian_note(
         f"# AI Digest - {date_str}",
         "",
     ]
+
+    context_lines = _render_context_lines(context)
+    if context_lines:
+        lines.extend(["## Context", *context_lines, ""])
+
     if render_mode == "source_segmented":
         lines.extend(_render_source_segmented_sections(sections))
         return "\n".join(lines).strip() + "\n"
@@ -68,7 +77,9 @@ def render_obsidian_note(
             lines.append(f"> Tags: {_render_tags(item.score.tags)}")
         if item.summary:
             lines.append(f"> TL;DR: {_clean_text(item.summary.tldr, max_len=240)}")
-            lines.append(f"> Why it matters: {_clean_text(item.summary.why_it_matters, max_len=240)}")
+            lines.append(
+                f"> Why it matters: {_clean_text(item.summary.why_it_matters, max_len=240)}"
+            )
         lines.append(">")
 
     lines.extend(["", "## Skim"])
@@ -88,6 +99,54 @@ def render_obsidian_note(
         lines.append(line)
 
     return "\n".join(lines).strip() + "\n"
+
+
+def _render_context_lines(context: dict[str, Any] | None) -> list[str]:
+    if not context:
+        return []
+    mode = context.get("mode") if isinstance(context.get("mode"), dict) else {}
+    fetched = context.get("fetched") if isinstance(context.get("fetched"), dict) else {}
+    pipeline = (
+        context.get("pipeline") if isinstance(context.get("pipeline"), dict) else {}
+    )
+    selection = (
+        context.get("selection") if isinstance(context.get("selection"), dict) else {}
+    )
+
+    use_last = bool(mode.get("use_last_completed_window", False))
+    only_new = bool(mode.get("only_new", False))
+    run_mode = "incremental" if only_new else "manual"
+    lines = [
+        f"- Mode: {run_mode} (last_completed_window={str(use_last).lower()}, only_new={str(only_new).lower()})",
+        (
+            "- Fetched: "
+            f"rss={int(fetched.get('rss_items', 0) or 0)}, "
+            f"youtube={int(fetched.get('youtube_items', 0) or 0)}, "
+            f"x={int(fetched.get('x_items', 0) or 0)}, "
+            f"github={int(fetched.get('github_items', 0) or 0)}"
+        ),
+        (
+            "- Candidate funnel: "
+            f"unique={int(pipeline.get('unique_count', 0) or 0)} -> "
+            f"candidates={int(pipeline.get('candidate_count', 0) or 0)}"
+        ),
+        (
+            "- Filters: "
+            f"seen={int(pipeline.get('seen_count', 0) or 0)}, "
+            "low-impact-github-issues="
+            f"{int(pipeline.get('github_issue_dropped_low_impact', 0) or 0)}"
+        ),
+        (
+            "- Final: "
+            f"must-read={int(selection.get('must_read_count', 0) or 0)}, "
+            f"skim={int(selection.get('skim_count', 0) or 0)}, "
+            f"videos={int(selection.get('video_count', 0) or 0)}"
+        ),
+    ]
+    sparse_note = str(context.get("sparse_note", "")).strip()
+    if sparse_note:
+        lines.append(f"- Note: {sparse_note}")
+    return lines
 
 
 def _render_source_segmented_sections(sections: DigestSections) -> list[str]:
