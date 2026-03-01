@@ -21,6 +21,7 @@ Current X ingestion is manual inbox URL parsing (`x_inbox_path`), which cannot s
 - Preserve current manual inbox path as fallback and migration-safe mode.
 - Support incremental ingestion with persisted cursor/checkpoint state.
 - Keep existing run/delivery/scoring architecture unchanged from consumer perspective.
+- Stay aligned with official X API endpoint/tier constraints from current docs.
 
 ## Non-Goals
 - No full social graph features (followers/following management UI).
@@ -37,3 +38,8 @@ Current X ingestion is manual inbox URL parsing (`x_inbox_path`), which cannot s
 - Runs ingest incremental X items from configured selectors without duplicating old items.
 - Source health clearly identifies failures by selector type (`x_author`, `x_theme`, `x_inbox`).
 - Existing inbox-only behavior continues to work when selector-based ingestion is disabled.
+
+## Official API Validation Notes
+- Recent theme search is constrained to recent-search windows (last 7 days) unless full-archive access is available.
+- Query and pagination behavior must follow official constraints (max results and next-token paging).
+- Project access tier/post-cap limits materially affect feasible selector volume and run frequency.

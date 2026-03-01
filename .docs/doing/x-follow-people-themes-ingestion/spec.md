@@ -36,6 +36,21 @@ The system SHALL fetch X selector content via a provider abstraction with explic
 - THEN source errors are recorded per selector
 - AND non-X sources continue through the pipeline
 
+### Requirement: Official Endpoint Compatibility
+The system SHALL use officially documented X API endpoints and parameters for author/theme ingestion.
+
+#### Scenario: Author ingestion endpoint usage
+- GIVEN selector type `x_author`
+- WHEN provider mode is `x_api`
+- THEN ingestion uses official user-post retrieval endpoints and parameter bounds
+- AND request formation remains compatible with current X API contract
+
+#### Scenario: Theme ingestion endpoint usage
+- GIVEN selector type `x_theme`
+- WHEN provider mode is `x_api`
+- THEN ingestion uses official recent-search endpoint and query syntax rules
+- AND pagination uses official next-token mechanics
+
 ### Requirement: Incremental Selector Cursoring
 The system SHALL persist per-selector cursor/checkpoint state to avoid repeated ingestion of old X posts.
 
@@ -44,6 +59,15 @@ The system SHALL persist per-selector cursor/checkpoint state to avoid repeated 
 - WHEN a new run executes
 - THEN fetch starts from the last checkpoint where supported
 - AND already-seen X posts are minimized by cursor + existing seen-key logic
+
+### Requirement: Time-Window and Tier Awareness
+The system SHALL reflect official X API time-window and tier limitations in behavior and operator feedback.
+
+#### Scenario: Historical request outside allowed window
+- GIVEN a selector fetch would require data outside recent-search availability
+- WHEN provider/tier does not support full archive
+- THEN ingestion uses the supported recent window only
+- AND source health or run context records that older history is not available in current tier
 
 ### Requirement: Canonical Item Compatibility
 The system SHALL normalize selector-ingested X posts into existing canonical `Item` schema.

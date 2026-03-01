@@ -37,6 +37,15 @@ Create provider router in `connectors/x_provider.py`:
   - env `DIGEST_X_PROVIDER=inbox_only|x_api`
   - env `X_BEARER_TOKEN` for API mode
 
+Official endpoint mapping (x_api mode):
+- `x_author`:
+  - resolve handle via `GET /2/users/by/username/:username`
+  - fetch posts via `GET /2/users/:id/tweets`
+- `x_theme`:
+  - fetch via `GET /2/tweets/search/recent`
+- pagination:
+  - use official pagination token response/request fields
+
 ### 3. Cursor State in SQLite
 Add table in `storage/sqlite_store.py`:
 - `x_selector_cursors(selector_type TEXT, selector_value TEXT, cursor TEXT, last_item_id TEXT, updated_at TEXT, PRIMARY KEY(selector_type, selector_value))`
@@ -73,6 +82,7 @@ Add `connectors/x_selectors.py`:
   - auth missing/invalid token
   - rate limit/backoff guidance
   - selector syntax remediation
+  - tier/time-window limitation guidance (for recent-only access)
 
 ## API Mode Details (v1)
 - Author path:
@@ -81,8 +91,20 @@ Add `connectors/x_selectors.py`:
 - Theme path:
   - query recent posts by theme terms
   - include URL expansions when available
+- query construction:
+  - use documented operators for precision (for example `from:<handle>`, `has:links`, `-is:retweet` where needed)
+  - keep query length and complexity within official limits
 - Rate controls:
   - profile/env caps for max requests and max items per selector per run
+  - enforce `max_results` within official per-request bounds
+
+## Tier and Capability Gating
+- Add startup/provider capability check:
+  - confirm bearer token configured
+  - confirm endpoint availability for selected mode
+- If access is insufficient:
+  - continue non-X ingestion
+  - report explicit health hints on unavailable X selector capabilities
 
 ## Data and Compatibility Notes
 - Existing `seen` key dedupe remains final safety net.

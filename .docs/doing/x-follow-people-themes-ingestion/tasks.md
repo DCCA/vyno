@@ -9,6 +9,7 @@
 - [ ] 2.1 Add X provider router abstraction (`inbox_only`, `x_api`).
 - [ ] 2.2 Implement selector connector for author/theme fetch with bounded limits.
 - [ ] 2.3 Preserve existing inbox connector and merge outputs safely.
+- [ ] 2.4 Implement endpoint mapping using official X API paths and pagination fields.
 
 ## 3. Cursoring and Storage
 - [ ] 3.1 Add `x_selector_cursors` table migration in SQLite store.
@@ -29,4 +30,5 @@
 - [ ] 6.1 Add/extend unit tests for source canonicalization and connector normalization.
 - [ ] 6.2 Add/extend integration tests for mixed-mode runs and source health outputs.
 - [ ] 6.3 Run frontend tests for source management parity.
-- [ ] 6.4 Document env/config migration notes in README and `.docs/done/...` on completion.
+- [ ] 6.4 Validate behavior against official X API docs constraints (time window, query/paging, limits).
+- [ ] 6.5 Document env/config migration notes in README and `.docs/done/...` on completion.
