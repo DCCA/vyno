@@ -258,6 +258,7 @@ type SaveAction =
   | "rollback"
 
 type ConsoleSurface = "dashboard" | "run" | "onboarding" | "sources" | "profile" | "review" | "timeline" | "history"
+type SourcesView = "overview" | "effective" | "health"
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").trim().replace(/\/$/, "")
 const API_TOKEN = import.meta.env.VITE_WEB_API_TOKEN ?? ""
@@ -344,6 +345,12 @@ function toInt(value: unknown): number | null {
   return null
 }
 
+function truncateText(value: string, maxChars = 92): string {
+  const source = (value ?? "").trim()
+  if (source.length <= maxChars) return source
+  return `${source.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`
+}
+
 export default function App() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -351,6 +358,11 @@ export default function App() {
   const [sources, setSources] = useState<SourceMap>({})
   const [sourceType, setSourceType] = useState("rss")
   const [sourceValue, setSourceValue] = useState("")
+  const [sourcesView, setSourcesView] = useState<SourcesView>("overview")
+  const [sourceSearch, setSourceSearch] = useState("")
+  const [sourceHealthSearch, setSourceHealthSearch] = useState("")
+  const [showAllEffectiveSources, setShowAllEffectiveSources] = useState(false)
+  const [showAllSourceHealth, setShowAllSourceHealth] = useState(false)
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [profileBaseline, setProfileBaseline] = useState<Record<string, unknown> | null>(null)
   const [profileJson, setProfileJson] = useState("")
@@ -400,6 +412,37 @@ export default function App() {
   const sortedSourceRows = useMemo(
     () => Object.entries(sources).sort((a, b) => a[0].localeCompare(b[0])),
     [sources],
+  )
+  const totalSourceCount = useMemo(
+    () => sortedSourceRows.reduce((sum, [, values]) => sum + values.length, 0),
+    [sortedSourceRows],
+  )
+  const filteredSourceRows = useMemo(() => {
+    const query = sourceSearch.trim().toLowerCase()
+    if (!query) return sortedSourceRows
+    return sortedSourceRows.filter(([type, values]) => {
+      if (type.toLowerCase().includes(query)) return true
+      return values.some((value) => String(value).toLowerCase().includes(query))
+    })
+  }, [sortedSourceRows, sourceSearch])
+  const effectiveRowsVisible = useMemo(
+    () => (showAllEffectiveSources ? filteredSourceRows : filteredSourceRows.slice(0, 12)),
+    [filteredSourceRows, showAllEffectiveSources],
+  )
+  const filteredSourceHealth = useMemo(() => {
+    const query = sourceHealthSearch.trim().toLowerCase()
+    if (!query) return sourceHealth
+    return sourceHealth.filter((item) => {
+      return (
+        item.source.toLowerCase().includes(query) ||
+        item.last_error.toLowerCase().includes(query) ||
+        item.hint.toLowerCase().includes(query)
+      )
+    })
+  }, [sourceHealth, sourceHealthSearch])
+  const sourceHealthVisible = useMemo(
+    () => (showAllSourceHealth ? filteredSourceHealth : filteredSourceHealth.slice(0, 12)),
+    [filteredSourceHealth, showAllSourceHealth],
   )
   const profileJsonParseError = useMemo(() => {
     if (!profileJson.trim()) return ""
@@ -1075,6 +1118,14 @@ export default function App() {
   useEffect(() => {
     setMobileNavOpen(false)
   }, [surface])
+
+  useEffect(() => {
+    setShowAllEffectiveSources(false)
+  }, [sourceSearch, sources])
+
+  useEffect(() => {
+    setShowAllSourceHealth(false)
+  }, [sourceHealthSearch, sourceHealth.length])
 
   useEffect(() => {
     if (!timelineRunId) return
@@ -1840,65 +1891,258 @@ export default function App() {
 
                     <Card>
                       <CardHeader>
-                        <CardTitle className="font-display">Effective Sources</CardTitle>
+                        <CardTitle className="font-display">Sources Workspace</CardTitle>
+                        <CardDescription>Compact triage views for effective source coverage and ingestion failures.</CardDescription>
                       </CardHeader>
-                      <CardContent>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Type</TableHead>
-                              <TableHead>Count</TableHead>
-                              <TableHead>Values</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {sortedSourceRows.map(([type, values]) => (
-                              <TableRow key={type}>
-                                <TableCell className="font-semibold">{type}</TableCell>
-                                <TableCell>{values.length}</TableCell>
-                                <TableCell className="font-mono text-xs text-muted-foreground">
-                                  {values.slice(0, 5).join("\n") || "-"}
-                                  {values.length > 5 ? `\n... (+${values.length - 5})` : ""}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                      <CardContent className="space-y-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary">types: {sortedSourceRows.length}</Badge>
+                          <Badge variant="secondary">total sources: {totalSourceCount}</Badge>
+                          <Badge variant={sourceHealth.length > 0 ? "warning" : "success"}>
+                            failing sources: {sourceHealth.length}
+                          </Badge>
+                        </div>
+
+                        <Tabs value={sourcesView} onValueChange={(value) => setSourcesView((value as SourcesView) || "overview")}>
+                          <TabsList className="grid w-full grid-cols-3 md:max-w-[560px]">
+                            <TabsTrigger value="overview">Overview</TabsTrigger>
+                            <TabsTrigger value="effective">Effective Sources</TabsTrigger>
+                            <TabsTrigger value="health">Source Health</TabsTrigger>
+                          </TabsList>
+
+                          <TabsContent value="overview" className="space-y-3 pt-3">
+                            <div className="grid gap-3 xl:grid-cols-2">
+                              <Card>
+                                <CardHeader className="pb-2">
+                                  <CardTitle className="font-display text-base">Effective Sources (preview)</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-2">
+                                  {sortedSourceRows.slice(0, 6).map(([type, values]) => (
+                                    <div key={`preview:${type}`} className="rounded-lg border bg-muted/10 p-2.5">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <p className="text-sm font-semibold">{type}</p>
+                                        <Badge variant="secondary">{values.length}</Badge>
+                                      </div>
+                                      <p className="truncate font-mono text-xs text-muted-foreground" title={values[0] || "-"}>
+                                        {values[0] ? truncateText(values[0], 82) : "-"}
+                                      </p>
+                                    </div>
+                                  ))}
+                                  <Button variant="outline" size="sm" onClick={() => setSourcesView("effective")}>
+                                    Open effective sources
+                                  </Button>
+                                </CardContent>
+                              </Card>
+
+                              <Card>
+                                <CardHeader className="pb-2">
+                                  <CardTitle className="font-display text-base">Source Health (preview)</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-2">
+                                  {sourceHealth.slice(0, 6).map((item) => (
+                                    <div key={`health-preview:${item.kind}:${item.source}`} className="rounded-lg border bg-muted/10 p-2.5">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <p className="truncate font-mono text-[11px]" title={item.source}>
+                                          {truncateText(item.source, 72)}
+                                        </p>
+                                        <Badge variant={item.count > 0 ? "warning" : "secondary"}>{item.count}</Badge>
+                                      </div>
+                                      <p className="truncate text-xs text-muted-foreground" title={item.last_error}>
+                                        {truncateText(item.last_error, 94)}
+                                      </p>
+                                    </div>
+                                  ))}
+                                  {sourceHealth.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">No recent failing sources.</p>
+                                  ) : (
+                                    <Button variant="outline" size="sm" onClick={() => setSourcesView("health")}>
+                                      Open source health
+                                    </Button>
+                                  )}
+                                </CardContent>
+                              </Card>
+                            </div>
+                          </TabsContent>
+
+                          <TabsContent value="effective" className="space-y-3 pt-3">
+                            <div className="flex flex-wrap items-end gap-3">
+                              <div className="min-w-[240px] flex-1 space-y-2">
+                                <Label htmlFor="effective-source-search">Filter effective sources</Label>
+                                <Input
+                                  id="effective-source-search"
+                                  placeholder="Search source type or value"
+                                  value={sourceSearch}
+                                  onChange={(event) => setSourceSearch(event.target.value)}
+                                />
+                              </div>
+                              <Badge variant="secondary">rows: {filteredSourceRows.length}</Badge>
+                            </div>
+
+                            <div className="hidden overflow-auto rounded-md border md:block md:max-h-[460px]">
+                              <Table>
+                                <TableHeader className="sticky top-0 z-10 bg-card">
+                                  <TableRow>
+                                    <TableHead className="w-[180px]">Type</TableHead>
+                                    <TableHead className="w-[80px]">Count</TableHead>
+                                    <TableHead>Values</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {effectiveRowsVisible.map(([type, values]) => (
+                                    <TableRow key={type} className="align-top">
+                                      <TableCell className="font-semibold">{type}</TableCell>
+                                      <TableCell>{values.length}</TableCell>
+                                      <TableCell className="space-y-2">
+                                        <p className="font-mono text-xs text-muted-foreground" title={values.join("\n")}>
+                                          {values.length === 0
+                                            ? "-"
+                                            : `${truncateText(values[0], 100)}${
+                                                values.length > 1 ? ` | ${truncateText(values[1], 100)}` : ""
+                                              }${values.length > 2 ? ` | +${values.length - 2} more` : ""}`}
+                                        </p>
+                                        {values.length > 0 ? (
+                                          <details className="rounded-md border bg-muted/10 p-2">
+                                            <summary className="cursor-pointer text-xs font-medium text-primary">
+                                              View full values
+                                            </summary>
+                                            <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
+                                              {values.join("\n")}
+                                            </pre>
+                                          </details>
+                                        ) : null}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                  {effectiveRowsVisible.length === 0 ? (
+                                    <TableRow>
+                                      <TableCell colSpan={3} className="text-center text-sm text-muted-foreground">
+                                        No effective sources match the current filter.
+                                      </TableCell>
+                                    </TableRow>
+                                  ) : null}
+                                </TableBody>
+                              </Table>
+                            </div>
+
+                            <div className="space-y-2 md:hidden">
+                              {effectiveRowsVisible.length > 0 ? (
+                                effectiveRowsVisible.map(([type, values]) => (
+                                  <div key={`mobile:${type}`} className="rounded-lg border bg-muted/10 p-3">
+                                    <div className="mb-1 flex items-center justify-between gap-2">
+                                      <p className="text-sm font-semibold">{type}</p>
+                                      <Badge variant="secondary">{values.length}</Badge>
+                                    </div>
+                                    <p className="font-mono text-xs text-muted-foreground" title={values.join("\n")}>
+                                      {values.length === 0 ? "-" : truncateText(values.join(" | "), 150)}
+                                    </p>
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-sm text-muted-foreground">No effective sources match the current filter.</p>
+                              )}
+                            </div>
+
+                            {filteredSourceRows.length > 12 ? (
+                              <div className="flex justify-end">
+                                <Button variant="outline" size="sm" onClick={() => setShowAllEffectiveSources((prev) => !prev)}>
+                                  {showAllEffectiveSources ? "Show less" : `Show more (${filteredSourceRows.length - 12})`}
+                                </Button>
+                              </div>
+                            ) : null}
+                          </TabsContent>
+
+                          <TabsContent value="health" className="space-y-3 pt-3">
+                            {sourceHealth.length > 0 ? (
+                              <>
+                                <div className="flex flex-wrap items-end gap-3">
+                                  <div className="min-w-[240px] flex-1 space-y-2">
+                                    <Label htmlFor="source-health-search">Filter failing sources</Label>
+                                    <Input
+                                      id="source-health-search"
+                                      placeholder="Search source, error, or hint"
+                                      value={sourceHealthSearch}
+                                      onChange={(event) => setSourceHealthSearch(event.target.value)}
+                                    />
+                                  </div>
+                                  <Badge variant="secondary">rows: {filteredSourceHealth.length}</Badge>
+                                </div>
+
+                                <div className="hidden overflow-auto rounded-md border md:block md:max-h-[500px]">
+                                  <Table>
+                                    <TableHeader className="sticky top-0 z-10 bg-card">
+                                      <TableRow>
+                                        <TableHead className="w-[34%]">Source</TableHead>
+                                        <TableHead className="w-[90px]">Failures</TableHead>
+                                        <TableHead className="w-[30%]">Last Error</TableHead>
+                                        <TableHead>Suggested Fix</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {sourceHealthVisible.map((item) => (
+                                        <TableRow key={`${item.kind}:${item.source}`} className="align-top">
+                                          <TableCell className="font-mono text-xs" title={item.source}>
+                                            {truncateText(item.source, 110)}
+                                          </TableCell>
+                                          <TableCell>{item.count}</TableCell>
+                                          <TableCell className="text-xs text-muted-foreground" title={item.last_error}>
+                                            {truncateText(item.last_error, 100)}
+                                          </TableCell>
+                                          <TableCell className="text-xs" title={item.hint}>
+                                            {truncateText(item.hint, 110)}
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                      {sourceHealthVisible.length === 0 ? (
+                                        <TableRow>
+                                          <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                                            No failing sources match the current filter.
+                                          </TableCell>
+                                        </TableRow>
+                                      ) : null}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+
+                                <div className="space-y-2 md:hidden">
+                                  {sourceHealthVisible.length > 0 ? (
+                                    sourceHealthVisible.map((item) => (
+                                      <div key={`mobile-health:${item.kind}:${item.source}`} className="rounded-lg border bg-muted/10 p-3">
+                                        <div className="mb-1 flex items-center justify-between gap-2">
+                                          <p className="truncate font-mono text-[11px]" title={item.source}>
+                                            {truncateText(item.source, 80)}
+                                          </p>
+                                          <Badge variant={item.count > 0 ? "warning" : "secondary"}>{item.count}</Badge>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground" title={item.last_error}>
+                                          {truncateText(item.last_error, 120)}
+                                        </p>
+                                        <p className="mt-1 text-xs" title={item.hint}>
+                                          {truncateText(item.hint, 120)}
+                                        </p>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <p className="text-sm text-muted-foreground">No failing sources match the current filter.</p>
+                                  )}
+                                </div>
+
+                                {filteredSourceHealth.length > 12 ? (
+                                  <div className="flex justify-end">
+                                    <Button variant="outline" size="sm" onClick={() => setShowAllSourceHealth((prev) => !prev)}>
+                                      {showAllSourceHealth ? "Show less" : `Show more (${filteredSourceHealth.length - 12})`}
+                                    </Button>
+                                  </div>
+                                ) : null}
+                              </>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">
+                                No source health issues detected in recent runs.
+                              </p>
+                            )}
+                          </TabsContent>
+                        </Tabs>
                       </CardContent>
                     </Card>
-
-                    {sourceHealth.length > 0 ? (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="font-display">Source Health</CardTitle>
-                          <CardDescription>
-                            Broken sources detected in recent runs. Fix these to improve source coverage.
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Source</TableHead>
-                                <TableHead>Failures (20 runs)</TableHead>
-                                <TableHead>Last Error</TableHead>
-                                <TableHead>Suggested Fix</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {sourceHealth.slice(0, 12).map((item) => (
-                                <TableRow key={`${item.kind}:${item.source}`}>
-                                  <TableCell className="font-mono text-xs">{item.source}</TableCell>
-                                  <TableCell>{item.count}</TableCell>
-                                  <TableCell className="text-xs text-muted-foreground">{item.last_error}</TableCell>
-                                  <TableCell className="text-xs">{item.hint}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </CardContent>
-                      </Card>
-                    ) : null}
                   </TabsContent>
 
                   <TabsContent value="profile" className="space-y-4">
