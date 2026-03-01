@@ -4,8 +4,9 @@ import argparse
 import importlib
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import os
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -180,6 +181,103 @@ def _parse_id_set(raw: str) -> set[str]:
     return {p.strip() for p in (raw or "").split(",") if p.strip()}
 
 
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        "+00:00", "Z"
+    )
+
+
+def _write_bot_health(
+    path: str,
+    *,
+    status: str,
+    poll_timeout: int,
+    consecutive_errors: int,
+    last_error: str,
+    last_ok_at: str,
+) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "status": status,
+        "updated_at": _utc_now_iso(),
+        "last_ok_at": last_ok_at,
+        "consecutive_errors": max(0, int(consecutive_errors)),
+        "poll_timeout_s": max(1, int(poll_timeout)),
+        "last_error": str(last_error or ""),
+    }
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=True), encoding="utf-8")
+    tmp.replace(p)
+
+
+def _parse_iso_utc(value: str) -> datetime:
+    raw = (value or "").strip()
+    if not raw:
+        raise ValueError("timestamp is required")
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(raw)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _cmd_bot_health_check(args: argparse.Namespace) -> int:
+    health_path = str(args.health_path or "").strip()
+    if not health_path:
+        print("bot_health_error: --health-path is required")
+        return 1
+    p = Path(health_path)
+    if not p.exists():
+        print(f"bot_health_error: missing health file at {health_path}")
+        return 1
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(f"bot_health_error: invalid health payload ({exc})")
+        return 1
+    if not isinstance(payload, dict):
+        print("bot_health_error: health payload is not an object")
+        return 1
+
+    status = str(payload.get("status", "")).strip().lower()
+    updated_at_raw = str(payload.get("updated_at", "")).strip()
+    if not updated_at_raw:
+        print("bot_health_error: missing updated_at")
+        return 1
+
+    try:
+        updated_at = _parse_iso_utc(updated_at_raw)
+    except Exception as exc:
+        print(f"bot_health_error: invalid updated_at ({exc})")
+        return 1
+
+    now = datetime.now(timezone.utc)
+    age = max(0.0, (now - updated_at.astimezone(timezone.utc)).total_seconds())
+    stale_seconds = max(5, int(args.stale_seconds))
+    if age > stale_seconds:
+        print(
+            f"bot_health_error: stale heartbeat age={int(age)}s threshold={stale_seconds}s"
+        )
+        return 1
+
+    consecutive_errors = int(payload.get("consecutive_errors", 0) or 0)
+    max_error_streak = max(1, int(args.max_error_streak))
+    if status == "error" and consecutive_errors > max_error_streak:
+        print(
+            "bot_health_error: error streak exceeded "
+            f"(current={consecutive_errors} threshold={max_error_streak})"
+        )
+        return 1
+
+    print(
+        "bot_health_ok: "
+        f"status={status or 'unknown'} age={int(age)}s errors={consecutive_errors}"
+    )
+    return 0
+
+
 def _cmd_bot(args: argparse.Namespace) -> int:
     profile = load_effective_profile(args.profile, args.profile_overlay)
     bot_token = (
@@ -213,6 +311,16 @@ def _cmd_bot(args: argparse.Namespace) -> int:
     )
 
     offset: int | None = None
+    last_ok_at = ""
+    consecutive_errors = 0
+    _write_bot_health(
+        args.health_path,
+        status="starting",
+        poll_timeout=args.poll_timeout,
+        consecutive_errors=0,
+        last_error="",
+        last_ok_at="",
+    )
     while True:
         try:
             updates = get_telegram_updates(
@@ -238,7 +346,26 @@ def _cmd_bot(args: argparse.Namespace) -> int:
                         response.callback_query_id,
                         response.callback_text or "",
                     )
+            consecutive_errors = 0
+            last_ok_at = _utc_now_iso()
+            _write_bot_health(
+                args.health_path,
+                status="ok",
+                poll_timeout=args.poll_timeout,
+                consecutive_errors=0,
+                last_error="",
+                last_ok_at=last_ok_at,
+            )
         except Exception as exc:
+            consecutive_errors += 1
+            _write_bot_health(
+                args.health_path,
+                status="error",
+                poll_timeout=args.poll_timeout,
+                consecutive_errors=consecutive_errors,
+                last_error=str(exc),
+                last_ok_at=last_ok_at,
+            )
             print(f"bot_error: {exc}")
             time.sleep(2)
 
@@ -300,7 +427,16 @@ def main() -> int:
         default=DEFAULT_RUN_LOCK_STALE_SECONDS,
     )
     bot.add_argument("--poll-timeout", type=int, default=30)
+    bot.add_argument("--health-path", default=".runtime/bot-health.json")
     bot.set_defaults(func=_cmd_bot)
+
+    bot_health = sub.add_parser(
+        "bot-health-check", help="Check bot health heartbeat for container liveness"
+    )
+    bot_health.add_argument("--health-path", default=".runtime/bot-health.json")
+    bot_health.add_argument("--stale-seconds", type=int, default=90)
+    bot_health.add_argument("--max-error-streak", type=int, default=5)
+    bot_health.set_defaults(func=_cmd_bot_health_check)
 
     web = sub.add_parser("web", help="Run config web API server")
     web.add_argument("--host", default=WEB_DEFAULT_HOST)

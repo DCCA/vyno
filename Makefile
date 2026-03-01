@@ -17,16 +17,16 @@ doctor:
 	$(DIGEST_CMD) --sources config/sources.yaml --sources-overlay data/sources.local.yaml --profile config/profile.yaml --profile-overlay data/profile.local.yaml --db digest-live.db doctor
 
 live:
-	$(DIGEST_CMD) --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db run
+	$(DIGEST_CMD) --sources config/sources.yaml --sources-overlay data/sources.local.yaml --profile config/profile.yaml --profile-overlay data/profile.local.yaml --db digest-live.db run
 
 schedule:
-	$(DIGEST_CMD) --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db schedule --time $(or $(TIME),07:00) --timezone $(or $(TZ),America/Sao_Paulo)
+	$(DIGEST_CMD) --sources config/sources.yaml --sources-overlay data/sources.local.yaml --profile config/profile.yaml --profile-overlay data/profile.local.yaml --db digest-live.db schedule --time $(or $(TIME),07:00) --timezone $(or $(TZ),America/Sao_Paulo)
 
 logs:
 	tail -f logs/digest.log
 
 bot:
-	$(DIGEST_CMD) --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db bot
+	$(DIGEST_CMD) --sources config/sources.yaml --sources-overlay data/sources.local.yaml --profile config/profile.yaml --profile-overlay data/profile.local.yaml --db digest-live.db bot
 
 web-api:
 	$(DIGEST_CMD) --sources config/sources.yaml --sources-overlay data/sources.local.yaml --profile config/profile.yaml --profile-overlay data/profile.local.yaml --db digest-live.db web --host $(or $(HOST),127.0.0.1) --port $(or $(PORT),8787)

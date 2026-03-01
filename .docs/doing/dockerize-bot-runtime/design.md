@@ -27,7 +27,8 @@ This preserves mutable state across restarts while keeping image immutable.
 ## Reliability Controls
 - Compose `restart: unless-stopped` for bot service.
 - Keep existing run-lock semantics (`.runtime/run.lock`) to prevent overlapping manual runs.
-- Add container `healthcheck` (process/command-level) and document operator checks.
+- Add heartbeat-based bot health state (`.runtime/bot-health.json`) updated by `digest bot`.
+- Add container `healthcheck` via `digest bot-health-check` to fail stale/error-streak states.
 
 ## Secrets & Env
 - Inject via `.env` and/or host env vars.

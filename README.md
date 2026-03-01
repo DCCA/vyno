@@ -72,7 +72,7 @@ make doctor
 - Scheduler with overrides: `make schedule TIME=08:30 TZ=America/New_York`
 - Tail logs: `make logs`
 - Run Telegram command bot:
-  - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db bot`
+  - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --sources-overlay data/sources.local.yaml --profile config/profile.yaml --profile-overlay data/profile.local.yaml --db digest-live.db bot`
 - Run config API directly via CLI:
   - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --sources-overlay data/sources.local.yaml --profile config/profile.yaml --profile-overlay data/profile.local.yaml --db digest-live.db web --host 127.0.0.1 --port 8787`
 - Start API + UI together (friendly default): `make app`
@@ -165,8 +165,10 @@ Container runtime state is persisted on host mounts:
 - `obsidian-vault/`
 
 ### Healthcheck
-`compose.yaml` defines a healthcheck for the bot container process command line.
+`compose.yaml` defines a heartbeat-based bot healthcheck using `digest bot-health-check`.
 Use `docker compose ps` to inspect health status.
+Manual check example:
+`PYTHONPATH=src ./bin/digest bot-health-check --health-path .runtime/bot-health.json`
 
 ## Configuration
 ### `config/sources.yaml`

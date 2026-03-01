@@ -17,4 +17,4 @@ RUN chmod +x /app/bin/digest \
     && mkdir -p /app/logs /app/.runtime
 
 ENTRYPOINT ["/app/bin/digest"]
-CMD ["--sources", "config/sources.yaml", "--sources-overlay", "data/sources.local.yaml", "--profile", "config/profile.yaml", "--db", "digest-live.db", "bot"]
+CMD ["--sources", "config/sources.yaml", "--sources-overlay", "data/sources.local.yaml", "--profile", "config/profile.yaml", "--profile-overlay", "data/profile.local.yaml", "--db", "digest-live.db", "bot"]

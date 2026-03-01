@@ -14,6 +14,8 @@ services:
         "data/sources.local.yaml",
         "--profile",
         "config/profile.yaml",
+        "--profile-overlay",
+        "data/profile.local.yaml",
         "--db",
         "digest-live.db",
         "bot",
@@ -29,11 +31,17 @@ services:
     healthcheck:
       test:
         [
-          "CMD-SHELL",
-          "tr '\\000' ' ' </proc/1/cmdline | grep -q 'digest.cli' && tr '\\000' ' ' </proc/1/cmdline | grep -q ' bot'",
+          "CMD",
+          "/app/bin/digest",
+          "bot-health-check",
+          "--health-path",
+          ".runtime/bot-health.json",
+          "--stale-seconds",
+          "120",
+          "--max-error-streak",
+          "8",
         ]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
-
+      start_period: 90s

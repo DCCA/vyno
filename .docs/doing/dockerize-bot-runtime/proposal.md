@@ -7,6 +7,7 @@ The digest bot currently depends on a local shell session and manual restarts. C
 - Define a Docker-based deployment plan for bot-first operations.
 - Specify container runtime requirements for persistence, secrets, restart behavior, and observability.
 - Define a phased implementation plan to reach stable 24/7 bot operation.
+- Record explicit keep/remove decision criteria for Docker runtime support (`decision.md`).
 
 ## Out of Scope
 - Migrating storage from SQLite to external databases.
