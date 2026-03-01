@@ -111,6 +111,56 @@ class TestTimelineStore(unittest.TestCase):
             self.assertEqual(notes[0]["labels"], ["github", "auth"])
             self.assertEqual(notes[0]["actions"], ["rotate token"])
 
+    def test_timeline_runs_include_orphan_event_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            store = SQLiteStore(str(db))
+            orphan_run_id = "web-request-run"
+            store.insert_timeline_event(
+                run_id=orphan_run_id,
+                event_index=0,
+                stage="queued",
+                severity="info",
+                message="Queued digest run",
+                elapsed_s=0.0,
+                details={"mode": "live"},
+            )
+            rows = store.list_timeline_runs(limit=10)
+            self.assertEqual(rows[0]["run_id"], orphan_run_id)
+            self.assertEqual(rows[0]["event_count"], 1)
+            self.assertIn(rows[0]["status"], {"running", "unknown"})
+            summary = store.timeline_summary(run_id=orphan_run_id)
+            self.assertEqual(summary["run_id"], orphan_run_id)
+            self.assertEqual(summary["event_count"], 1)
+
+    def test_reassign_timeline_run_id_moves_events_and_notes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            store = SQLiteStore(str(db))
+            old_run_id = "web-request-run"
+            new_run_id = "pipeline-run"
+            store.insert_timeline_event(
+                run_id=old_run_id,
+                event_index=0,
+                stage="queued",
+                severity="info",
+                message="Queued digest run",
+                elapsed_s=0.0,
+                details={"mode": "live"},
+            )
+            store.add_timeline_note(run_id=old_run_id, note="note", author="ops")
+            store.reassign_timeline_run_id(old_run_id=old_run_id, new_run_id=new_run_id)
+
+            old_events = store.list_timeline_events(run_id=old_run_id, limit=10)
+            new_events = store.list_timeline_events(run_id=new_run_id, limit=10)
+            self.assertEqual(len(old_events), 0)
+            self.assertEqual(len(new_events), 1)
+
+            old_notes = store.list_timeline_notes(run_id=old_run_id, limit=10)
+            new_notes = store.list_timeline_notes(run_id=new_run_id, limit=10)
+            self.assertEqual(len(old_notes), 0)
+            self.assertEqual(len(new_notes), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

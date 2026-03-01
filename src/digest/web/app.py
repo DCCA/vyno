@@ -283,6 +283,7 @@ def create_app(settings: WebSettings):
             run_progress[run_id] = {
                 "run_id": run_id,
                 "pipeline_run_id": "",
+                "_timeline_run_id": run_id,
                 "mode": mode,
                 "stage": "queued",
                 "stage_label": _run_stage_label("queued"),
@@ -333,10 +334,16 @@ def create_app(settings: WebSettings):
         }
 
         persist_payload: dict[str, Any] | None = None
+        timeline_reassign: tuple[str, str] | None = None
         with progress_lock:
             state = run_progress.get(run_id)
             if state is None:
                 return
+            timeline_run_id = str(state.get("_timeline_run_id", run_id) or run_id)
+            if pipeline_run_id and pipeline_run_id != timeline_run_id:
+                timeline_reassign = (timeline_run_id, pipeline_run_id)
+                timeline_run_id = pipeline_run_id
+                state["_timeline_run_id"] = timeline_run_id
 
             fetch_total = int(state.get("_fetch_total", 0) or 0)
             fetch_done = int(state.get("_fetch_done", 0) or 0)
@@ -390,6 +397,7 @@ def create_app(settings: WebSettings):
                 }
             )
             persist_payload = {
+                "timeline_run_id": timeline_run_id,
                 "event_index": next_event_index,
                 "ts_utc": updated_at,
                 "stage": stage,
@@ -398,9 +406,14 @@ def create_app(settings: WebSettings):
                 "elapsed_s": round(elapsed_s, 1),
                 "details": details,
             }
+        if timeline_reassign is not None:
+            timeline_store.reassign_timeline_run_id(
+                old_run_id=timeline_reassign[0],
+                new_run_id=timeline_reassign[1],
+            )
         if persist_payload is not None:
             timeline_store.insert_timeline_event(
-                run_id=run_id,
+                run_id=str(persist_payload["timeline_run_id"]),
                 event_index=int(persist_payload["event_index"]),
                 ts_utc=str(persist_payload["ts_utc"]),
                 stage=str(persist_payload["stage"]),
@@ -424,6 +437,7 @@ def create_app(settings: WebSettings):
             state = run_progress.get(run_id)
             if state is None:
                 return
+            timeline_run_id = str(state.get("_timeline_run_id", run_id) or run_id)
             details = dict(state.get("details", {}))
             if error:
                 details["error"] = error
@@ -443,6 +457,7 @@ def create_app(settings: WebSettings):
                 }
             )
             persist_payload = {
+                "timeline_run_id": timeline_run_id,
                 "event_index": next_event_index,
                 "ts_utc": now_iso,
                 "stage": stage,
@@ -453,7 +468,7 @@ def create_app(settings: WebSettings):
             }
         if persist_payload is not None:
             timeline_store.insert_timeline_event(
-                run_id=run_id,
+                run_id=str(persist_payload["timeline_run_id"]),
                 event_index=int(persist_payload["event_index"]),
                 ts_utc=str(persist_payload["ts_utc"]),
                 stage=str(persist_payload["stage"]),
@@ -940,7 +955,7 @@ def create_app(settings: WebSettings):
     def get_timeline_events(
         run_id: str,
         limit: int = 200,
-        after_event_index: int = 0,
+        after_event_index: int = -1,
         stage: str = "",
         severity: str = "",
         order: str = "asc",
@@ -959,7 +974,7 @@ def create_app(settings: WebSettings):
     def get_timeline_live(
         run_id: str | None = None,
         limit: int = 200,
-        after_event_index: int = 0,
+        after_event_index: int = -1,
         order: str = "asc",
     ) -> dict[str, Any]:
         target_run_id = str(run_id or "").strip()

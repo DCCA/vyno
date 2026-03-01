@@ -686,7 +686,7 @@ class SQLiteStore:
         *,
         run_id: str,
         limit: int = 200,
-        after_event_index: int = 0,
+        after_event_index: int = -1,
         stage: str = "",
         severity: str = "",
         order: str = "asc",
@@ -695,7 +695,7 @@ class SQLiteStore:
         if not rid:
             return []
         where = ["run_id = ?", "event_index > ?"]
-        params: list[object] = [rid, max(0, int(after_event_index))]
+        params: list[object] = [rid, max(-1, int(after_event_index))]
         stage_filter = stage.strip()
         severity_filter = severity.strip().lower()
         if stage_filter:
@@ -735,21 +735,29 @@ class SQLiteStore:
         with self._conn() as conn:
             rows = conn.execute(
                 (
-                    "SELECT r.run_id, r.status, r.started_at, r.window_start, r.window_end, "
-                    "(SELECT COUNT(*) FROM run_timeline_events e WHERE e.run_id = r.run_id) AS event_count "
-                    "FROM runs r ORDER BY r.started_at DESC LIMIT ?"
+                    "SELECT e.run_id, r.status, COALESCE(r.started_at, MIN(e.ts_utc)) AS started_at, "
+                    "r.window_start, r.window_end, "
+                    "COUNT(*) AS event_count, MAX(e.event_index) AS max_event_index "
+                    "FROM run_timeline_events e "
+                    "LEFT JOIN runs r ON r.run_id = e.run_id "
+                    "GROUP BY e.run_id, r.status, r.started_at, r.window_start, r.window_end "
+                    "ORDER BY started_at DESC, max_event_index DESC LIMIT ?"
                 ),
                 (max(1, min(500, int(limit))),),
             ).fetchall()
         out: list[dict[str, object]] = []
         for row in rows:
+            run_id = str(row[0])
+            status = str(row[1] or "").strip()
+            if not status:
+                status = self._infer_timeline_status(run_id)
             out.append(
                 {
-                    "run_id": str(row[0]),
-                    "status": str(row[1]),
-                    "started_at": str(row[2]),
-                    "window_start": str(row[3]),
-                    "window_end": str(row[4]),
+                    "run_id": run_id,
+                    "status": status or "unknown",
+                    "started_at": str(row[2] or ""),
+                    "window_start": str(row[3] or ""),
+                    "window_end": str(row[4] or ""),
                     "event_count": int(row[5] or 0),
                 }
             )
@@ -767,18 +775,20 @@ class SQLiteStore:
                 ),
                 (rid,),
             ).fetchone()
-            if run_row is None:
-                return {}
             counts_row = conn.execute(
                 (
                     "SELECT COUNT(*), "
                     "SUM(CASE WHEN severity = 'error' THEN 1 ELSE 0 END), "
                     "SUM(CASE WHEN severity = 'warn' THEN 1 ELSE 0 END), "
-                    "MAX(elapsed_s) "
+                    "MAX(elapsed_s), "
+                    "MIN(ts_utc) "
                     "FROM run_timeline_events WHERE run_id = ?"
                 ),
                 (rid,),
             ).fetchone()
+            event_count = int((counts_row[0] or 0) if counts_row else 0)
+            if event_count <= 0:
+                return {}
             last_row = conn.execute(
                 (
                     "SELECT stage, message, details_json "
@@ -789,17 +799,35 @@ class SQLiteStore:
             ).fetchone()
 
         details = _json_dict(last_row[2]) if last_row is not None else {}
-        source_errors = [
-            line.strip() for line in str(run_row[3] or "").splitlines() if line.strip()
-        ]
-        summary_errors = [
-            line.strip() for line in str(run_row[4] or "").splitlines() if line.strip()
-        ]
+        if run_row is not None:
+            source_errors = [
+                line.strip() for line in str(run_row[3] or "").splitlines() if line.strip()
+            ]
+            summary_errors = [
+                line.strip() for line in str(run_row[4] or "").splitlines() if line.strip()
+            ]
+            status = str(run_row[1] or "").strip() or self._infer_timeline_status(rid)
+            started_at = str(run_row[2] or "")
+        else:
+            source_errors = []
+            summary_errors = []
+            status = self._infer_timeline_status(rid, last_stage=str(last_row[0] or ""), last_details=details)
+            started_at = str((counts_row[4] if counts_row else "") or "")
+        source_error_count = (
+            len(source_errors)
+            if source_errors
+            else max(0, int(details.get("source_error_count") or 0))
+        )
+        summary_error_count = (
+            len(summary_errors)
+            if summary_errors
+            else max(0, int(details.get("summary_error_count") or 0))
+        )
         return {
-            "run_id": str(run_row[0]),
-            "status": str(run_row[1]),
-            "started_at": str(run_row[2]),
-            "event_count": int((counts_row[0] or 0) if counts_row else 0),
+            "run_id": rid,
+            "status": status or "unknown",
+            "started_at": started_at,
+            "event_count": event_count,
             "error_event_count": int((counts_row[1] or 0) if counts_row else 0),
             "warn_event_count": int((counts_row[2] or 0) if counts_row else 0),
             "duration_s": float((counts_row[3] or 0.0) if counts_row else 0.0),
@@ -809,8 +837,8 @@ class SQLiteStore:
             "must_read_count": int(details.get("must_read_count") or 0),
             "skim_count": int(details.get("skim_count") or 0),
             "video_count": int(details.get("video_count") or 0),
-            "source_error_count": len(source_errors),
-            "summary_error_count": len(summary_errors),
+            "source_error_count": source_error_count,
+            "summary_error_count": summary_error_count,
         }
 
     def add_timeline_note(
@@ -907,6 +935,57 @@ class SQLiteStore:
                 limit=max(1, min(2000, int(limit_notes))),
             ),
         }
+
+    def reassign_timeline_run_id(
+        self,
+        *,
+        old_run_id: str,
+        new_run_id: str,
+    ) -> None:
+        old_id = old_run_id.strip()
+        new_id = new_run_id.strip()
+        if not old_id or not new_id or old_id == new_id:
+            return
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE run_timeline_events SET run_id = ? WHERE run_id = ?",
+                (new_id, old_id),
+            )
+            conn.execute(
+                "UPDATE run_timeline_notes SET run_id = ? WHERE run_id = ?",
+                (new_id, old_id),
+            )
+
+    def _infer_timeline_status(
+        self,
+        run_id: str,
+        *,
+        last_stage: str = "",
+        last_details: dict[str, object] | None = None,
+    ) -> str:
+        details = last_details if isinstance(last_details, dict) else {}
+        stage = (last_stage or "").strip()
+        if not stage:
+            with self._conn() as conn:
+                row = conn.execute(
+                    (
+                        "SELECT stage, details_json FROM run_timeline_events "
+                        "WHERE run_id = ? ORDER BY event_index DESC LIMIT 1"
+                    ),
+                    (run_id,),
+                ).fetchone()
+            if row is None:
+                return "unknown"
+            stage = str(row[0] or "")
+            details = _json_dict(row[1])
+        if stage == "run_failed":
+            return "failed"
+        if stage == "run_finish":
+            status = str(details.get("status", "")).strip().lower()
+            if status in {"success", "partial", "failed", "running"}:
+                return status
+            return "success"
+        return "running"
 
 
 def _parse_dt(value: str) -> datetime | None:
