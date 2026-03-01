@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hmac
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,11 @@ import threading
 import uuid
 from typing import Any
 
+from digest.constants import (
+    DEFAULT_RUN_ID_LENGTH,
+    DEFAULT_RUN_LOCK_STALE_SECONDS,
+    WEB_PROGRESS_HISTORY_LIMIT,
+)
 from digest.config import parse_profile_dict, profile_to_dict
 from digest.logging_utils import get_run_logger
 from digest.ops.onboarding import (
@@ -59,6 +65,12 @@ DEFAULT_WEB_CORS_ORIGIN_REGEX = (
     r"|(172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+))(:\d+)?$"
 )
 
+DEFAULT_WEB_API_AUTH_MODE = "required"
+DEFAULT_WEB_API_TOKEN_HEADER = "X-Digest-Api-Token"
+ALLOWED_WEB_API_AUTH_MODES = {"required", "optional", "off"}
+REDACTED_SECRET = "__REDACTED__"
+SECRET_KEY_RE = re.compile(r"(token|secret|password|api[_-]?key)", re.IGNORECASE)
+
 
 def _cors_allowed_origins() -> list[str]:
     raw = str(os.getenv("DIGEST_WEB_CORS_ORIGINS", "") or "").strip()
@@ -74,6 +86,100 @@ def _cors_allow_origin_regex() -> str:
     if raw:
         return raw
     return DEFAULT_WEB_CORS_ORIGIN_REGEX
+
+
+def _web_api_auth_mode() -> str:
+    raw = (
+        str(os.getenv("DIGEST_WEB_API_AUTH_MODE", DEFAULT_WEB_API_AUTH_MODE) or "")
+        .strip()
+        .lower()
+    )
+    if raw in ALLOWED_WEB_API_AUTH_MODES:
+        return raw
+    return DEFAULT_WEB_API_AUTH_MODE
+
+
+def _web_api_token() -> str:
+    return str(os.getenv("DIGEST_WEB_API_TOKEN", "") or "").strip()
+
+
+def _web_api_token_header() -> str:
+    raw = str(
+        os.getenv("DIGEST_WEB_API_TOKEN_HEADER", DEFAULT_WEB_API_TOKEN_HEADER) or ""
+    ).strip()
+    if not raw:
+        return DEFAULT_WEB_API_TOKEN_HEADER
+    return raw
+
+
+def _api_auth_decision(
+    *,
+    path: str,
+    method: str,
+    mode: str,
+    configured_token: str,
+    presented_token: str,
+) -> tuple[bool, int, str]:
+    if not path.startswith("/api/"):
+        return True, 200, ""
+    if method.upper() == "OPTIONS":
+        return True, 200, ""
+    if path == "/api/health":
+        return True, 200, ""
+    if mode == "off":
+        return True, 200, ""
+    if mode == "required" and not configured_token:
+        return (
+            False,
+            503,
+            "DIGEST_WEB_API_TOKEN is required when DIGEST_WEB_API_AUTH_MODE=required",
+        )
+    if configured_token:
+        if not presented_token:
+            return False, 401, "missing API token"
+        if not hmac.compare_digest(presented_token, configured_token):
+            return False, 401, "invalid API token"
+    return True, 200, ""
+
+
+def _is_secret_key(key: str) -> bool:
+    return bool(SECRET_KEY_RE.search((key or "").strip()))
+
+
+def _redact_secrets(value: Any) -> Any:
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for key, item in value.items():
+            if _is_secret_key(str(key)):
+                if isinstance(item, str):
+                    out[key] = REDACTED_SECRET if item else ""
+                elif item is None:
+                    out[key] = None
+                else:
+                    out[key] = REDACTED_SECRET
+                continue
+            out[key] = _redact_secrets(item)
+        return out
+    if isinstance(value, list):
+        return [_redact_secrets(item) for item in value]
+    return value
+
+
+def _rehydrate_redacted_value(candidate: Any, current: Any) -> Any:
+    if isinstance(candidate, str) and candidate == REDACTED_SECRET:
+        return current
+    if isinstance(candidate, dict) and isinstance(current, dict):
+        out_dict: dict[str, Any] = {}
+        for key, item in candidate.items():
+            out_dict[key] = _rehydrate_redacted_value(item, current.get(key))
+        return out_dict
+    if isinstance(candidate, list) and isinstance(current, list):
+        out_list: list[Any] = []
+        for idx, item in enumerate(candidate):
+            ref = current[idx] if idx < len(current) else None
+            out_list.append(_rehydrate_redacted_value(item, ref))
+        return out_list
+    return candidate
 
 
 def _web_live_run_options(*, trigger: str) -> dict[str, bool]:
@@ -98,21 +204,26 @@ class WebSettings:
     profile_overlay_path: str
     db_path: str
     run_lock_path: str
-    run_lock_stale_seconds: int = 21600
+    run_lock_stale_seconds: int = DEFAULT_RUN_LOCK_STALE_SECONDS
     history_dir: str = ".runtime/config-history"
     onboarding_state_path: str = ".runtime/onboarding-state.json"
 
 
 def create_app(settings: WebSettings):
     try:
-        from fastapi import Body, FastAPI, HTTPException
+        from fastapi import Body, FastAPI, HTTPException, Request
         from fastapi.middleware.cors import CORSMiddleware
+        from fastapi.responses import JSONResponse
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
             "FastAPI and pydantic are required for web mode. Install optional web deps."
         ) from exc
 
     app = FastAPI(title="Digest Config Console API", version="0.1.0")
+    auth_mode = _web_api_auth_mode()
+    auth_token = _web_api_token()
+    auth_header = _web_api_token_header()
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_cors_allowed_origins(),
@@ -120,6 +231,19 @@ def create_app(settings: WebSettings):
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def require_api_token(request: Request, call_next: Any) -> Any:
+        allowed, status_code, detail = _api_auth_decision(
+            path=request.url.path,
+            method=request.method,
+            mode=auth_mode,
+            configured_token=auth_token,
+            presented_token=str(request.headers.get(auth_header, "") or "").strip(),
+        )
+        if not allowed:
+            return JSONResponse(status_code=status_code, content={"detail": detail})
+        return await call_next(request)
 
     lock = RunLock(
         settings.run_lock_path, stale_seconds=settings.run_lock_stale_seconds
@@ -147,7 +271,7 @@ def create_app(settings: WebSettings):
             run_progress_order.remove(run_id)
         run_progress_order.append(run_id)
         latest_progress_run_id = run_id
-        while len(run_progress_order) > 40:
+        while len(run_progress_order) > WEB_PROGRESS_HISTORY_LIMIT:
             stale = run_progress_order.pop(0)
             run_progress.pop(stale, None)
 
@@ -384,26 +508,31 @@ def create_app(settings: WebSettings):
         effective = load_effective_profile(
             settings.profile_path, settings.profile_overlay_path
         )
-        return {"profile": profile_to_dict(effective)}
+        return {"profile": _redact_secrets(profile_to_dict(effective))}
 
     @app.post("/api/config/profile/validate")
     def post_profile_validate(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         profile_data = payload.get("profile")
         if not isinstance(profile_data, dict):
             raise HTTPException(status_code=400, detail="profile object is required")
-        validated = parse_profile_dict(profile_data)
-        return {"valid": True, "profile": profile_to_dict(validated)}
+        current = profile_to_dict(
+            load_effective_profile(settings.profile_path, settings.profile_overlay_path)
+        )
+        hydrated = _rehydrate_redacted_value(profile_data, current)
+        validated = parse_profile_dict(hydrated)
+        return {"valid": True, "profile": _redact_secrets(profile_to_dict(validated))}
 
     @app.post("/api/config/profile/diff")
     def post_profile_diff(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         profile_data = payload.get("profile")
         if not isinstance(profile_data, dict):
             raise HTTPException(status_code=400, detail="profile object is required")
-        validated = parse_profile_dict(profile_data)
-        candidate = profile_to_dict(validated)
         current = profile_to_dict(
             load_effective_profile(settings.profile_path, settings.profile_overlay_path)
         )
+        hydrated = _rehydrate_redacted_value(profile_data, current)
+        validated = parse_profile_dict(hydrated)
+        candidate = profile_to_dict(validated)
         return {
             "diff": _dict_diff(current, candidate),
         }
@@ -413,10 +542,14 @@ def create_app(settings: WebSettings):
         profile_data = payload.get("profile")
         if not isinstance(profile_data, dict):
             raise HTTPException(status_code=400, detail="profile object is required")
+        current = profile_to_dict(
+            load_effective_profile(settings.profile_path, settings.profile_overlay_path)
+        )
+        hydrated = _rehydrate_redacted_value(profile_data, current)
         overlay = save_profile_overlay(
             settings.profile_path,
             settings.profile_overlay_path,
-            profile_data,
+            hydrated,
         )
         _save_snapshot(
             settings,
@@ -444,7 +577,7 @@ def create_app(settings: WebSettings):
                 "outputs",
                 details="obsidian",
             )
-        return {"saved": True, "overlay": overlay}
+        return {"saved": True, "overlay": _redact_secrets(overlay)}
 
     @app.get("/api/config/effective")
     def get_effective() -> dict[str, Any]:
@@ -469,7 +602,7 @@ def create_app(settings: WebSettings):
                 if sources_cfg.x_inbox_path
                 else [],
             },
-            "profile": profile_to_dict(profile_cfg),
+            "profile": _redact_secrets(profile_to_dict(profile_cfg)),
         }
 
     @app.get("/api/config/history")
@@ -504,6 +637,11 @@ def create_app(settings: WebSettings):
         data = json.loads(path.read_text(encoding="utf-8"))
         sources_overlay = data.get("sources_overlay", {})
         profile_overlay = data.get("profile_overlay", {})
+        current_profile_overlay = _read_yaml_dict(settings.profile_overlay_path)
+        profile_overlay = _rehydrate_redacted_value(
+            profile_overlay,
+            current_profile_overlay,
+        )
         _write_yaml_dict(settings.sources_overlay_path, sources_overlay)
         _write_yaml_dict(settings.profile_overlay_path, profile_overlay)
         _save_snapshot(
@@ -512,7 +650,7 @@ def create_app(settings: WebSettings):
         return {"rolled_back": True}
 
     def _start_live_run() -> dict[str, Any]:
-        run_request_id = uuid.uuid4().hex[:12]
+        run_request_id = uuid.uuid4().hex[:DEFAULT_RUN_ID_LENGTH]
         acquired, current = lock.acquire(run_request_id)
         if not acquired and current is not None:
             return {
@@ -943,10 +1081,14 @@ def _save_snapshot(
         "action": action,
         "details": details,
         "sources_overlay": _read_yaml_dict(settings.sources_overlay_path),
-        "profile_overlay": _read_yaml_dict(settings.profile_overlay_path),
-        "effective_profile": load_effective_profile_dict(
-            settings.profile_path,
-            settings.profile_overlay_path,
+        "profile_overlay": _redact_secrets(
+            _read_yaml_dict(settings.profile_overlay_path)
+        ),
+        "effective_profile": _redact_secrets(
+            load_effective_profile_dict(
+                settings.profile_path,
+                settings.profile_overlay_path,
+            )
         ),
         "effective_sources": list_sources(
             settings.sources_path,
