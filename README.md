@@ -47,12 +47,17 @@ pip install -r requirements.txt
   - `data/sources.local.yaml`
   - `data/profile.local.yaml` (copy from `data/profile.local.example.yaml`)
 
-4. Run once:
+4. Start the local app (API + UI):
+```bash
+make app
+```
+
+5. Run once:
 ```bash
 make live
 ```
 
-5. Run setup preflight (recommended before bot/schedule):
+6. Run setup preflight (recommended before bot/schedule):
 ```bash
 make doctor
 ```
@@ -68,6 +73,7 @@ make doctor
   - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --profile config/profile.yaml --db digest-live.db bot`
 - Run config API directly via CLI:
   - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --sources-overlay data/sources.local.yaml --profile config/profile.yaml --profile-overlay data/profile.local.yaml --db digest-live.db web --host 127.0.0.1 --port 8787`
+- Start API + UI together (friendly default): `make app`
 - Run config web API (for Vite UI): `make web-api`
 - Run config web UI (Vite + shadcn + Tailwind): `make web-ui`
 - Docker operations:
@@ -79,6 +85,10 @@ make doctor
   - Stop services: `make docker-down`
 
 ## Config Web Console (Vite + shadcn + Tailwind)
+- One-command startup: `make app`
+  - starts API on `http://127.0.0.1:8787`
+  - starts UI on `http://127.0.0.1:5173`
+  - press `Ctrl+C` to stop both
 - API server: `make web-api` (serves at `http://127.0.0.1:8787` by default)
 - UI dev server: `make web-ui` (Vite at `http://127.0.0.1:5173`)
 - UI build: `make web-ui-build`
@@ -92,7 +102,7 @@ make doctor
   - `VITE_API_BASE=http://127.0.0.1:8787 npm --prefix web run dev`
 
 ## Recommended Onboarding Flow
-1. Start API + UI (`make web-api` and `make web-ui`).
+1. Start API + UI (`make app`).
 2. Open the Onboarding tab and run preflight.
 3. Fix any failing checks and optional warnings you care about.
 4. Apply a source pack (or configure sources manually).

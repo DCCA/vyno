@@ -1,4 +1,4 @@
-.PHONY: test doctor live schedule logs bot web-api web-ui web-ui-build docker-build docker-up docker-down docker-logs docker-ps docker-restart
+.PHONY: test doctor live schedule logs bot web-api web-ui web-ui-build app docker-build docker-up docker-down docker-logs docker-ps docker-restart
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && echo 1 || echo 0)
 
@@ -36,6 +36,9 @@ web-ui:
 
 web-ui-build:
 	npm --prefix web run build
+
+app:
+	./scripts/start-app.sh
 
 docker-build:
 	docker compose build digest-bot
