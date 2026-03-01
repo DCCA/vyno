@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
+from digest.constants import DEFAULT_RUN_ID_LENGTH
 from digest.logging_utils import get_run_logger
 from digest.ops.profile_registry import load_effective_profile
 from digest.ops.run_lock import RunLock
@@ -320,7 +321,7 @@ def _render_source_list(rows: dict[str, list[str]]) -> str:
 
 
 def _trigger_run(ctx: CommandContext, chat_id: str) -> str:
-    run_id = uuid.uuid4().hex[:12]
+    run_id = uuid.uuid4().hex[:DEFAULT_RUN_ID_LENGTH]
     acquired, current = ctx.lock.acquire(run_id)
     if not acquired and current is not None:
         return f"Run already active: {current.run_id} (started {current.started_at})"

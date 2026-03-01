@@ -64,6 +64,8 @@ make doctor
 
 ## Common Commands
 - Run tests: `make test`
+- Run security checks (baseline + high-severity scan): `make security-check`
+- Run extended security checks (includes Semgrep advisory): `make security-check-extended`
 - Run onboarding preflight checks: `make doctor`
 - Run once (live): `make live`
 - Run scheduler: `make schedule`
@@ -76,6 +78,9 @@ make doctor
 - Start API + UI together (friendly default): `make app`
 - Run config web API (for Vite UI): `make web-api`
 - Run config web UI (Vite + shadcn + Tailwind): `make web-ui`
+  - when running separately, set the same API token in both shells:
+    - API shell: `DIGEST_WEB_API_TOKEN=dev-local-token make web-api`
+    - UI shell: `VITE_WEB_API_TOKEN=dev-local-token make web-ui`
 - Docker operations:
   - Build image: `make docker-build`
   - Start bot service: `make docker-up`
@@ -88,6 +93,7 @@ make doctor
 - One-command startup: `make app`
   - starts API on `http://127.0.0.1:8787`
   - starts UI on `http://127.0.0.1:5173`
+  - generates a session API token automatically when required auth is enabled
   - press `Ctrl+C` to stop both
 - API server: `make web-api` (serves at `http://127.0.0.1:8787` by default)
 - UI dev server: `make web-ui` (Vite at `http://127.0.0.1:5173`)
@@ -100,6 +106,10 @@ make doctor
 - Source health panel shows broken sources from recent runs with suggested fixes.
 - Optional API base override for UI:
   - `VITE_API_BASE=http://127.0.0.1:8787 npm --prefix web run dev`
+- API auth controls:
+  - `DIGEST_WEB_API_AUTH_MODE=required|optional|off` (default: `required`)
+  - `DIGEST_WEB_API_TOKEN=<token>`
+  - `DIGEST_WEB_API_TOKEN_HEADER=<header-name>` (default: `X-Digest-Api-Token`)
 
 ## Recommended Onboarding Flow
 1. Start API + UI (`make app`).
@@ -208,6 +218,7 @@ Most used:
 - `OPENAI_API_KEY`
 - `GITHUB_TOKEN` (recommended for GitHub API rate limits)
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+- `DIGEST_WEB_API_AUTH_MODE`, `DIGEST_WEB_API_TOKEN` (web config API auth)
 - Bot admin controls:
   - `TELEGRAM_ADMIN_CHAT_IDS` (comma-separated)
   - `TELEGRAM_ADMIN_USER_IDS` (comma-separated)
@@ -258,6 +269,14 @@ Runtime profile edits from the web console are persisted in `data/profile.local.
 - Never commit real secrets to git.
 - Use `.env` locally (ignored by `.gitignore`).
 - Keep inbox/runtime files private; use tracked templates (`.env.example`, `data/x_inbox.example.txt`) for sharing.
+- Run `make security-check` before opening PRs.
+- `make security-check` policy:
+  - blocks new potential secrets using `.secrets.baseline`
+  - fails on Bandit high-severity findings (`-lll`)
+  - enforces Ruff syntax/runtime safety rules (`E9,F63,F7,F82`)
+- Use `make security-check-extended` for advisory Semgrep sweeps (`p/secrets`, `p/python`).
+- Update baseline intentionally when expected fixtures trigger secret detectors:
+  - `uvx --from detect-secrets detect-secrets scan $(git ls-files --cached --others --exclude-standard) > .secrets.baseline`
 
 ## Known Limitations
 - In restricted network environments, source fetches may fail and runs can be `partial` or `failed`.

@@ -5,6 +5,7 @@ import os
 import urllib.error
 import urllib.request
 
+from digest.constants import DEFAULT_OPENAI_MODEL
 from digest.models import Item, Score
 
 TOPIC_VOCAB = [
@@ -34,7 +35,7 @@ FORMAT_VOCAB = [
 class ResponsesAPIScorerTagger:
     provider = "agent"
 
-    def __init__(self, model: str = "gpt-5.1-codex-mini", timeout: int = 30) -> None:
+    def __init__(self, model: str = DEFAULT_OPENAI_MODEL, timeout: int = 30) -> None:
         self.model = model
         self.timeout = timeout
         self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
@@ -86,8 +87,14 @@ class ResponsesAPIScorerTagger:
                             "quality": {"type": "number"},
                             "novelty": {"type": "number"},
                             "total": {"type": "number"},
-                            "topic_tags": {"type": "array", "items": {"type": "string"}},
-                            "format_tags": {"type": "array", "items": {"type": "string"}},
+                            "topic_tags": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "format_tags": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
                             "tags": {"type": "array", "items": {"type": "string"}},
                             "reason": {"type": "string"},
                         },
@@ -141,7 +148,9 @@ class ResponsesAPIScorerTagger:
 
         topic_tags = _normalize_vocab_tags(parsed.get("topic_tags", []), TOPIC_VOCAB)
         format_tags = _normalize_vocab_tags(parsed.get("format_tags", []), FORMAT_VOCAB)
-        tags = _normalize_free_tags(parsed.get("tags", []), fallback=topic_tags + format_tags)
+        tags = _normalize_free_tags(
+            parsed.get("tags", []), fallback=topic_tags + format_tags
+        )
         reason = str(parsed.get("reason", "")).strip()[:280]
 
         return Score(

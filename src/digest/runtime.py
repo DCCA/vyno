@@ -9,6 +9,12 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
+from digest.constants import (
+    DEFAULT_RUN_ID_LENGTH,
+    DEFAULT_SCORE_CACHE_MAX_AGE_HOURS,
+    DEFAULT_WINDOW_HOURS,
+    DIGEST_MUST_READ_LIMIT,
+)
 from digest.config import ProfileConfig, SourceConfig
 from digest.connectors.github import fetch_github_items, normalize_github_org
 from digest.connectors.rss import fetch_rss_items
@@ -52,7 +58,7 @@ def run_digest(
     logger: logging.Logger | logging.LoggerAdapter | None = None,
     progress_cb: ProgressCallback | None = None,
 ) -> RunReport:
-    run_id = uuid.uuid4().hex[:12]
+    run_id = uuid.uuid4().hex[:DEFAULT_RUN_ID_LENGTH]
     run_logger = logger or get_run_logger(run_id)
     now = datetime.now(tz=timezone.utc)
     run_started_at = now
@@ -75,7 +81,7 @@ def run_digest(
         except Exception:
             return
 
-    window_start = (now - timedelta(hours=24)).isoformat()
+    window_start = (now - timedelta(hours=DEFAULT_WINDOW_HOURS)).isoformat()
     if use_last_completed_window:
         window_start = store.last_completed_window_end() or window_start
     window_end = now.isoformat()
@@ -519,7 +525,7 @@ def run_digest(
             item.hash,
             profile.openai_model,
             item_id=item.id,
-            max_age_hours=24,
+            max_age_hours=DEFAULT_SCORE_CACHE_MAX_AGE_HOURS,
         )
         if cached_score is not None:
             cache_hits += 1
@@ -638,7 +644,10 @@ def run_digest(
 
     if profile.quality_repair_enabled and ranked_non_videos and sections.must_read:
         candidate_pool = ranked_non_videos[: profile.quality_repair_candidate_pool_size]
-        if len(candidate_pool) >= 5 and len(sections.must_read) >= 5:
+        if (
+            len(candidate_pool) >= DIGEST_MUST_READ_LIMIT
+            and len(sections.must_read) >= DIGEST_MUST_READ_LIMIT
+        ):
             before_ids = [si.item.id for si in sections.must_read]
             quality_model = profile.quality_repair_model or profile.openai_model
             try:

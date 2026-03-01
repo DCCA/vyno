@@ -7,6 +7,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+from digest.constants import GITHUB_DEFAULT_PER_PAGE
 from digest.models import Item, ItemType
 
 API_BASE = "https://api.github.com"
@@ -230,7 +231,7 @@ def _fetch_repo_releases(
     *,
     max_age_days: int,
 ) -> list[Item]:
-    path = f"/repos/{repo}/releases?per_page=5"
+    path = f"/repos/{repo}/releases?per_page={GITHUB_DEFAULT_PER_PAGE}"
     data = _request_json(path, token, timeout)
     out: list[Item] = []
     for rel in data if isinstance(data, list) else []:
@@ -264,7 +265,7 @@ def _fetch_repo_issues_and_prs(
     *,
     max_age_days: int,
 ) -> list[Item]:
-    path = f"/repos/{repo}/issues?state=open&per_page=5"
+    path = f"/repos/{repo}/issues?state=open&per_page={GITHUB_DEFAULT_PER_PAGE}"
     data = _request_json(path, token, timeout)
     out: list[Item] = []
     for issue in data if isinstance(data, list) else []:
@@ -308,7 +309,7 @@ def _search_repos_by_topic(
     max_age_days: int,
 ) -> list[Item]:
     q = urllib.parse.quote_plus(f"topic:{topic}")
-    path = f"/search/repositories?q={q}&sort=updated&order=desc&per_page=5"
+    path = f"/search/repositories?q={q}&sort=updated&order=desc&per_page={GITHUB_DEFAULT_PER_PAGE}"
     data = _request_json(path, token, timeout)
     out: list[Item] = []
     for repo in data.get("items", []) if isinstance(data, dict) else []:
@@ -353,7 +354,7 @@ def _search_issues_and_prs(
     max_age_days: int,
 ) -> list[Item]:
     q = urllib.parse.quote_plus(query)
-    path = f"/search/issues?q={q}&sort=updated&order=desc&per_page=5"
+    path = f"/search/issues?q={q}&sort=updated&order=desc&per_page={GITHUB_DEFAULT_PER_PAGE}"
     data = _request_json(path, token, timeout)
     out: list[Item] = []
     for issue in data.get("items", []) if isinstance(data, dict) else []:

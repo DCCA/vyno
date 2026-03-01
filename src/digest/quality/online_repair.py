@@ -9,6 +9,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from digest.constants import DEFAULT_OPENAI_MODEL, DIGEST_MUST_READ_LIMIT
 from digest.models import DigestSections, ScoredItem
 
 FeatureKey = tuple[str, str]
@@ -26,7 +27,7 @@ class QualityRepairResult:
 class ResponsesAPIQualityRepair:
     provider = "openai_responses"
 
-    def __init__(self, model: str = "gpt-5.1-codex-mini", timeout: int = 30) -> None:
+    def __init__(self, model: str = DEFAULT_OPENAI_MODEL, timeout: int = 30) -> None:
         self.model = model
         self.timeout = timeout
         self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
@@ -39,13 +40,15 @@ class ResponsesAPIQualityRepair:
         candidate_pool: list[ScoredItem],
     ) -> QualityRepairResult:
         current_ids = [si.item.id for si in current_must_read]
-        if len(current_ids) < 5:
+        if len(current_ids) < DIGEST_MUST_READ_LIMIT:
             raise RuntimeError(
-                "Quality repair requires at least 5 current must-read items"
+                f"Quality repair requires at least {DIGEST_MUST_READ_LIMIT} current must-read items"
             )
         pool_ids = [si.item.id for si in candidate_pool]
-        if len(pool_ids) < 5:
-            raise RuntimeError("Quality repair requires candidate pool size >= 5")
+        if len(pool_ids) < DIGEST_MUST_READ_LIMIT:
+            raise RuntimeError(
+                f"Quality repair requires candidate pool size >= {DIGEST_MUST_READ_LIMIT}"
+            )
 
         payload = {
             "model": self.model,
@@ -58,7 +61,7 @@ class ResponsesAPIQualityRepair:
                             "text": (
                                 "You are an editor for an AI daily digest. "
                                 "Assess Must-read quality and propose a repaired Must-read list "
-                                "of exactly 5 ids selected only from the provided candidate pool. "
+                                f"of exactly {DIGEST_MUST_READ_LIMIT} ids selected only from the provided candidate pool. "
                                 "Prioritize practical impact, novelty, source diversity, and reduced redundancy."
                             ),
                         }
@@ -90,8 +93,8 @@ class ResponsesAPIQualityRepair:
                             "repaired_must_read_ids": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "minItems": 5,
-                                "maxItems": 5,
+                                "minItems": DIGEST_MUST_READ_LIMIT,
+                                "maxItems": DIGEST_MUST_READ_LIMIT,
                             },
                         },
                         "required": [
@@ -129,7 +132,7 @@ class ResponsesAPIQualityRepair:
         repaired_ids = _normalize_repaired_ids(parsed.get("repaired_must_read_ids", []))
 
         allowed = set(pool_ids)
-        if len(repaired_ids) != 5:
+        if len(repaired_ids) != DIGEST_MUST_READ_LIMIT:
             raise RuntimeError(
                 "Quality repair invalid schema: repaired_must_read_ids size"
             )
@@ -211,15 +214,15 @@ def compute_repair_feature_deltas(
     after_set = set(after_ids)
     promoted = after_set - before_set
     demoted = before_set - after_set
-    deltas: Counter[FeatureKey] = Counter()
+    deltas: dict[FeatureKey, float] = {}
 
     for item_id in promoted:
         for feature in feature_map.get(item_id, []):
-            deltas[feature] += step
+            deltas[feature] = float(deltas.get(feature, 0.0)) + step
 
     for item_id in demoted:
         for feature in feature_map.get(item_id, []):
-            deltas[feature] -= step
+            deltas[feature] = float(deltas.get(feature, 0.0)) - step
 
     return {k: float(v) for k, v in deltas.items() if v != 0}
 
@@ -290,7 +293,7 @@ def _quality_eval_input(
         "current_must_read": [_item_payload(si) for si in current_must_read],
         "candidate_pool": [_item_payload(si) for si in candidate_pool],
         "selection_policy": {
-            "must_read_count": 5,
+            "must_read_count": DIGEST_MUST_READ_LIMIT,
             "prefer_source_diversity": True,
             "avoid_redundant_theme_overlap": True,
             "prefer_actionable_and_specific_items": True,

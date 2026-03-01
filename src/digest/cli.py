@@ -9,6 +9,11 @@ import os
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from digest.constants import (
+    DEFAULT_RUN_LOCK_STALE_SECONDS,
+    WEB_DEFAULT_HOST,
+    WEB_DEFAULT_PORT,
+)
 from digest.config import load_dotenv
 from digest.ops.onboarding import OnboardingSettings, run_preflight
 from digest.ops.profile_registry import load_effective_profile
@@ -289,15 +294,23 @@ def main() -> int:
 
     bot = sub.add_parser("bot", help="Run Telegram command bot worker")
     bot.add_argument("--run-lock-path", default=".runtime/run.lock")
-    bot.add_argument("--run-lock-stale-seconds", type=int, default=21600)
+    bot.add_argument(
+        "--run-lock-stale-seconds",
+        type=int,
+        default=DEFAULT_RUN_LOCK_STALE_SECONDS,
+    )
     bot.add_argument("--poll-timeout", type=int, default=30)
     bot.set_defaults(func=_cmd_bot)
 
     web = sub.add_parser("web", help="Run config web API server")
-    web.add_argument("--host", default="127.0.0.1")
-    web.add_argument("--port", type=int, default=8787)
+    web.add_argument("--host", default=WEB_DEFAULT_HOST)
+    web.add_argument("--port", type=int, default=WEB_DEFAULT_PORT)
     web.add_argument("--run-lock-path", default=".runtime/run.lock")
-    web.add_argument("--run-lock-stale-seconds", type=int, default=21600)
+    web.add_argument(
+        "--run-lock-stale-seconds",
+        type=int,
+        default=DEFAULT_RUN_LOCK_STALE_SECONDS,
+    )
     web.add_argument("--history-dir", default=".runtime/config-history")
     web.add_argument(
         "--onboarding-state-path", default=".runtime/onboarding-state.json"

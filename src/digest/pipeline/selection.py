@@ -2,6 +2,12 @@ from __future__ import annotations
 
 import urllib.parse
 
+from digest.constants import (
+    DIGEST_MUST_READ_LIMIT,
+    DIGEST_SKIM_LIMIT,
+    DIGEST_TOTAL_LIMIT,
+    DIGEST_VIDEO_LIMIT,
+)
 from digest.models import DigestSections, ScoredItem
 
 
@@ -25,18 +31,18 @@ def select_digest_sections(
     must_read_max_per_source: int = 2,
 ) -> DigestSections:
     ranked = rank_scored_items(scored_items, rank_overrides=rank_overrides)
-    videos = [i for i in ranked if i.item.type == "video"][:5]
+    videos = [i for i in ranked if i.item.type == "video"][:DIGEST_VIDEO_LIMIT]
     non_videos = [i for i in ranked if i.item.type != "video"]
     must_read = _select_must_read(non_videos, max_per_source=must_read_max_per_source)
     must_read_ids = {item.item.id for item in must_read}
-    skim = [i for i in non_videos if i.item.id not in must_read_ids][:10]
+    skim = [i for i in non_videos if i.item.id not in must_read_ids][:DIGEST_SKIM_LIMIT]
 
     total = must_read + skim + videos
-    total = total[:20]
+    total = total[:DIGEST_TOTAL_LIMIT]
 
-    must_read = [i for i in total if i in must_read][:5]
-    skim = [i for i in total if i in skim][:10]
-    videos = [i for i in total if i in videos][:5]
+    must_read = [i for i in total if i in must_read][:DIGEST_MUST_READ_LIMIT]
+    skim = [i for i in total if i in skim][:DIGEST_SKIM_LIMIT]
+    videos = [i for i in total if i in videos][:DIGEST_VIDEO_LIMIT]
 
     return DigestSections(must_read=must_read, skim=skim, videos=videos)
 
@@ -47,7 +53,7 @@ def _select_must_read(
     max_per_source: int,
 ) -> list[ScoredItem]:
     if max_per_source <= 0:
-        return non_videos[:5]
+        return non_videos[:DIGEST_MUST_READ_LIMIT]
 
     selected: list[ScoredItem] = []
     selected_ids: set[str] = set()
@@ -60,14 +66,14 @@ def _select_must_read(
         selected.append(scored)
         selected_ids.add(scored.item.id)
         source_counts[source] = source_counts.get(source, 0) + 1
-        if len(selected) >= 5:
+        if len(selected) >= DIGEST_MUST_READ_LIMIT:
             return selected
 
     for scored in non_videos:
         if scored.item.id in selected_ids:
             continue
         selected.append(scored)
-        if len(selected) >= 5:
+        if len(selected) >= DIGEST_MUST_READ_LIMIT:
             break
 
     return selected

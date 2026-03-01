@@ -6,6 +6,7 @@ import time
 import urllib.error
 import urllib.request
 
+from digest.constants import DEFAULT_OPENAI_MODEL
 from digest.models import Item, Summary
 
 
@@ -14,7 +15,7 @@ class ResponsesAPISummarizer:
 
     def __init__(
         self,
-        model: str = "gpt-5.1-codex-mini",
+        model: str = DEFAULT_OPENAI_MODEL,
         timeout: int = 30,
         retries: int = 2,
         retry_backoff_seconds: float = 0.6,

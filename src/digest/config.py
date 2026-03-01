@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import urllib.parse
 
+from digest.constants import DEFAULT_OPENAI_MODEL
+
 try:
     import yaml
 except ImportError as exc:  # pragma: no cover
@@ -62,7 +64,7 @@ class ProfileConfig:
     max_fallback_share: float = 0.1
     agent_scoring_retry_attempts: int = 1
     agent_scoring_text_max_chars: int = 8000
-    openai_model: str = "gpt-5.1-codex-mini"
+    openai_model: str = DEFAULT_OPENAI_MODEL
     quality_repair_enabled: bool = False
     quality_repair_model: str = ""
     quality_repair_threshold: float = 80.0
@@ -226,7 +228,7 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         agent_scoring_text_max_chars=max(
             400, int(data.get("agent_scoring_text_max_chars", 8000) or 8000)
         ),
-        openai_model=str(data.get("openai_model", env_model or "gpt-5.1-codex-mini")),
+        openai_model=str(data.get("openai_model", env_model or DEFAULT_OPENAI_MODEL)),
         quality_repair_enabled=bool(data.get("quality_repair_enabled", False)),
         quality_repair_model=str(data.get("quality_repair_model", "")).strip(),
         quality_repair_threshold=quality_repair_threshold,
