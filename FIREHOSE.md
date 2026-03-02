@@ -101,3 +101,27 @@ Before moving a change from `.docs/doing/` to `.docs/done/`:
 - Work in short loops: discuss → implement → test → refine.
 - If work runs long, stop and provide a status update.
 - Preserve intent with concise, high-signal notes.
+
+## Done Folder Pruning (Summary-First Retention)
+
+When `.docs/done/` gets too large, apply this standard cleanup to preserve core history and reduce noise.
+
+### Retention policy
+- Keep only `completion-summary.md` in each `.docs/done/<change>/` folder.
+- Remove other per-change artifacts from `.docs/done/` (for example: `proposal.md`, `spec.md`, `design.md`, `tasks.md`, `browser-flow-report.md`, `decision.md`).
+- Keep full historical detail recoverable through git history.
+
+### Required index
+- Maintain `.docs/done/INDEX.md` with one line per completed change:
+  - change id
+  - one-line summary
+  - link to `completion-summary.md`
+
+### Pruning checklist
+1. Verify every done folder has `completion-summary.md` (create one if missing).
+2. Regenerate/refresh `.docs/done/INDEX.md`.
+3. Delete non-summary files inside done folders.
+4. Validate resulting shape:
+   - one `completion-summary.md` per done folder
+   - one central `INDEX.md`
+5. Commit with a focused docs-only commit message.
