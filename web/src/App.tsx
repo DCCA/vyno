@@ -394,6 +394,20 @@ function statusHoverDetail(row: UnifiedSourceRow): string {
   return details.join("\n")
 }
 
+function sourceValuePlaceholderForType(sourceType: string): string {
+  const st = (sourceType || "").trim().toLowerCase()
+  if (st === "rss") return "https://news.ycombinator.com/rss"
+  if (st === "youtube_channel") return "UC_x5XG1OV2P6uZZ5FSM9Ttw"
+  if (st === "youtube_query") return "llm evals"
+  if (st === "x_author") return "@thdxr or https://x.com/thdxr"
+  if (st === "x_theme") return "ai agents"
+  if (st === "github_repo") return "openai/openai-cookbook"
+  if (st === "github_topic") return "llm-evals"
+  if (st === "github_query") return "agentic eval framework"
+  if (st === "github_org") return "vercel-labs or https://github.com/vercel-labs"
+  return "Enter source value"
+}
+
 function sourceHealthMatches(type: string, source: string, item: SourceHealthItem): boolean {
   const t = (type || "").trim().toLowerCase()
   const s = (source || "").trim().toLowerCase()
@@ -544,6 +558,7 @@ export default function App() {
 
   const localDiffCount = useMemo(() => Object.keys(localProfileDiff).length, [localProfileDiff])
   const serverDiffCount = useMemo(() => Object.keys(profileDiff).length, [profileDiff])
+  const sourceValuePlaceholder = useMemo(() => sourceValuePlaceholderForType(sourceType), [sourceType])
   const selectedTimelineEvent = useMemo(
     () => timelineEvents.find((row) => row.id === timelineSelectedEventId) ?? null,
     [timelineEvents, timelineSelectedEventId],
@@ -2073,7 +2088,7 @@ export default function App() {
                           <div className="space-y-2">
                             <Label>Value</Label>
                             <Input
-                              placeholder="https://github.com/vercel-labs or owner/repo"
+                              placeholder={sourceValuePlaceholder}
                               value={sourceValue}
                               onChange={(event) => setSourceValue(event.target.value)}
                             />

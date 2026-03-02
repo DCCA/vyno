@@ -34,3 +34,10 @@ test("unified rows expose per-line edit and delete actions", () => {
   expectSource(/Delete \$\{row\.type\} source\?/, "delete confirmation prompt missing")
   expectSource(/failing sources: \{sourceHealth\.length\}/, "source health summary metric missing")
 })
+
+test("source value placeholder adapts to selected source type", () => {
+  expectSource(/function sourceValuePlaceholderForType\(sourceType: string\)/, "placeholder helper missing")
+  expectSource(/if \(st === "x_author"\) return "@thdxr or https:\/\/x\.com\/thdxr"/, "x_author placeholder missing")
+  expectSource(/if \(st === "github_org"\) return "vercel-labs or https:\/\/github\.com\/vercel-labs"/, "github_org placeholder missing")
+  expectSource(/placeholder=\{sourceValuePlaceholder\}/, "dynamic source placeholder binding missing")
+})
