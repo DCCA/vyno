@@ -11,23 +11,26 @@ function expectSource(pattern, message) {
   assert.match(appSource, pattern, message)
 }
 
-test("sources workspace exposes density-focused sub-surfaces", () => {
-  expectSource(/Sources Workspace/, "sources workspace heading missing")
+test("sources workspace merges management and triage into one surface", () => {
+  expectSource(/CardTitle className="font-display">Sources<\/CardTitle>/, "sources unified heading missing")
+  expectSource(/Manage inputs and triage source health in one unified workspace/, "sources unified description missing")
   expectSource(/<TabsTrigger value="overview">Overview<\/TabsTrigger>/, "overview tab missing")
-  expectSource(/<TabsTrigger value="effective">Effective Sources<\/TabsTrigger>/, "effective sources tab missing")
-  expectSource(/<TabsTrigger value="health">Source Health<\/TabsTrigger>/, "source health tab missing")
+  expectSource(/<TabsTrigger value="unified">Unified Sources<\/TabsTrigger>/, "unified sources tab missing")
 })
 
-test("effective sources view includes search, truncation reveal, and row expansion", () => {
-  expectSource(/Filter effective sources/, "effective source search label missing")
-  expectSource(/effective-source-search/, "effective source search input missing")
-  expectSource(/View full values/, "full source value reveal missing")
-  expectSource(/Show more \(\$\{filteredSourceRows\.length - 12\}\)/, "effective source show more control missing")
+test("unified sources view includes filter controls and merged columns", () => {
+  expectSource(/Filter sources/, "unified source search label missing")
+  expectSource(/unified-source-search/, "unified source search input missing")
+  expectSource(/<TableHead className="w-\[140px\]">Type<\/TableHead>/, "type column missing")
+  expectSource(/<TableHead className="w-\[300px\]">Source<\/TableHead>/, "source column missing")
+  expectSource(/<TableHead className="w-\[100px\]">Health<\/TableHead>/, "health column missing")
+  expectSource(/<TableHead className="w-\[140px\]">Actions<\/TableHead>/, "actions column missing")
+  expectSource(/Show more \(\$\{filteredUnifiedSourceRows\.length - 12\}\)/, "unified source show more control missing")
 })
 
-test("source health view includes compact triage controls", () => {
-  expectSource(/Filter failing sources/, "source health search label missing")
-  expectSource(/source-health-search/, "source health search input missing")
+test("unified rows expose per-line edit and delete actions", () => {
+  expectSource(/onClick=\{\(\) => editUnifiedSourceRow\(row\)\}/, "row edit action missing")
+  expectSource(/onClick=\{\(\) => void deleteUnifiedSourceRow\(row\)\}/, "row delete action missing")
+  expectSource(/Delete \$\{row\.type\} source\?/, "delete confirmation prompt missing")
   expectSource(/failing sources: \{sourceHealth\.length\}/, "source health summary metric missing")
-  expectSource(/Show more \(\$\{filteredSourceHealth\.length - 12\}\)/, "source health show more control missing")
 })
