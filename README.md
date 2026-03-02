@@ -175,7 +175,7 @@ Manual check example:
 - `rss_feeds`, `youtube_channels`, `youtube_queries`
 - `x_inbox_path`
 - `x_authors`, `x_themes`
-  - `x_authors` accepts X handles (for example `openai` or `@openai`)
+  - `x_authors` accepts X handles (`openai`, `@openai`) and profile URLs (`https://x.com/openai`)
   - `x_themes` accepts free-text recent-search queries
 - `github_repos`, `github_topics`, `github_search_queries`, `github_orgs`
   - `github_orgs` accepts either `org-login` or `https://github.com/org-login`

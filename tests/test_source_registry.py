@@ -40,6 +40,20 @@ class TestSourceRegistry(unittest.TestCase):
             rows = list_sources(str(base), str(overlay))
             self.assertIn("ai agents evals", rows["x_theme"])
 
+    def test_add_x_author_accepts_profile_url(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "sources.yaml"
+            overlay = Path(tmp) / "sources.local.yaml"
+            base.write_text("rss_feeds: ['https://example.com/rss.xml']\n", encoding="utf-8")
+
+            created, value = add_source(str(base), str(overlay), "x_author", "https://x.com/thdxr")
+            self.assertTrue(created)
+            self.assertEqual(value, "thdxr")
+
+            created2, value2 = add_source(str(base), str(overlay), "x_author", "https://twitter.com/thdxr")
+            self.assertFalse(created2)
+            self.assertEqual(value2, "thdxr")
+
     def test_add_github_org_normalizes_and_dedupes(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "sources.yaml"

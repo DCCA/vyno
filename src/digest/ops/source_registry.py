@@ -137,9 +137,14 @@ def canonicalize_source_value(source_type: str, value: str) -> str:
         return " ".join(raw.split())
 
     if st == "x_author":
-        handle = raw.lstrip("@").strip().lower()
+        candidate = raw.strip()
+        parsed = urllib.parse.urlparse(candidate)
+        if parsed.scheme in {"http", "https"} and parsed.netloc.lower() in {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}:
+            path = [part for part in parsed.path.split("/") if part]
+            candidate = path[0] if path else ""
+        handle = candidate.lstrip("@").strip().lower()
         if not re.fullmatch(r"[a-z0-9_]{1,15}", handle):
-            raise ValueError("x_author must be a valid X handle (without URL)")
+            raise ValueError("x_author must be a valid X handle or X profile URL")
         return handle
 
     if st == "x_theme":
