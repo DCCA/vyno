@@ -1,5 +1,11 @@
 # Repository Guidelines
 
+## Firehose Precedence
+- `FIREHOSE.md` is the project source-of-truth for process and documentation workflow.
+- Agents MUST follow `FIREHOSE.md` instructions when planning, implementing, and cleaning docs artifacts.
+- If `AGENTS.md` and `FIREHOSE.md` differ, follow `FIREHOSE.md` unless the user explicitly overrides it.
+- Docs refactors/cleanup MUST preserve Firehose structure (`.docs/todo`, `.docs/doing`, `.docs/done`) and required artifacts.
+
 ## Project Structure & Module Organization
 This repository is currently documentation-first. The root contains project-level guidance in `FIREHOSE.md`.
 
