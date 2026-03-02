@@ -270,6 +270,9 @@ type SaveAction =
   | "seen-reset-apply"
   | "rollback"
 
+type Notice = { kind: "ok" | "error"; text: string }
+type NoticeScope = "global" | "run" | "onboarding" | "sources" | "profile" | "review" | "timeline" | "history"
+
 type ConsoleSurface = "dashboard" | "run" | "onboarding" | "sources" | "profile" | "review" | "timeline" | "history"
 
 const CONSOLE_SURFACES: ConsoleSurface[] = [
@@ -465,7 +468,8 @@ export default function App() {
   const [timelineSelectedEventId, setTimelineSelectedEventId] = useState(0)
   const [timelineNoteAuthor, setTimelineNoteAuthor] = useState("admin")
   const [timelineNoteText, setTimelineNoteText] = useState("")
-  const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null)
+  const [globalNotice, setGlobalNotice] = useState<Notice | null>(null)
+  const [localNotices, setLocalNotices] = useState<Partial<Record<Exclude<NoticeScope, "global">, Notice>>>({})
   const [surface, setSurface] = useState<ConsoleSurface>("dashboard")
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [consoleModeOverride, setConsoleModeOverride] = useState<"setup" | "manage" | null>(null)
@@ -664,6 +668,43 @@ export default function App() {
                             ? "Loading configuration..."
                             : ""
 
+  function setScopedNotice(scope: NoticeScope, kind: Notice["kind"], text: string) {
+    const next = { kind, text }
+    if (scope === "global") {
+      setGlobalNotice(next)
+      return
+    }
+    setLocalNotices((prev) => ({ ...prev, [scope]: next }))
+  }
+
+  function clearScopedNotice(scope: NoticeScope) {
+    if (scope === "global") {
+      setGlobalNotice(null)
+      return
+    }
+    setLocalNotices((prev) => {
+      const copy = { ...prev }
+      delete copy[scope]
+      return copy
+    })
+  }
+
+  function renderScopedNotice(scope: NoticeScope) {
+    const notice = scope === "global" ? globalNotice : localNotices[scope]
+    if (!notice) return null
+    return (
+      <Alert variant={notice.kind === "error" ? "destructive" : "default"} role="status" aria-live={notice.kind === "error" ? "assertive" : "polite"}>
+        <AlertTitle>{notice.kind === "error" ? "Action failed" : "Action completed"}</AlertTitle>
+        <AlertDescription className="flex items-start justify-between gap-3">
+          <span>{notice.text}</span>
+          <Button variant="ghost" size="sm" onClick={() => clearScopedNotice(scope)}>
+            Dismiss
+          </Button>
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
   useEffect(() => {
     void refreshAll()
     const timer = setInterval(() => {
@@ -785,7 +826,7 @@ export default function App() {
         setSourceType(typeData.types[0])
       }
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("global", "error", String(error))
     } finally {
       setLoading(false)
     }
@@ -813,7 +854,7 @@ export default function App() {
 
   async function handleSourceMutation(action: "add" | "remove") {
     if (!sourceType || !sourceValue.trim()) {
-      setNotice({ kind: "error", text: "Select a source type and enter a value." })
+      setScopedNotice("sources", "error", "Select a source type and enter a value.")
       return
     }
     setSaveAction(action === "add" ? "source-add" : "source-remove")
@@ -825,9 +866,9 @@ export default function App() {
       })
       await refreshAll()
       setSourceValue("")
-      setNotice({ kind: "ok", text: `Source ${action} completed.` })
+      setScopedNotice("sources", "ok", `Source ${action} completed.`)
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("sources", "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
@@ -837,7 +878,7 @@ export default function App() {
   function editUnifiedSourceRow(row: UnifiedSourceRow) {
     setSourceType(row.type)
     setSourceValue(row.source)
-    setNotice({ kind: "ok", text: `Loaded ${row.type} source for editing.` })
+    setScopedNotice("sources", "ok", `Loaded ${row.type} source for editing.`)
   }
 
   async function deleteUnifiedSourceRow(row: UnifiedSourceRow) {
@@ -850,9 +891,9 @@ export default function App() {
         body: JSON.stringify({ source_type: row.type, value: row.source }),
       })
       await refreshAll()
-      setNotice({ kind: "ok", text: `Removed ${row.type}: ${row.source}` })
+      setScopedNotice("sources", "ok", `Removed ${row.type}: ${row.source}`)
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("sources", "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
@@ -870,9 +911,9 @@ export default function App() {
       })
       if (result.started) {
         const modeText = result.mode ? ` (${result.mode})` : ""
-        setNotice({ kind: "ok", text: `Run started: ${result.run_id}${modeText}` })
+        setScopedNotice("run", "ok", `Run started: ${result.run_id}${modeText}`)
       } else {
-        setNotice({ kind: "error", text: `Run already active: ${result.active_run_id}` })
+        setScopedNotice("run", "error", `Run already active: ${result.active_run_id}`)
       }
       const [status, progress] = await Promise.all([
         api<RunStatus>("/api/run-status"),
@@ -883,7 +924,7 @@ export default function App() {
       setRunStatus(status)
       setRunProgress(progress.available ? progress : null)
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("run", "error", String(error))
     } finally {
       setRunNowLoading(false)
       setSaving(false)
@@ -898,14 +939,15 @@ export default function App() {
       setPreflight(result)
       const status = await api<OnboardingStatus>("/api/onboarding/status")
       setOnboarding(status)
-      setNotice({
-        kind: result.ok ? "ok" : "error",
-        text: result.ok
+      setScopedNotice(
+        "onboarding",
+        result.ok ? "ok" : "error",
+        result.ok
           ? `Preflight passed (${result.pass_count} checks).`
           : `Preflight found ${result.fail_count} failing checks.`,
-      })
+      )
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("onboarding", "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
@@ -925,12 +967,13 @@ export default function App() {
         },
       )
       await refreshAll()
-      setNotice({
-        kind: result.error_count > 0 ? "error" : "ok",
-        text: `Source pack applied: added=${result.added_count}, existing=${result.existing_count}, errors=${result.error_count}.`,
-      })
+      setScopedNotice(
+        "onboarding",
+        result.error_count > 0 ? "error" : "ok",
+        `Source pack applied: added=${result.added_count}, existing=${result.existing_count}, errors=${result.error_count}.`,
+      )
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("onboarding", "error", String(error))
     } finally {
       setSaveAction("")
       setActiveSourcePackId("")
@@ -945,9 +988,9 @@ export default function App() {
       setPreviewResult(result)
       const status = await api<OnboardingStatus>("/api/onboarding/status")
       setOnboarding(status)
-      setNotice({ kind: "ok", text: `Preview run completed (${result.status}).` })
+      setScopedNotice("onboarding", "ok", `Preview run completed (${result.status}).`)
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("onboarding", "error", String(error))
     } finally {
       setPreviewLoading(false)
     }
@@ -973,14 +1016,15 @@ export default function App() {
       setRunStatus(status)
       setRunProgress(progress.available ? progress : null)
       setOnboarding(onboardingStatus)
-      setNotice({
-        kind: result.started ? "ok" : "error",
-        text: result.started
+      setScopedNotice(
+        "onboarding",
+        result.started ? "ok" : "error",
+        result.started
           ? `Live run started: ${result.run_id}`
           : `Run already active: ${result.active_run_id}`,
-      })
+      )
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("onboarding", "error", String(error))
     } finally {
       setActivateLoading(false)
       setSaving(false)
@@ -999,9 +1043,9 @@ export default function App() {
       })
       setProfile(result.profile)
       setProfileJson(JSON.stringify(result.profile, null, 2))
-      setNotice({ kind: "ok", text: "Profile validated." })
+      setScopedNotice("review", "ok", "Profile validated.")
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("review", "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
@@ -1019,9 +1063,9 @@ export default function App() {
       })
       setProfileDiff(result.diff)
       setProfileDiffComputedAt(new Date().toISOString())
-      setNotice({ kind: "ok", text: "Diff updated." })
+      setScopedNotice("review", "ok", "Diff updated.")
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("review", "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
@@ -1038,9 +1082,9 @@ export default function App() {
         body: JSON.stringify({ profile: parsed }),
       })
       await refreshAll()
-      setNotice({ kind: "ok", text: "Profile overlay saved." })
+      setScopedNotice("review", "ok", "Profile overlay saved.")
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("review", "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
@@ -1060,9 +1104,9 @@ export default function App() {
         }),
       })
       setRunPolicy(result.run_policy)
-      setNotice({ kind: "ok", text: "Run policy saved." })
+      setScopedNotice("profile", "ok", "Run policy saved.")
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("profile", "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
@@ -1083,9 +1127,9 @@ export default function App() {
         },
       )
       setSeenResetPreviewCount(result.affected_count)
-      setNotice({ kind: "ok", text: `Preview complete: ${result.affected_count} seen keys affected.` })
+      setScopedNotice("profile", "ok", `Preview complete: ${result.affected_count} seen keys affected.`)
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("profile", "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
@@ -1107,10 +1151,10 @@ export default function App() {
       })
       setSeenResetPreviewCount(null)
       setSeenResetConfirm(false)
-      setNotice({ kind: "ok", text: `Seen reset applied: ${result.deleted_count} keys removed.` })
+      setScopedNotice("profile", "ok", `Seen reset applied: ${result.deleted_count} keys removed.`)
       await refreshAll()
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("profile", "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
@@ -1127,9 +1171,9 @@ export default function App() {
         body: JSON.stringify({ snapshot_id: snapshotId }),
       })
       await refreshAll()
-      setNotice({ kind: "ok", text: `Rolled back to ${snapshotId}.` })
+      setScopedNotice("history", "ok", `Rolled back to ${snapshotId}.`)
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("history", "error", String(error))
     } finally {
       setSaveAction("")
       setActiveRollbackId("")
@@ -1174,7 +1218,7 @@ export default function App() {
       setTimelineNotes(notesResult.notes ?? [])
       setTimelineSummary(summaryResult.summary ?? null)
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("timeline", "error", String(error))
     } finally {
       if (!options?.silent) {
         setSaveAction("")
@@ -1185,7 +1229,7 @@ export default function App() {
 
   async function addTimelineNote() {
     if (!timelineRunId || !timelineNoteText.trim()) {
-      setNotice({ kind: "error", text: "Select a run and enter a note." })
+      setScopedNotice("timeline", "error", "Select a run and enter a note.")
       return
     }
     setSaveAction("timeline-note")
@@ -1201,9 +1245,9 @@ export default function App() {
       })
       setTimelineNoteText("")
       await refreshTimeline({ silent: true })
-      setNotice({ kind: "ok", text: "Timeline note saved." })
+      setScopedNotice("timeline", "ok", "Timeline note saved.")
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("timeline", "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
@@ -1225,6 +1269,27 @@ export default function App() {
   useEffect(() => {
     setMobileNavOpen(false)
   }, [surface])
+
+  useEffect(() => {
+    if (!globalNotice || globalNotice.kind !== "ok") return
+    const timer = window.setTimeout(() => setGlobalNotice(null), 5000)
+    return () => window.clearTimeout(timer)
+  }, [globalNotice])
+
+  useEffect(() => {
+    const timers: number[] = []
+    for (const [scope, notice] of Object.entries(localNotices)) {
+      if (!notice || notice.kind !== "ok") continue
+      timers.push(
+        window.setTimeout(() => {
+          clearScopedNotice(scope as NoticeScope)
+        }, 5000),
+      )
+    }
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer))
+    }
+  }, [localNotices])
 
   useEffect(() => {
     setShowAllUnifiedSources(false)
@@ -1258,9 +1323,9 @@ export default function App() {
       anchor.download = `timeline-${timelineRunId}.json`
       anchor.click()
       URL.revokeObjectURL(url)
-      setNotice({ kind: "ok", text: "Timeline JSON exported." })
+      setScopedNotice("timeline", "ok", "Timeline JSON exported.")
     } catch (error) {
-      setNotice({ kind: "error", text: String(error) })
+      setScopedNotice("timeline", "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
@@ -1534,12 +1599,7 @@ export default function App() {
           </Card>
         ) : null}
 
-        {notice ? (
-          <Alert variant={notice.kind === "error" ? "destructive" : "default"}>
-            <AlertTitle>{notice.kind === "error" ? "Action failed" : "Action completed"}</AlertTitle>
-            <AlertDescription>{notice.text}</AlertDescription>
-          </Alert>
-        ) : null}
+        {renderScopedNotice("global")}
 
         <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
           <aside className={`${mobileNavOpen ? "block" : "hidden"} space-y-4 lg:block`}>
@@ -1697,6 +1757,7 @@ export default function App() {
               </>
             ) : surface === "run" ? (
               <>
+                {renderScopedNotice("run")}
                 <Card>
                   <CardHeader>
                     <CardTitle className="font-display">Run Center</CardTitle>
@@ -1766,6 +1827,7 @@ export default function App() {
               </>
             ) : surface === "onboarding" ? (
               <>
+                {renderScopedNotice("onboarding")}
                 <Card>
                   <CardHeader>
                     <CardTitle className="font-display">Setup Journey</CardTitle>
@@ -2033,6 +2095,7 @@ export default function App() {
                             </Button>
                           </div>
                         </div>
+                        {renderScopedNotice("sources")}
 
                         <div className="space-y-3 pt-1">
                           <div className="flex flex-wrap items-end gap-3">
@@ -2173,6 +2236,7 @@ export default function App() {
                   </TabsContent>
 
                   <TabsContent value="profile" className="space-y-4">
+                    {renderScopedNotice("profile")}
                     <Card>
                       <CardHeader>
                         <CardTitle className="font-display">Digest Policy</CardTitle>
@@ -2422,6 +2486,7 @@ export default function App() {
                   </TabsContent>
 
                   <TabsContent value="review" className="space-y-4">
+                    {renderScopedNotice("review")}
                     <Card>
                       <CardHeader>
                         <CardTitle className="font-display">Review and Apply</CardTitle>
@@ -2524,7 +2589,9 @@ export default function App() {
                           Monitor active run events and review historical timeline details after completion.
                         </CardDescription>
                       </CardHeader>
-                      <CardContent className="grid gap-3 md:grid-cols-[2fr,1fr,1fr,1fr,auto]">
+                      <CardContent className="space-y-3">
+                        {renderScopedNotice("timeline")}
+                        <div className="grid gap-3 md:grid-cols-[2fr,1fr,1fr,1fr,auto]">
                         <div className="space-y-2">
                           <Label>Run</Label>
                           <Select value={timelineRunId} onValueChange={setTimelineRunId}>
@@ -2618,6 +2685,7 @@ export default function App() {
                               onCheckedChange={(checked) => setTimelineLivePaused(!checked)}
                             />
                           </div>
+                        </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -2845,7 +2913,8 @@ export default function App() {
                         <CardTitle className="font-display">Snapshot History</CardTitle>
                         <CardDescription>Rollback overlay state to a previous snapshot when needed.</CardDescription>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="space-y-3">
+                        {renderScopedNotice("history")}
                         <Table>
                           <TableHeader>
                             <TableRow>
