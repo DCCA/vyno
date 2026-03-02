@@ -374,6 +374,17 @@ function truncateText(value: string, maxChars = 92): string {
   return `${source.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`
 }
 
+function statusHoverDetail(row: UnifiedSourceRow): string {
+  const details = [
+    `Type: ${row.type || "-"}`,
+    `Source: ${row.source || "-"}`,
+    `Last seen: ${row.last_seen || "-"}`,
+    `Last error: ${row.last_error || "-"}`,
+    `Hint: ${row.hint || "-"}`,
+  ]
+  return details.join("\n")
+}
+
 function sourceHealthMatches(type: string, source: string, item: SourceHealthItem): boolean {
   const t = (type || "").trim().toLowerCase()
   const s = (source || "").trim().toLowerCase()
@@ -2049,17 +2060,14 @@ export default function App() {
                             <Badge variant="secondary">rows: {filteredUnifiedSourceRows.length}</Badge>
                           </div>
 
-                          <div className="hidden overflow-x-auto overflow-y-auto rounded-md border md:block md:max-h-[520px]">
-                            <Table className="min-w-[1240px]">
+                          <div className="hidden overflow-y-auto rounded-md border md:block md:max-h-[520px]">
+                            <Table className="w-full table-fixed">
                               <TableHeader className="sticky top-0 z-10 bg-card">
                                 <TableRow>
                                   <TableHead className="w-[140px]">Type</TableHead>
-                                  <TableHead className="w-[320px]">Source</TableHead>
-                                  <TableHead className="w-[160px]">Status</TableHead>
-                                  <TableHead className="w-[240px]">Last Error</TableHead>
-                                  <TableHead className="w-[160px]">Last Seen</TableHead>
-                                  <TableHead className="w-[220px]">Hint</TableHead>
-                                  <TableHead className="sticky right-0 w-[160px] bg-card">Actions</TableHead>
+                                  <TableHead>Source</TableHead>
+                                  <TableHead className="w-[150px]">Status</TableHead>
+                                  <TableHead className="w-[180px] text-right">Actions</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -2067,22 +2075,17 @@ export default function App() {
                                   <TableRow key={row.key} className="align-top">
                                     <TableCell className="font-semibold">{row.type}</TableCell>
                                     <TableCell className="font-mono text-xs" title={row.source}>
-                                      {truncateText(row.source, 128)}
+                                      {truncateText(row.source, 96)}
                                     </TableCell>
                                     <TableCell>
-                                      <Badge variant={row.health === "failing" ? "warning" : "success"}>
-                                        {row.health === "failing" ? `failing (${row.count})` : "healthy"}
-                                      </Badge>
+                                      <span tabIndex={0} title={statusHoverDetail(row)} className="inline-flex cursor-help">
+                                        <Badge variant={row.health === "failing" ? "warning" : "success"}>
+                                          {row.health === "failing" ? `failing (${row.count})` : "healthy"}
+                                        </Badge>
+                                      </span>
                                     </TableCell>
-                                    <TableCell className="text-xs text-muted-foreground" title={row.last_error}>
-                                      {truncateText(row.last_error, 110)}
-                                    </TableCell>
-                                    <TableCell className="text-xs text-muted-foreground">{row.last_seen}</TableCell>
-                                    <TableCell className="text-xs" title={row.hint}>
-                                      {truncateText(row.hint, 100)}
-                                    </TableCell>
-                                    <TableCell className="sticky right-0 bg-card">
-                                      <div className="flex items-center gap-2">
+                                    <TableCell>
+                                      <div className="flex items-center justify-end gap-2">
                                         <Button variant="outline" size="sm" onClick={() => editUnifiedSourceRow(row)} disabled={saving}>
                                           Edit
                                         </Button>
@@ -2101,7 +2104,7 @@ export default function App() {
                                 ))}
                                 {unifiedRowsVisible.length === 0 ? (
                                   <TableRow>
-                                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                                    <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
                                       No sources match the current filters.
                                     </TableCell>
                                   </TableRow>

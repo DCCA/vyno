@@ -21,9 +21,10 @@ test("unified sources view includes filter controls and merged columns", () => {
   expectSource(/Filter sources/, "unified source search label missing")
   expectSource(/unified-source-search/, "unified source search input missing")
   expectSource(/<TableHead className="w-\[140px\]">Type<\/TableHead>/, "type column missing")
-  expectSource(/<TableHead className="w-\[320px\]">Source<\/TableHead>/, "source column missing")
-  expectSource(/<TableHead className="w-\[160px\]">Status<\/TableHead>/, "status column missing")
-  expectSource(/<TableHead className="sticky right-0 w-\[160px\] bg-card">Actions<\/TableHead>/, "actions column missing")
+  expectSource(/<TableHead>Source<\/TableHead>/, "source column missing")
+  expectSource(/<TableHead className="w-\[150px\]">Status<\/TableHead>/, "status column missing")
+  expectSource(/<TableHead className="w-\[180px\] text-right">Actions<\/TableHead>/, "actions column missing")
+  expectSource(/title=\{statusHoverDetail\(row\)\}/, "status hover detail tooltip missing")
   expectSource(/Show more \(\$\{filteredUnifiedSourceRows\.length - 12\}\)/, "unified source show more control missing")
 })
 
