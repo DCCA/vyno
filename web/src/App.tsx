@@ -271,7 +271,6 @@ type SaveAction =
   | "rollback"
 
 type ConsoleSurface = "dashboard" | "run" | "onboarding" | "sources" | "profile" | "review" | "timeline" | "history"
-type SourcesView = "overview" | "unified"
 
 const CONSOLE_SURFACES: ConsoleSurface[] = [
   "dashboard",
@@ -283,7 +282,6 @@ const CONSOLE_SURFACES: ConsoleSurface[] = [
   "timeline",
   "history",
 ]
-const SOURCES_VIEWS: SourcesView[] = ["overview", "unified"]
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").trim().replace(/\/$/, "")
 const API_TOKEN = import.meta.env.VITE_WEB_API_TOKEN ?? ""
@@ -398,12 +396,6 @@ function readSurfaceFromUrl(): ConsoleSurface | null {
   return CONSOLE_SURFACES.includes(value as ConsoleSurface) ? (value as ConsoleSurface) : null
 }
 
-function readSourcesViewFromUrl(): SourcesView | null {
-  if (typeof window === "undefined") return null
-  const search = new URLSearchParams(window.location.search)
-  const value = (search.get("sourcesView") || "").trim()
-  return SOURCES_VIEWS.includes(value as SourcesView) ? (value as SourcesView) : null
-}
 
 export default function App() {
   const uiStateHydratedRef = useRef(false)
@@ -413,7 +405,6 @@ export default function App() {
   const [sources, setSources] = useState<SourceMap>({})
   const [sourceType, setSourceType] = useState("rss")
   const [sourceValue, setSourceValue] = useState("")
-  const [sourcesView, setSourcesView] = useState<SourcesView>("overview")
   const [sourceSearch, setSourceSearch] = useState("")
   const [showAllUnifiedSources, setShowAllUnifiedSources] = useState(false)
   const [sourceStatusFilter, setSourceStatusFilter] = useState<"all" | "healthy" | "failing">("all")
@@ -685,12 +676,8 @@ export default function App() {
 
   useEffect(() => {
     const initialSurface = readSurfaceFromUrl()
-    const initialSourcesView = readSourcesViewFromUrl()
     if (initialSurface) {
       setSurface(initialSurface)
-    }
-    if (initialSourcesView) {
-      setSourcesView(initialSourcesView)
     }
     uiStateHydratedRef.current = true
   }, [])
@@ -1230,15 +1217,10 @@ export default function App() {
     if (!uiStateHydratedRef.current || typeof window === "undefined") return
     const search = new URLSearchParams(window.location.search)
     search.set("surface", surface)
-    if (surface === "sources") {
-      search.set("sourcesView", sourcesView)
-    } else {
-      search.delete("sourcesView")
-    }
     const nextSearch = search.toString()
     const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`
     window.history.replaceState({}, "", nextUrl)
-  }, [surface, sourcesView])
+  }, [surface])
 
   useEffect(() => {
     if (!timelineRunId) return
@@ -2035,208 +2017,148 @@ export default function App() {
                           </div>
                         </div>
 
-                        <Tabs value={sourcesView} onValueChange={(value) => setSourcesView((value as SourcesView) || "overview")}>
-                          <TabsList className="grid w-full grid-cols-2 md:max-w-[420px]">
-                            <TabsTrigger value="unified">Unified Sources</TabsTrigger>
-                            <TabsTrigger value="overview">Overview</TabsTrigger>
-                          </TabsList>
-
-                          <TabsContent value="unified" className="space-y-3 pt-3">
-                            <div className="flex flex-wrap items-end gap-3">
-                              <div className="min-w-[240px] flex-1 space-y-2">
-                                <Label htmlFor="unified-source-search">Filter sources</Label>
-                                <Input
-                                  id="unified-source-search"
-                                  placeholder="Search type, source, error, or hint"
-                                  value={sourceSearch}
-                                  onChange={(event) => setSourceSearch(event.target.value)}
-                                />
-                              </div>
-                              <div className="min-w-[170px] space-y-2">
-                                <Label>Status</Label>
-                                <Select
-                                  value={sourceStatusFilter}
-                                  onValueChange={(value) =>
-                                    setSourceStatusFilter(value === "failing" ? "failing" : value === "healthy" ? "healthy" : "all")
-                                  }
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="all">all</SelectItem>
-                                    <SelectItem value="healthy">healthy</SelectItem>
-                                    <SelectItem value="failing">failing</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <Badge variant="secondary">rows: {filteredUnifiedSourceRows.length}</Badge>
+                        <div className="space-y-3 pt-1">
+                          <div className="flex flex-wrap items-end gap-3">
+                            <div className="min-w-[240px] flex-1 space-y-2">
+                              <Label htmlFor="unified-source-search">Filter sources</Label>
+                              <Input
+                                id="unified-source-search"
+                                placeholder="Search type, source, error, or hint"
+                                value={sourceSearch}
+                                onChange={(event) => setSourceSearch(event.target.value)}
+                              />
                             </div>
+                            <div className="min-w-[170px] space-y-2">
+                              <Label>Status</Label>
+                              <Select
+                                value={sourceStatusFilter}
+                                onValueChange={(value) =>
+                                  setSourceStatusFilter(value === "failing" ? "failing" : value === "healthy" ? "healthy" : "all")
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="all">all</SelectItem>
+                                  <SelectItem value="healthy">healthy</SelectItem>
+                                  <SelectItem value="failing">failing</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <Badge variant="secondary">rows: {filteredUnifiedSourceRows.length}</Badge>
+                          </div>
 
-                            <div className="hidden overflow-auto rounded-md border md:block md:max-h-[520px]">
-                              <Table>
-                                <TableHeader className="sticky top-0 z-10 bg-card">
-                                  <TableRow>
-                                    <TableHead className="w-[140px]">Type</TableHead>
-                                    <TableHead className="w-[300px]">Source</TableHead>
-                                    <TableHead className="w-[70px]">Count</TableHead>
-                                    <TableHead className="w-[100px]">Health</TableHead>
-                                    <TableHead className="w-[240px]">Last Error</TableHead>
-                                    <TableHead className="w-[140px]">Last Seen</TableHead>
-                                    <TableHead className="w-[220px]">Hint</TableHead>
-                                    <TableHead className="w-[140px]">Actions</TableHead>
+                          <div className="hidden overflow-x-auto overflow-y-auto rounded-md border md:block md:max-h-[520px]">
+                            <Table className="min-w-[1240px]">
+                              <TableHeader className="sticky top-0 z-10 bg-card">
+                                <TableRow>
+                                  <TableHead className="w-[140px]">Type</TableHead>
+                                  <TableHead className="w-[320px]">Source</TableHead>
+                                  <TableHead className="w-[160px]">Status</TableHead>
+                                  <TableHead className="w-[240px]">Last Error</TableHead>
+                                  <TableHead className="w-[160px]">Last Seen</TableHead>
+                                  <TableHead className="w-[220px]">Hint</TableHead>
+                                  <TableHead className="sticky right-0 w-[160px] bg-card">Actions</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {unifiedRowsVisible.map((row) => (
+                                  <TableRow key={row.key} className="align-top">
+                                    <TableCell className="font-semibold">{row.type}</TableCell>
+                                    <TableCell className="font-mono text-xs" title={row.source}>
+                                      {truncateText(row.source, 128)}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant={row.health === "failing" ? "warning" : "success"}>
+                                        {row.health === "failing" ? `failing (${row.count})` : "healthy"}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground" title={row.last_error}>
+                                      {truncateText(row.last_error, 110)}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">{row.last_seen}</TableCell>
+                                    <TableCell className="text-xs" title={row.hint}>
+                                      {truncateText(row.hint, 100)}
+                                    </TableCell>
+                                    <TableCell className="sticky right-0 bg-card">
+                                      <div className="flex items-center gap-2">
+                                        <Button variant="outline" size="sm" onClick={() => editUnifiedSourceRow(row)} disabled={saving}>
+                                          Edit
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => void deleteUnifiedSourceRow(row)}
+                                          disabled={saving}
+                                          className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                                        >
+                                          Delete
+                                        </Button>
+                                      </div>
+                                    </TableCell>
                                   </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {unifiedRowsVisible.map((row) => (
-                                    <TableRow key={row.key} className="align-top">
-                                      <TableCell className="font-semibold">{row.type}</TableCell>
-                                      <TableCell className="font-mono text-xs" title={row.source}>
-                                        {truncateText(row.source, 120)}
-                                      </TableCell>
-                                      <TableCell>{row.count}</TableCell>
-                                      <TableCell>
-                                        <Badge variant={row.health === "failing" ? "warning" : "success"}>{row.health}</Badge>
-                                      </TableCell>
-                                      <TableCell className="text-xs text-muted-foreground" title={row.last_error}>
-                                        {truncateText(row.last_error, 110)}
-                                      </TableCell>
-                                      <TableCell className="text-xs text-muted-foreground">{row.last_seen}</TableCell>
-                                      <TableCell className="text-xs" title={row.hint}>
-                                        {truncateText(row.hint, 100)}
-                                      </TableCell>
-                                      <TableCell>
-                                        <div className="flex items-center gap-2">
-                                          <Button variant="outline" size="sm" onClick={() => editUnifiedSourceRow(row)} disabled={saving}>
-                                            Edit
-                                          </Button>
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => void deleteUnifiedSourceRow(row)}
-                                            disabled={saving}
-                                            className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                                          >
-                                            Delete
-                                          </Button>
-                                        </div>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                  {unifiedRowsVisible.length === 0 ? (
-                                    <TableRow>
-                                      <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
-                                        No sources match the current filters.
-                                      </TableCell>
-                                    </TableRow>
-                                  ) : null}
-                                </TableBody>
-                              </Table>
-                            </div>
+                                ))}
+                                {unifiedRowsVisible.length === 0 ? (
+                                  <TableRow>
+                                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                                      No sources match the current filters.
+                                    </TableCell>
+                                  </TableRow>
+                                ) : null}
+                              </TableBody>
+                            </Table>
+                          </div>
 
-                            <div className="space-y-2 md:hidden">
-                              {unifiedRowsVisible.length > 0 ? (
-                                unifiedRowsVisible.map((row) => (
-                                  <div key={`mobile:${row.key}`} className="rounded-lg border bg-muted/10 p-3">
-                                    <div className="mb-1 flex items-center justify-between gap-2">
-                                      <p className="text-sm font-semibold">{row.type}</p>
-                                      <Badge variant={row.health === "failing" ? "warning" : "success"}>{row.health}</Badge>
-                                    </div>
-                                    <p className="font-mono text-xs text-muted-foreground" title={row.source}>
-                                      {truncateText(row.source, 150)}
-                                    </p>
-                                    <p className="mt-1 text-xs text-muted-foreground">count: {row.count}</p>
-                                    <p className="text-xs text-muted-foreground" title={row.last_error}>
-                                      error: {truncateText(row.last_error, 120)}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">last seen: {row.last_seen}</p>
-                                    <p className="text-xs" title={row.hint}>
-                                      hint: {truncateText(row.hint, 120)}
-                                    </p>
-                                    <div className="mt-2 flex items-center gap-2">
-                                      <Button variant="outline" size="sm" onClick={() => editUnifiedSourceRow(row)} disabled={saving}>
-                                        Edit
-                                      </Button>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => void deleteUnifiedSourceRow(row)}
-                                        disabled={saving}
-                                        className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                                      >
-                                        Delete
-                                      </Button>
-                                    </div>
+                          <div className="space-y-2 md:hidden">
+                            {unifiedRowsVisible.length > 0 ? (
+                              unifiedRowsVisible.map((row) => (
+                                <div key={`mobile:${row.key}`} className="rounded-lg border bg-muted/10 p-3">
+                                  <div className="mb-1 flex items-center justify-between gap-2">
+                                    <p className="text-sm font-semibold">{row.type}</p>
+                                    <Badge variant={row.health === "failing" ? "warning" : "success"}>
+                                      {row.health === "failing" ? `failing (${row.count})` : "healthy"}
+                                    </Badge>
                                   </div>
-                                ))
-                              ) : (
-                                <p className="text-sm text-muted-foreground">No sources match the current filters.</p>
-                              )}
-                            </div>
-
-                            {filteredUnifiedSourceRows.length > 12 ? (
-                              <div className="flex justify-end">
-                                <Button variant="outline" size="sm" onClick={() => setShowAllUnifiedSources((prev) => !prev)}>
-                                  {showAllUnifiedSources ? "Show less" : `Show more (${filteredUnifiedSourceRows.length - 12})`}
-                                </Button>
-                              </div>
-                            ) : null}
-                          </TabsContent>
-
-                          <TabsContent value="overview" className="space-y-3 pt-3">
-                            <div className="grid gap-3 xl:grid-cols-2">
-                              <Card>
-                                <CardHeader className="pb-2">
-                                  <CardTitle className="font-display text-base">Unified Source Snapshot</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-2">
-                                  {unifiedSourceRows.slice(0, 6).map((row) => (
-                                    <div key={`snapshot:${row.key}`} className="rounded-lg border bg-muted/10 p-2.5">
-                                      <div className="flex items-center justify-between gap-2">
-                                        <p className="text-sm font-semibold">{row.type}</p>
-                                        <Badge variant={row.health === "failing" ? "warning" : "success"}>{row.health}</Badge>
-                                      </div>
-                                      <p className="truncate font-mono text-xs text-muted-foreground" title={row.source}>
-                                        {truncateText(row.source, 92)}
-                                      </p>
-                                    </div>
-                                  ))}
-                                  <Button variant="outline" size="sm" onClick={() => setSourcesView("unified")}>
-                                    Open unified sources
-                                  </Button>
-                                </CardContent>
-                              </Card>
-
-                              <Card>
-                                <CardHeader className="pb-2">
-                                  <CardTitle className="font-display text-base">Failure Overview</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-2">
-                                  {sourceHealth.slice(0, 6).map((item) => (
-                                    <div key={`health-snapshot:${item.kind}:${item.source}`} className="rounded-lg border bg-muted/10 p-2.5">
-                                      <div className="flex items-center justify-between gap-2">
-                                        <p className="truncate font-mono text-[11px]" title={item.source}>
-                                          {truncateText(item.source, 72)}
-                                        </p>
-                                        <Badge variant={item.count > 0 ? "warning" : "secondary"}>{item.count}</Badge>
-                                      </div>
-                                      <p className="truncate text-xs text-muted-foreground" title={item.last_error}>
-                                        {truncateText(item.last_error, 94)}
-                                      </p>
-                                    </div>
-                                  ))}
-                                  {sourceHealth.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground">No recent failing sources.</p>
-                                  ) : (
-                                    <Button variant="outline" size="sm" onClick={() => setSourcesView("unified")}>
-                                      Open unified sources
+                                  <p className="font-mono text-xs text-muted-foreground" title={row.source}>
+                                    {truncateText(row.source, 150)}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground" title={row.last_error}>
+                                    error: {truncateText(row.last_error, 120)}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">last seen: {row.last_seen}</p>
+                                  <p className="text-xs" title={row.hint}>
+                                    hint: {truncateText(row.hint, 120)}
+                                  </p>
+                                  <div className="mt-2 flex items-center gap-2">
+                                    <Button variant="outline" size="sm" onClick={() => editUnifiedSourceRow(row)} disabled={saving}>
+                                      Edit
                                     </Button>
-                                  )}
-                                </CardContent>
-                              </Card>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => void deleteUnifiedSourceRow(row)}
+                                      disabled={saving}
+                                      className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                                    >
+                                      Delete
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-sm text-muted-foreground">No sources match the current filters.</p>
+                            )}
+                          </div>
+
+                          {filteredUnifiedSourceRows.length > 12 ? (
+                            <div className="flex justify-end">
+                              <Button variant="outline" size="sm" onClick={() => setShowAllUnifiedSources((prev) => !prev)}>
+                                {showAllUnifiedSources ? "Show less" : `Show more (${filteredUnifiedSourceRows.length - 12})`}
+                              </Button>
                             </div>
-                          </TabsContent>
-                        </Tabs>
+                          ) : null}
+                        </div>
                       </CardContent>
                     </Card>
                   </TabsContent>

@@ -14,17 +14,16 @@ function expectSource(pattern, message) {
 test("sources workspace merges management and triage into one surface", () => {
   expectSource(/CardTitle className="font-display">Sources<\/CardTitle>/, "sources unified heading missing")
   expectSource(/Manage inputs and triage source health in one unified workspace/, "sources unified description missing")
-  expectSource(/<TabsTrigger value="overview">Overview<\/TabsTrigger>/, "overview tab missing")
-  expectSource(/<TabsTrigger value="unified">Unified Sources<\/TabsTrigger>/, "unified sources tab missing")
+  expectSource(/Label htmlFor="unified-source-search">Filter sources<\/Label>/, "unified source filter missing")
 })
 
 test("unified sources view includes filter controls and merged columns", () => {
   expectSource(/Filter sources/, "unified source search label missing")
   expectSource(/unified-source-search/, "unified source search input missing")
   expectSource(/<TableHead className="w-\[140px\]">Type<\/TableHead>/, "type column missing")
-  expectSource(/<TableHead className="w-\[300px\]">Source<\/TableHead>/, "source column missing")
-  expectSource(/<TableHead className="w-\[100px\]">Health<\/TableHead>/, "health column missing")
-  expectSource(/<TableHead className="w-\[140px\]">Actions<\/TableHead>/, "actions column missing")
+  expectSource(/<TableHead className="w-\[320px\]">Source<\/TableHead>/, "source column missing")
+  expectSource(/<TableHead className="w-\[160px\]">Status<\/TableHead>/, "status column missing")
+  expectSource(/<TableHead className="sticky right-0 w-\[160px\] bg-card">Actions<\/TableHead>/, "actions column missing")
   expectSource(/Show more \(\$\{filteredUnifiedSourceRows\.length - 12\}\)/, "unified source show more control missing")
 })
 
