@@ -7,44 +7,74 @@
 - Docs refactors/cleanup MUST preserve Firehose structure (`.docs/todo`, `.docs/doing`, `.docs/done`) and required artifacts.
 
 ## Project Structure & Module Organization
-This repository is currently documentation-first. The root contains project-level guidance in `FIREHOSE.md`.
+AI Daily Digest is a Python application with a web console.
 
-Use `.docs/` as the primary workspace for planned and active work:
-- `.docs/PRD.md`: product goals, constraints, and non-goals.
-- `.docs/todo/`: proposed work not started.
-- `.docs/doing/<change-name>/`: active change set (`proposal.md`, `spec.md`, `design.md`, `tasks.md`).
-- `.docs/done/<change-name>/`: completed changes and outcomes.
+Key paths:
+- `src/digest/`: runtime, connectors, delivery, web API.
+- `web/`: Vite + React + Tailwind admin/config console.
+- `tests/`: Python unit/integration tests.
+- `web/tests/`: frontend source-shape tests.
+- `config/`: tracked base config (`sources.yaml`, `profile.yaml`).
+- `data/`: local overlays/templates (`sources.local.yaml`, `profile.local.yaml`, `x_inbox.example.txt`).
+- `.docs/`: Firehose planning and history (`PRD.md`, `todo/`, `doing/`, `done/`).
 
 Keep each change scoped to one logical unit of work.
 
 ## Build, Test, and Development Commands
-No language runtime or build system is configured yet. Use lightweight repo checks while authoring docs and structure:
-- `rg --files`: list tracked project files quickly.
-- `rg "Requirement:" .docs`: verify requirement sections are present.
-- `git status`: review pending edits before commit.
-- `git diff -- AGENTS.md FIREHOSE.md`: confirm targeted documentation changes.
+Primary commands:
+- `make test`: run Python test suite.
+- `make app`: start API + UI together (`scripts/start-app.sh`).
+- `make web-api`: run config API only.
+- `make web-ui`: run UI dev server only.
+- `make web-ui-build`: build UI.
+- `npm --prefix web run test`: run frontend tests.
+- `make live`: execute one digest run.
+- `make doctor`: run onboarding/preflight checks.
+- `make security-check`: run security baseline checks.
 
-Add project-specific build/test commands here when application code is introduced.
+Useful checks:
+- `rg --files`
+- `git status`
+- `git diff -- AGENTS.md FIREHOSE.md README.md`
 
 ## Coding Style & Naming Conventions
-Prefer concise, explicit Markdown and small, reviewable diffs.
-- Use clear headings and short sections.
-- Use RFC 2119 terms in specs (`MUST`, `SHALL`, `SHOULD`, `MAY`).
-- Write Given/When/Then scenarios under each requirement.
-- Name change folders with lowercase kebab-case (example: `.docs/doing/auth-session-timeout/`).
+- Keep diffs small, explicit, and reviewable.
+- Follow existing project patterns before introducing new abstractions.
+- For Firehose docs/specs, use RFC 2119 (`MUST`, `SHALL`, `SHOULD`, `MAY`) and Given/When/Then scenarios.
+- Use lowercase kebab-case for change folder names in `.docs/doing/` and `.docs/todo/`.
 
 ## Testing Guidelines
-Treat verification as mandatory, even for docs-driven work.
-- Confirm every planned task is checked off or explicitly deferred.
-- Ensure implementation notes match final behavior.
-- When code exists, add/update relevant automated tests before moving work to `.docs/done/`.
+Verification is mandatory:
+- Run `make test` for backend/runtime changes.
+- Run `npm --prefix web run test` and `npm --prefix web run build` for web UI changes.
+- Keep docs task lists synced with actual completion or explicit deferrals.
+- Before moving a change from `.docs/doing/` to `.docs/done/`, ensure completion notes reflect real behavior.
 
 ## Commit & Pull Request Guidelines
-This repository has no commit history yet; use this baseline:
-- Commit messages: imperative, scoped, and specific (example: `docs: add initial change spec for auth timeout`).
+- Commit messages: imperative, scoped, and specific (example: `web(ui): localize action feedback by surface`).
 - Keep commits focused; avoid mixing unrelated work.
 - PRs should include: summary, affected paths, verification steps, risks, and follow-ups.
 - Link related issues/tasks and include screenshots only when UI artifacts are introduced.
+
+## Runtime & Config Essentials
+- Runtime uses base configs plus overlays:
+  - Base: `config/sources.yaml`, `config/profile.yaml`
+  - Overlay: `data/sources.local.yaml`, `data/profile.local.yaml`
+- Local DB default: `digest-live.db`
+- Logs default: `logs/digest.log`
+- Web API auth defaults to required mode; when running API/UI separately, keep matching token/header env vars.
+
+High-signal source types in current system include:
+- `rss`, `youtube_channel`, `youtube_query`
+- `x_author`, `x_theme` (X selectors; supports handle and profile URL canonicalization for `x_author`)
+- `github_repo`, `github_topic`, `github_query`, `github_org`
+
+## Docs Hygiene
+- Keep `.docs/done/` summary-first:
+  - one `completion-summary.md` per done change folder
+  - `.docs/done/INDEX.md` as central history index
+- Keep full historical detail recoverable through git history.
+- Use `.docs/todo/` for deferred/not-started work; `.docs/doing/` only for active work.
 
 ## UI Feedback Locality Pattern
 Use this as a default UX rule for all web surfaces.
