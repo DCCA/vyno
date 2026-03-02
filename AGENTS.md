@@ -39,3 +39,15 @@ This repository has no commit history yet; use this baseline:
 - Keep commits focused; avoid mixing unrelated work.
 - PRs should include: summary, affected paths, verification steps, risks, and follow-ups.
 - Link related issues/tasks and include screenshots only when UI artifacts are introduced.
+
+## UI Feedback Locality Pattern
+Use this as a default UX rule for all web surfaces.
+
+- Feedback MUST be shown close to the action that triggered it (same card/section, near the control row).
+- Global top-of-page alerts SHOULD be reserved for global/system events (boot failures, auth/session issues, app-wide outages).
+- Success feedback SHOULD auto-dismiss after a short timeout; error feedback SHOULD persist until dismissed or corrected.
+- Feedback MUST include non-color cues (explicit title/text) and SHOULD use `aria-live` semantics:
+  - polite for success/info
+  - assertive for errors/blockers
+- Table-row actions (for example edit/delete) SHOULD render feedback near the table region, with row identity in message text.
+- Destructive actions SHOULD keep confirmation and result feedback in the same local interaction zone.
