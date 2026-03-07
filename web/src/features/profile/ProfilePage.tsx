@@ -23,6 +23,7 @@ export function ProfilePage({
   onDismissNotice,
   profile,
   scheduleStatus,
+  onboardingLifecycle,
   profileJson,
   setProfileJson,
   updateProfileField,
@@ -45,6 +46,7 @@ export function ProfilePage({
   onValidateProfile,
   onComputeProfileDiff,
   onSaveProfileWorkspace,
+  onRevisitSetupGuide,
   onPreviewSeenReset,
   onApplySeenReset,
 }: {
@@ -52,6 +54,7 @@ export function ProfilePage({
   onDismissNotice: () => void
   profile: Record<string, unknown> | null
   scheduleStatus: ScheduleStatus | null
+  onboardingLifecycle: "needs_setup" | "ready"
   profileJson: string
   setProfileJson: (value: string) => void
   updateProfileField: (path: string, value: unknown) => void
@@ -74,6 +77,7 @@ export function ProfilePage({
   onValidateProfile: () => void
   onComputeProfileDiff: () => void
   onSaveProfileWorkspace: () => void
+  onRevisitSetupGuide: () => void
   onPreviewSeenReset: () => void
   onApplySeenReset: () => void
 }) {
@@ -390,6 +394,18 @@ export function ProfilePage({
             onToggle={() => setShowMaintenance((current) => !current)}
           >
             <div className="space-y-4">
+              {onboardingLifecycle === "ready" ? (
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <p className="text-sm font-medium">Setup guide</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Reopen the guided setup without resetting the workspace or restoring setup to the main menu.</p>
+                  <div className="mt-4">
+                    <Button type="button" variant="outline" onClick={onRevisitSetupGuide} disabled={saving}>
+                      Revisit setup guide
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="space-y-2">
                 <Label>Seen reset protection</Label>
                 <Select

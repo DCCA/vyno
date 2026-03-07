@@ -28,14 +28,20 @@ export function HistoryPage({
     <div className="space-y-4">
       <WorkspaceHeader
         title="History"
-        description="Review config snapshots and perform rollback without competing with unrelated editing controls."
+        description="Review configuration history as a product ledger and roll back with clearer, calmer context."
         badges={[{ label: `snapshots: ${history.length}` }]}
       />
 
+      <div className="grid gap-4 md:grid-cols-3">
+        <LedgerMetric label="Snapshots" value={String(history.length)} />
+        <LedgerMetric label="Latest action" value={history[0]?.action ?? "n/a"} />
+        <LedgerMetric label="Rollback mode" value="Manual" />
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle className="font-display">Snapshot History</CardTitle>
-          <CardDescription>Rollback overlay state to a previous snapshot when needed.</CardDescription>
+          <CardTitle className="font-display">Snapshot Ledger</CardTitle>
+          <CardDescription>Rollback overlay state to a previous snapshot when needed, without mixing archival data with live editing.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <InlineNotice notice={notice} onDismiss={onDismissNotice} />
@@ -71,5 +77,16 @@ export function HistoryPage({
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function LedgerMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <Card>
+      <CardHeader className="pb-4">
+        <CardDescription className="text-[11px] uppercase tracking-[0.14em]">{label}</CardDescription>
+        <CardTitle className="font-display text-[1.75rem]">{value}</CardTitle>
+      </CardHeader>
+    </Card>
   )
 }

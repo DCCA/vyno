@@ -103,6 +103,7 @@ export type OnboardingStep = {
 
 export type OnboardingStatus = {
   generated_at_utc: string
+  lifecycle: "needs_setup" | "ready"
   steps: OnboardingStep[]
   progress: { completed: number; total: number }
   preflight: {

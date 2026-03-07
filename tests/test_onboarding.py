@@ -133,6 +133,7 @@ class TestOnboarding(unittest.TestCase):
             settings = self._write_base_files(tmp, safe_profile=True)
 
             pending = build_onboarding_status(settings)
+            self.assertEqual(pending["lifecycle"], "needs_setup")
             pending_by_id = {row["id"]: row for row in pending["steps"]}
             self.assertEqual(pending_by_id["schedule"]["status"], "pending")
 
@@ -168,6 +169,41 @@ class TestOnboarding(unittest.TestCase):
             status = build_onboarding_status(settings)
             by_id = {row["id"]: row for row in status["steps"]}
             self.assertEqual(by_id["profile"]["status"], "complete")
+
+    def test_onboarding_status_reports_ready_lifecycle_when_all_steps_complete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = self._write_base_files(tmp, safe_profile=True)
+            overlay_profile = Path(settings.profile_overlay_path)
+            overlay_profile.write_text(
+                yaml.safe_dump(
+                    {
+                        "topics": ["agents"],
+                        "schedule": {
+                            "enabled": True,
+                            "time_local": "09:00",
+                            "timezone": "UTC",
+                        },
+                        "output": {
+                            "obsidian_vault_path": tmp,
+                            "obsidian_folder": "AI Digest",
+                        },
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            mark_step_completed(settings.onboarding_state_path, "preflight", details="preflight_ok")
+            mark_step_completed(settings.onboarding_state_path, "sources", details="pack:quickstart-core")
+            mark_step_completed(settings.onboarding_state_path, "preview", details="preview-run")
+
+            store = SQLiteStore(settings.db_path)
+            now = datetime.now(timezone.utc).isoformat()
+            store.start_run("run-ready", now, now)
+            store.finish_run("run-ready", "success", [], [])
+
+            status = build_onboarding_status(settings)
+
+            self.assertEqual(status["lifecycle"], "ready")
 
 
 if __name__ == "__main__":

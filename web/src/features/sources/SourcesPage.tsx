@@ -66,7 +66,7 @@ export function SourcesPage({
     <div className="space-y-4">
       <WorkspaceHeader
         title="Sources"
-        description="Manage inputs and triage source health in a dedicated workspace instead of sharing space with unrelated configuration."
+        description="Curate the signal library, keep ingestion healthy, and manage source quality from one structured workspace."
         badges={[
           { label: `types: ${sortedSourceRows.length}` },
           { label: `total sources: ${totalSourceCount}` },
@@ -74,11 +74,17 @@ export function SourcesPage({
         ]}
       />
 
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricTile label="Library size" value={String(totalSourceCount)} detail="Tracked source entries" />
+        <MetricTile label="Active types" value={String(sortedSourceRows.length)} detail="Distinct connectors in use" />
+        <MetricTile label="Health posture" value={sourceHealth.length > 0 ? "Watch" : "Clear"} detail={sourceHealth.length > 0 ? `${sourceHealth.length} sources need attention` : "No current failures"} />
+      </div>
+
       <div className="grid gap-4 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-        <Card>
+        <Card className="overflow-hidden">
           <CardHeader>
-            <CardTitle className="font-display">Source Entry</CardTitle>
-            <CardDescription>Add or remove one source without leaving the workspace.</CardDescription>
+            <CardTitle className="font-display">Source Studio</CardTitle>
+            <CardDescription>Add or remove one source at a time without leaving the library.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -118,13 +124,14 @@ export function SourcesPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden">
           <CardHeader>
-            <CardTitle className="font-display">Source Registry and Triage</CardTitle>
-            <CardDescription>Filter sources, inspect health, and keep row actions next to the affected source.</CardDescription>
+            <CardTitle className="font-display">Source Library</CardTitle>
+            <CardDescription>Filter sources, inspect health posture, and take row-level actions without leaving context.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex flex-wrap items-end gap-3">
+            <div className="rounded-[1.35rem] border border-border/80 bg-secondary/30 p-4">
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_170px_auto] md:items-end">
               <div className="min-w-[240px] flex-1 space-y-2">
                 <Label htmlFor="unified-source-search">Filter sources</Label>
                 <Input
@@ -147,7 +154,8 @@ export function SourcesPage({
                   </SelectContent>
                 </Select>
               </div>
-              <Badge variant="secondary">rows: {filteredUnifiedSourceRows.length}</Badge>
+              <Badge variant="outline" className="justify-self-start md:justify-self-end">rows {filteredUnifiedSourceRows.length}</Badge>
+              </div>
             </div>
 
             <div className="hidden overflow-y-auto rounded-md border md:block md:max-h-[620px]">
@@ -255,5 +263,17 @@ export function SourcesPage({
         </Card>
       </div>
     </div>
+  )
+}
+
+function MetricTile({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <Card>
+      <CardHeader className="pb-4">
+        <CardDescription className="text-[11px] uppercase tracking-[0.14em]">{label}</CardDescription>
+        <CardTitle className="font-display text-[1.8rem]">{value}</CardTitle>
+        <p className="text-sm text-muted-foreground">{detail}</p>
+      </CardHeader>
+    </Card>
   )
 }

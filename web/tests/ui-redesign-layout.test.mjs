@@ -14,10 +14,12 @@ function expectSource(source, pattern, message) {
 }
 
 test("redesign exposes focused navigation surfaces", () => {
-  expectSource(appSource, /Workspace Navigation/, "navigation panel title missing")
+  expectSource(appSource, /Vyno/, "brand rail missing")
+  expectSource(appSource, /Navigation/, "navigation section missing")
+  expectSource(navSource, /navItemsForLifecycle/, "lifecycle-aware nav builder missing")
   expectSource(navSource, /label: "Dashboard"/, "dashboard surface missing")
   expectSource(navSource, /label: "Run Center"/, "run center surface missing")
-  expectSource(navSource, /label: "Onboarding"/, "onboarding surface missing")
+  expectSource(navSource, /label: "Setup"/, "setup surface missing")
   expectSource(navSource, /label: "Sources"/, "sources surface missing")
   expectSource(navSource, /label: "Profile"/, "profile surface missing")
   expectSource(navSource, /label: "Timeline"/, "timeline surface missing")
@@ -29,6 +31,7 @@ test("redesign exposes focused navigation surfaces", () => {
 
 test("redesign includes responsive nav shell and animation hooks", () => {
   expectSource(appSource, /setMobileNavOpen/, "mobile nav state missing")
+  expectSource(appSource, /bg-console-rail/, "console rail styling missing")
   expectSource(appSource, /lg:hidden/, "mobile menu button style missing")
   expectSource(appSource, /animate-surface-enter/, "surface animation class missing")
   expectSource(appSource, /NavLink/, "route-aware navigation missing")

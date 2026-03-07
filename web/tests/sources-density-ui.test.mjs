@@ -15,7 +15,9 @@ function expectSource(source, pattern, message) {
 
 test("sources workspace merges management and triage into one surface", () => {
   expectSource(sourcesSource, /WorkspaceHeader/, "sources workspace header missing")
-  expectSource(sourcesSource, /Manage inputs and triage source health in a dedicated workspace/, "sources unified description missing")
+  expectSource(sourcesSource, /Curate the signal library, keep ingestion healthy/, "sources unified description missing")
+  expectSource(sourcesSource, /Source Studio/, "source studio module missing")
+  expectSource(sourcesSource, /Source Library/, "source library module missing")
   expectSource(sourcesSource, /Label htmlFor="unified-source-search">Filter sources<\/Label>/, "unified source filter missing")
 })
 

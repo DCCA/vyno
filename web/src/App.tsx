@@ -26,7 +26,7 @@ import {
   surfaceFromLegacyQuery,
   toInt,
 } from "@/lib/console-utils"
-import { navItems, surfaceForPathname, surfacePaths } from "@/app/navigation"
+import { navItemsForLifecycle, surfaceForPathname, surfacePaths } from "@/app/navigation"
 import type {
   ConsoleSurface,
   HistoryItem,
@@ -117,6 +117,11 @@ function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const currentSurface = surfaceForPathname(location.pathname)
+  const onboardingLifecycle = onboarding?.lifecycle ?? "needs_setup"
+  const onboardingRevisitMode = useMemo(
+    () => new URLSearchParams(location.search).get("mode") === "revisit",
+    [location.search],
+  )
 
   const sortedSourceRows = useMemo(
     () => Object.entries(sources).sort((a, b) => a[0].localeCompare(b[0])),
@@ -245,12 +250,11 @@ function App() {
     return facts.slice(0, 4)
   }, [runProgress])
 
-  const onboardingDone = Boolean(
-    onboarding && onboarding.progress.total > 0 && onboarding.progress.completed >= onboarding.progress.total,
-  )
+  const onboardingDone = onboardingLifecycle === "ready"
   const setupPercent = onboarding?.progress.total
     ? Math.round((onboarding.progress.completed / onboarding.progress.total) * 100)
     : 0
+  const visibleNavItems = useMemo(() => navItemsForLifecycle(onboardingLifecycle), [onboardingLifecycle])
   const digestLoadingMessage = runProgress
     ? `${runProgress.stage_label}: ${runProgress.stage_detail || runProgress.message}`
     : previewLoading
@@ -1037,9 +1041,138 @@ function App() {
 
   return (
     <main className="min-h-screen bg-console-canvas pb-10" aria-label="Digest Control Center">
-      <div className="mx-auto flex w-full max-w-[1380px] flex-col gap-5 px-4 py-6 md:px-6 lg:px-8 lg:py-8">
-        <header className="rounded-2xl border border-border/80 bg-card/90 p-5 shadow-lg shadow-primary/5 backdrop-blur-sm animate-surface-enter">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+      <div className="mx-auto grid w-full max-w-[1560px] gap-5 px-4 py-5 md:px-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-8 lg:py-7">
+        <aside className={`${mobileNavOpen ? "block" : "hidden"} lg:block`}>
+          <div className="bg-console-rail sticky top-6 space-y-5 rounded-[2rem] p-5 text-white shadow-[0_30px_70px_-40px_rgba(15,23,42,0.9)] animate-surface-enter">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">Vyno</p>
+                  <h1 className="font-display text-[1.6rem] tracking-tight text-white">Control Center</h1>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="border border-white/10 bg-white/5 text-white hover:bg-white/10 lg:hidden"
+                  onClick={() => setMobileNavOpen((prev) => !prev)}
+                  aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
+                >
+                  {mobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+                </Button>
+              </div>
+              <p className="text-sm leading-6 text-white/68">
+                {onboardingDone
+                  ? "Premium daily workspace for signals, automation, and intervention."
+                  : "Guided setup canvas for turning a raw workspace into a recurring digest product."}
+              </p>
+            </div>
+
+            <div className="rounded-[1.6rem] border border-white/10 bg-white/5 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55">Workspace mode</p>
+              <div className="mt-3 flex items-center justify-between">
+                <Badge variant={onboardingDone ? "success" : "warning"} className="text-[10px]">
+                  {onboardingDone ? "Recurring use" : "Guided setup"}
+                </Badge>
+                <span className="text-xs text-white/65">{currentSurface}</span>
+              </div>
+              <div className="mt-4 space-y-3">
+                {!onboardingDone ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-white/72">
+                      <span>Setup progress</span>
+                      <span>{onboarding?.progress.completed ?? 0}/{onboarding?.progress.total ?? 0}</span>
+                    </div>
+                    <Progress value={setupPercent} className="h-2 bg-white/10 [&>div]:bg-white" />
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/75">
+                    Setup is complete. The guide is hidden from primary navigation and remains available only from Profile.
+                  </div>
+                )}
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55">Automation</p>
+                  <p className="mt-2 text-sm text-white/80">
+                    {scheduleStatus?.enabled ? (scheduleStatus.next_run_at || "Scheduled daily") : "Not scheduled"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/45">Navigation</p>
+              <nav aria-label="Workspace surfaces" className="space-y-2">
+                {visibleNavItems.map((item, index) => {
+                  const Icon = item.icon
+                  const badge =
+                    item.id === "onboarding"
+                      ? `${onboarding?.progress.completed ?? 0}/${onboarding?.progress.total ?? 0}`
+                      : undefined
+                  return (
+                    <NavLink
+                      key={item.id}
+                      to={surfacePaths[item.id]}
+                      className={({ isActive }) =>
+                        `group flex min-h-[58px] w-full items-center justify-between rounded-[1.35rem] border px-3.5 py-3 text-left transition-all duration-200 ${
+                          isActive
+                            ? "border-white/18 bg-white/12 shadow-[0_18px_30px_-28px_rgba(255,255,255,0.9)]"
+                            : "border-white/8 bg-white/[0.03] hover:border-white/14 hover:bg-white/[0.08]"
+                        }`
+                      }
+                      style={{ animationDelay: `${index * 35}ms` }}
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <span className="flex items-center gap-3">
+                            <span className={`rounded-2xl p-2 ${isActive ? "bg-white/12" : "bg-white/[0.06]"}`}>
+                              <Icon className="h-4 w-4 text-white" />
+                            </span>
+                            <span>
+                              <span className="block text-sm font-semibold text-white">{item.label}</span>
+                              <span className="block text-[11px] text-white/55">{item.hint}</span>
+                            </span>
+                          </span>
+                          {badge ? (
+                            <Badge variant={item.id === "onboarding" && !onboardingDone ? "warning" : "secondary"} className="bg-white/10 text-white">
+                              {badge}
+                            </Badge>
+                          ) : isActive ? (
+                            <Badge variant="outline" className="border-white/10 bg-white/8 text-white">
+                              Open
+                            </Badge>
+                          ) : null}
+                        </>
+                      )}
+                    </NavLink>
+                  )
+                })}
+              </nav>
+            </div>
+
+            <div className="rounded-[1.6rem] border border-white/10 bg-white/5 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55">System pulse</p>
+              <div className="mt-3 space-y-3 text-sm text-white/78">
+                <div className="flex items-center justify-between">
+                  <span>Run state</span>
+                  <Badge variant={runStatus?.active ? "warning" : "success"} className="text-[10px]">
+                    {runStatus?.active ? "Running" : "Idle"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Source health</span>
+                  <span>{sourceHealth.length > 0 ? `${sourceHealth.length} issues` : "Clear"}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Default mode</span>
+                  <span>{runPolicy.default_mode}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <div className="flex min-w-0 flex-col gap-5">
+        <header className="rounded-[2rem] border border-border/80 bg-panel-subtle p-5 animate-surface-enter">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Button
@@ -1052,59 +1185,70 @@ function App() {
                   {mobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
                   {mobileNavOpen ? "Close" : "Menu"}
                 </Button>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/90">Digest Operations</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary/80">Dashboard builder style workspace</p>
               </div>
-              <h1 className="font-display text-3xl tracking-tight text-foreground md:text-4xl">Control Center</h1>
-              <p className="max-w-3xl text-sm text-muted-foreground">
-                Route-based operator workspace for onboarding, run control, and long-term maintenance without losing feature coverage.
+              <h1 className="max-w-[11ch] font-display text-3xl leading-[0.92] tracking-[-0.04em] text-foreground md:text-[2.85rem]">
+                Daily digest orchestration
+              </h1>
+              <p className="max-w-3xl text-[0.96rem] leading-7 text-muted-foreground">
+                A modular workspace for setup, source management, run orchestration, and operational review without falling back to generic admin chrome.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-              {runStatus?.active ? <Badge variant="warning">Active: {runStatus.active.run_id}</Badge> : <Badge variant="success">No active run</Badge>}
-              {runStatus?.latest ? <Badge variant="secondary">Last: {runStatus.latest.status}</Badge> : null}
-              {runStatus?.latest_completed && runStatus.latest_completed.source_error_count > 0 ? (
-                <Badge variant="warning">Source errors: {runStatus.latest_completed.source_error_count}</Badge>
-              ) : null}
-              <Button variant="outline" onClick={() => void refreshAll()} disabled={loading || saving}>
+            <div className="rounded-[1.6rem] border border-border/80 bg-white/88 p-3 shadow-[0_22px_34px_-28px_rgba(15,23,42,0.35)]">
+              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                {runStatus?.active ? <Badge variant="warning">Active {runStatus.active.run_id}</Badge> : <Badge variant="success">No active run</Badge>}
+                {runStatus?.latest ? <Badge variant="outline">Last {runStatus.latest.status}</Badge> : null}
+                {runStatus?.latest_completed && runStatus.latest_completed.source_error_count > 0 ? (
+                  <Badge variant="warning">Source errors {runStatus.latest_completed.source_error_count}</Badge>
+                ) : null}
+                <Button variant="outline" onClick={() => void refreshAll()} disabled={loading || saving}>
                 {loading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" /> : <RefreshCcw className="h-4 w-4" />}
                 {loading ? "Refreshing..." : "Refresh"}
-              </Button>
-              <div className="min-w-[190px]">
-                <Select
-                  value={runNowModeOverride}
-                  onValueChange={setRunNowModeOverride}
-                  disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id) || !runPolicy.allow_run_override}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">Run now: default ({runPolicy.default_mode})</SelectItem>
-                    <SelectItem value="fresh_only">Run now: fresh_only</SelectItem>
-                    <SelectItem value="balanced">Run now: balanced</SelectItem>
-                    <SelectItem value="replay_recent">Run now: replay_recent</SelectItem>
-                    <SelectItem value="backfill">Run now: backfill</SelectItem>
-                  </SelectContent>
-                </Select>
+                </Button>
+                <div className="min-w-[220px]">
+                  <Select
+                    value={runNowModeOverride}
+                    onValueChange={setRunNowModeOverride}
+                    disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id) || !runPolicy.allow_run_override}
+                  >
+                    <SelectTrigger className="rounded-full bg-background/85">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Run now: default ({runPolicy.default_mode})</SelectItem>
+                      <SelectItem value="fresh_only">Run now: fresh_only</SelectItem>
+                      <SelectItem value="balanced">Run now: balanced</SelectItem>
+                      <SelectItem value="replay_recent">Run now: replay_recent</SelectItem>
+                      <SelectItem value="backfill">Run now: backfill</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={() => void runNow()} disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}>
+                  {runNowLoading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" /> : <Play className="h-4 w-4" />}
+                  {runNowLoading ? "Starting..." : "Run now"}
+                </Button>
               </div>
-              <Button onClick={() => void runNow()} disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}>
-                {runNowLoading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" /> : <Play className="h-4 w-4" />}
-                {runNowLoading ? "Starting..." : "Run now"}
-              </Button>
             </div>
           </div>
         </header>
 
-        <section className="console-status-ribbon rounded-2xl px-4 py-3 animate-surface-enter [animation-delay:40ms]" aria-label="Run status ribbon">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={runStatus?.active ? "warning" : "success"}>{runStatus?.active ? "Run active" : "Run idle"}</Badge>
-            <Badge variant="secondary">surface: {currentSurface}</Badge>
-            <Badge variant="secondary">mode default: {runPolicy.default_mode}</Badge>
-            <Badge variant={sourceHealth.length > 0 ? "warning" : "success"}>
-              {sourceHealth.length > 0 ? `source issues: ${sourceHealth.length}` : "source health clear"}
-            </Badge>
-            {runStatus?.latest_completed ? <Badge variant="secondary">latest completed: {runStatus.latest_completed.status}</Badge> : null}
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 animate-surface-enter [animation-delay:40ms]" aria-label="Run status ribbon">
+          <div className="console-status-ribbon rounded-[1.4rem] px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/75">Surface</p>
+            <p className="mt-2 font-display text-xl">{currentSurface}</p>
+          </div>
+          <div className="console-status-ribbon rounded-[1.4rem] px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/75">Mode default</p>
+            <p className="mt-2 font-display text-xl">{runPolicy.default_mode}</p>
+          </div>
+          <div className="console-status-ribbon rounded-[1.4rem] px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/75">Source health</p>
+            <p className="mt-2 font-display text-xl">{sourceHealth.length > 0 ? `${sourceHealth.length} issues` : "Clear"}</p>
+          </div>
+          <div className="console-status-ribbon rounded-[1.4rem] px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/75">Latest completion</p>
+            <p className="mt-2 font-display text-xl">{runStatus?.latest_completed?.status ?? "n/a"}</p>
           </div>
         </section>
 
@@ -1163,97 +1307,6 @@ function App() {
         ) : null}
 
         <InlineNotice notice={globalNotice} onDismiss={() => clearScopedNotice("global")} />
-
-        <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <aside className={`${mobileNavOpen ? "block" : "hidden"} space-y-4 lg:block`}>
-            <Card className="border-border/80 bg-card/95 animate-surface-enter">
-              <CardHeader className="pb-3">
-                <CardTitle className="font-display text-base">Workspace Navigation</CardTitle>
-                <CardDescription>Route-based surfaces for daily operations and advanced controls.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <nav aria-label="Workspace surfaces" className="space-y-2">
-                  {navItems.map((item, index) => {
-                    const Icon = item.icon
-                    const badge =
-                      item.id === "onboarding"
-                        ? onboardingDone
-                          ? "Ready"
-                          : `${onboarding?.progress.completed ?? 0}/${onboarding?.progress.total ?? 0}`
-                        : undefined
-                    return (
-                      <NavLink
-                        key={item.id}
-                        to={surfacePaths[item.id]}
-                        className={({ isActive }) =>
-                          `group flex min-h-[52px] w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-all duration-200 ${
-                            isActive
-                              ? "border-primary/40 bg-primary/10 shadow-sm"
-                              : "border-border/70 bg-background/60 hover:border-primary/20 hover:bg-primary/5"
-                          }`
-                        }
-                        style={{ animationDelay: `${index * 35}ms` }}
-                      >
-                        {({ isActive }) => (
-                          <>
-                            <span className="flex items-center gap-2">
-                              <Icon className="h-4 w-4 text-primary" />
-                              <span>
-                                <span className="block text-sm font-semibold">{item.label}</span>
-                                <span className="block text-[11px] text-muted-foreground">{item.hint}</span>
-                              </span>
-                            </span>
-                            {badge ? <Badge variant={item.id === "onboarding" && !onboardingDone ? "warning" : "secondary"}>{badge}</Badge> : isActive ? <Badge variant="secondary">Open</Badge> : null}
-                          </>
-                        )}
-                      </NavLink>
-                    )
-                  })}
-                </nav>
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/80 bg-card/95 animate-surface-enter [animation-delay:80ms]">
-              <CardHeader className="pb-2">
-                <CardTitle className="font-display text-base">Digest Health</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="space-y-1 rounded-lg border border-border/70 bg-muted/15 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Setup status</p>
-                  <div className="flex items-center justify-between">
-                    <Badge variant={onboardingDone ? "success" : "warning"}>{onboardingDone ? "Ready" : "In progress"}</Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {onboarding?.progress.completed ?? 0}/{onboarding?.progress.total ?? 0}
-                    </span>
-                  </div>
-                  <Progress value={setupPercent} className="transition-all duration-500" />
-                </div>
-                {sourceHealth.length > 0 ? (
-                  <div className="rounded-lg border border-amber-300/50 bg-amber-50/60 p-3">
-                    <p className="text-xs font-semibold text-amber-900">Source health alerts: {sourceHealth.length}</p>
-                    <p className="mt-1 text-xs text-amber-800">Open Sources workspace to inspect diagnostics and apply fixes.</p>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-emerald-300/50 bg-emerald-50/60 p-3">
-                    <p className="text-xs font-semibold text-emerald-900">No source alerts in recent runs.</p>
-                  </div>
-                )}
-                <div className="rounded-lg border border-border/70 bg-muted/15 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Automation</p>
-                  <p className="mt-1 text-xs text-foreground">
-                    {scheduleStatus?.enabled
-                      ? scheduleStatus.next_run_at
-                        ? `Next run ${scheduleStatus.next_run_at}`
-                        : "Daily schedule enabled"
-                      : "Daily schedule not enabled"}
-                  </p>
-                  {scheduleStatus?.last_error ? (
-                    <p className="mt-1 text-xs text-amber-800">{scheduleStatus.last_error}</p>
-                  ) : null}
-                </div>
-              </CardContent>
-            </Card>
-          </aside>
 
           <section className="space-y-4 animate-surface-enter" aria-live="polite" aria-label="Console surface content">
             {loading || !profile ? (
@@ -1322,6 +1375,7 @@ function App() {
                       notice={localNotices.onboarding}
                       onDismissNotice={() => clearScopedNotice("onboarding")}
                       onboarding={onboarding}
+                      revisitMode={onboardingRevisitMode}
                       setupPercent={setupPercent}
                       scheduleStatus={scheduleStatus}
                       preflight={preflight}
@@ -1382,6 +1436,7 @@ function App() {
                       onDismissNotice={() => clearScopedNotice("profile")}
                       profile={profile}
                       scheduleStatus={scheduleStatus}
+                      onboardingLifecycle={onboardingLifecycle}
                       profileJson={profileJson}
                       setProfileJson={setProfileJson}
                       updateProfileField={updateProfileField}
@@ -1404,6 +1459,7 @@ function App() {
                       onValidateProfile={() => void validateProfile("profile")}
                       onComputeProfileDiff={() => void computeProfileDiff("profile")}
                       onSaveProfileWorkspace={() => void saveProfileWorkspace()}
+                      onRevisitSetupGuide={() => navigate(`${surfacePaths.onboarding}?mode=revisit`)}
                       onPreviewSeenReset={() => void previewSeenReset()}
                       onApplySeenReset={() => void applySeenReset()}
                     />

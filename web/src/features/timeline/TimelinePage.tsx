@@ -85,7 +85,7 @@ export function TimelinePage({
     <div className="space-y-4">
       <WorkspaceHeader
         title="Timeline"
-        description="Inspect live and historical run behavior with summary-first diagnostics, filtering, and note capture."
+        description="Inspect live and historical run behavior through a modular event browser with summary-first diagnostics."
         badges={[
           { label: timelineRunId ? `run: ${timelineRunId}` : "no run selected" },
           { label: timelineSummary?.mode?.name ? `mode: ${timelineSummary.mode.name}` : "mode: n/a" },
@@ -93,10 +93,17 @@ export function TimelinePage({
         ]}
       />
 
+      <div className="grid gap-4 md:grid-cols-4">
+        <TimelineMetric label="Run selected" value={timelineRunId || "n/a"} />
+        <TimelineMetric label="Events" value={timelineSummary ? String(timelineSummary.event_count) : "0"} />
+        <TimelineMetric label="Errors" value={timelineSummary ? String(timelineSummary.error_event_count) : "0"} />
+        <TimelineMetric label="Duration" value={timelineSummary ? formatElapsed(timelineSummary.duration_s) : "n/a"} />
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle className="font-display">Run Timeline</CardTitle>
-          <CardDescription>Monitor active run events and review historical timeline details after completion.</CardDescription>
+          <CardTitle className="font-display">Run Browser</CardTitle>
+          <CardDescription>Filter and inspect a run as a structured browser rather than a raw operations log.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <InlineNotice notice={notice} onDismiss={onDismissNotice} />
@@ -370,5 +377,16 @@ export function TimelinePage({
         </div>
       </div>
     </div>
+  )
+}
+
+function TimelineMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <Card>
+      <CardHeader className="pb-4">
+        <CardDescription className="text-[11px] uppercase tracking-[0.14em]">{label}</CardDescription>
+        <CardTitle className="font-display text-[1.7rem]">{value}</CardTitle>
+      </CardHeader>
+    </Card>
   )
 }

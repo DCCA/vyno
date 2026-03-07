@@ -676,8 +676,11 @@ def build_onboarding_status(settings: OnboardingSettings) -> dict[str, Any]:
 
     complete_count = sum(1 for row in step_rows if row["status"] == "complete")
 
+    lifecycle = "ready" if step_rows and complete_count >= len(step_rows) else "needs_setup"
+
     return {
         "generated_at_utc": _now_iso(),
+        "lifecycle": lifecycle,
         "steps": step_rows,
         "progress": {"completed": complete_count, "total": len(step_rows)},
         "preflight": {

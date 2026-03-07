@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -6,24 +6,24 @@
 
 @layer base {
   :root {
-    --background: 205 36% 95%;
-    --foreground: 212 36% 12%;
+    --background: 220 32% 97%;
+    --foreground: 222 28% 13%;
     --card: 0 0% 100%;
-    --card-foreground: 212 36% 12%;
-    --primary: 188 82% 30%;
+    --card-foreground: 222 28% 13%;
+    --primary: 220 73% 46%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 192 42% 90%;
-    --secondary-foreground: 198 80% 20%;
-    --muted: 204 22% 89%;
-    --muted-foreground: 216 18% 35%;
-    --accent: 37 95% 92%;
-    --accent-foreground: 31 78% 29%;
-    --destructive: 1 74% 50%;
+    --secondary: 220 24% 93%;
+    --secondary-foreground: 222 32% 20%;
+    --muted: 220 18% 92%;
+    --muted-foreground: 220 14% 40%;
+    --accent: 33 96% 90%;
+    --accent-foreground: 28 84% 25%;
+    --destructive: 0 71% 52%;
     --destructive-foreground: 0 0% 100%;
-    --border: 205 23% 79%;
-    --input: 205 23% 79%;
-    --ring: 188 82% 30%;
-    --radius: 0.95rem;
+    --border: 220 18% 86%;
+    --input: 220 18% 84%;
+    --ring: 220 73% 46%;
+    --radius: 1.25rem;
   }
 
   * {
@@ -32,9 +32,10 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    background-image: radial-gradient(circle at -3% -4%, rgba(12, 124, 149, 0.24), transparent 34%),
-      radial-gradient(circle at 96% 0%, rgba(237, 166, 41, 0.2), transparent 36%),
-      linear-gradient(154deg, rgba(255, 255, 255, 0.8), rgba(238, 247, 252, 0.92));
+    background-image:
+      radial-gradient(circle at 0% 0%, rgba(89, 110, 255, 0.12), transparent 28%),
+      radial-gradient(circle at 100% 4%, rgba(244, 178, 79, 0.14), transparent 24%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(244, 247, 251, 0.98));
     background-attachment: fixed;
   }
 
@@ -44,9 +45,11 @@
     inset: 0;
     pointer-events: none;
     z-index: -1;
-    opacity: 0.45;
-    background-image: radial-gradient(rgba(10, 24, 36, 0.12) 0.6px, transparent 0.6px);
-    background-size: 2px 2px;
+    opacity: 0.42;
+    background-image:
+      linear-gradient(rgba(15, 23, 42, 0.032) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15, 23, 42, 0.032) 1px, transparent 1px);
+    background-size: 28px 28px;
   }
 }
 
@@ -72,13 +75,31 @@
 
 @layer utilities {
   .bg-console-canvas {
-    background-image: linear-gradient(to right, rgba(15, 23, 42, 0.04) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
-    background-size: 34px 34px;
+    background-image:
+      linear-gradient(to right, rgba(15, 23, 42, 0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(15, 23, 42, 0.03) 1px, transparent 1px);
+    background-size: 36px 36px;
   }
 
   .animate-surface-enter {
     animation: surface-enter 320ms ease both;
+  }
+
+  .bg-console-rail {
+    background:
+      linear-gradient(180deg, rgba(14, 20, 38, 0.98), rgba(24, 33, 59, 0.96)),
+      radial-gradient(circle at top, rgba(96, 129, 255, 0.22), transparent 38%);
+  }
+
+  .shadow-panel {
+    box-shadow:
+      0 24px 60px -36px rgba(15, 23, 42, 0.34),
+      0 10px 26px -18px rgba(15, 23, 42, 0.16);
+  }
+
+  .bg-panel-subtle {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 251, 255, 0.94));
   }
 
   .skeleton-shimmer {
@@ -93,8 +114,10 @@
   }
 
   .console-status-ribbon {
-    border: 1px solid hsl(var(--primary) / 0.28);
-    background: linear-gradient(92deg, hsl(var(--primary) / 0.14), hsl(var(--accent) / 0.18), transparent 76%);
+    border: 1px solid hsl(var(--primary) / 0.18);
+    background:
+      linear-gradient(100deg, hsl(var(--primary) / 0.08), hsl(var(--accent) / 0.12), transparent 76%),
+      rgba(255, 255, 255, 0.72);
   }
 }
 

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const appSource = readFileSync(resolve(here, "../src/App.tsx"), "utf8")
+const navigationSource = readFileSync(resolve(here, "../src/app/navigation.ts"), "utf8")
 const onboardingSource = readFileSync(resolve(here, "../src/features/onboarding/OnboardingPage.tsx"), "utf8")
 const dashboardSource = readFileSync(resolve(here, "../src/features/dashboard/DashboardPage.tsx"), "utf8")
 const profileSource = readFileSync(resolve(here, "../src/features/profile/ProfilePage.tsx"), "utf8")
@@ -17,7 +18,8 @@ function expectSource(source, pattern, message) {
 }
 
 test("onboarding is a guided first-run setup flow", () => {
-  expectSource(onboardingSource, /title="Guided Setup"/, "guided setup header missing")
+  expectSource(onboardingSource, /title=\{revisitMode \? "Setup Guide" : "Guided Setup"\}/, "guided setup header missing")
+  expectSource(onboardingSource, /Activation Milestones/, "activation milestone summary missing")
   expectSource(onboardingSource, /Connect at least one output/, "output step missing")
   expectSource(onboardingSource, /Choose starter sources/, "source pack step missing")
   expectSource(onboardingSource, /Set digest preferences/, "preferences step missing")
@@ -30,13 +32,19 @@ test("onboarding is a guided first-run setup flow", () => {
 test("app routes incomplete setups into onboarding", () => {
   expectSource(appSource, /<Navigate to=\{surfacePaths\.onboarding\} replace \/>/, "incomplete setup redirect missing")
   expectSource(appSource, /api<\{ schedule_status: ScheduleStatus \}>\("\/api\/schedule\/status"\)/, "schedule status fetch missing")
+  expectSource(appSource, /const onboardingLifecycle = onboarding\?\.lifecycle \?\? "needs_setup"/, "app should read onboarding lifecycle")
+  expectSource(navigationSource, /navItemsForLifecycle/, "navigation should be lifecycle aware")
+  expectSource(navigationSource, /label: "Setup"/, "setup nav label missing")
 })
 
 test("dashboard and profile expose automation status after setup", () => {
-  expectSource(dashboardSource, /Daily Automation/, "dashboard automation card missing")
+  expectSource(dashboardSource, /Automation Control/, "dashboard automation control module missing")
+  expectSource(dashboardSource, /Current Posture/, "dashboard posture module missing")
   expectSource(dashboardSource, /Automation enabled|Automation not enabled/, "dashboard automation messaging missing")
   expectSource(profileSource, /title="Automation"/, "profile automation section missing")
   expectSource(profileSource, /Enable daily automation/, "profile schedule toggle missing")
+  expectSource(profileSource, /Revisit setup guide/, "profile revisit setup action missing")
+  expectSource(onboardingSource, /Active workspace/, "onboarding revisit banner missing")
 })
 
 test("local app startup uses proxied api calls and blocks port conflicts", () => {

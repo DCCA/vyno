@@ -28,6 +28,7 @@ export function OnboardingPage({
   notice,
   onDismissNotice,
   onboarding,
+  revisitMode,
   setupPercent,
   scheduleStatus,
   preflight,
@@ -52,6 +53,7 @@ export function OnboardingPage({
   notice: Notice | null | undefined
   onDismissNotice: () => void
   onboarding: OnboardingStatus | null
+  revisitMode: boolean
   setupPercent: number
   scheduleStatus: ScheduleStatus | null
   preflight: PreflightReport | null
@@ -77,13 +79,19 @@ export function OnboardingPage({
   const schedule = asRecord(profile?.schedule)
   const topics = asStringArray(profile?.topics)
   const obsidianFolder = asString(output.obsidian_folder, "AI Digest")
-  const firstPending = (onboarding?.steps ?? []).find((step) => step.status !== "complete")?.id || "preflight"
+  const milestoneRows = milestoneSummaries(onboarding?.steps ?? [])
+  const firstPendingMilestone = milestoneRows.find((row) => row.status !== "complete")?.id || "prepare"
+  const firstPendingMilestoneLabel = milestoneRows.find((row) => row.id === firstPendingMilestone)?.label || "Prepare workspace"
 
   return (
     <div className="space-y-4">
       <WorkspaceHeader
-        title="Guided Setup"
-        description="Move from zero setup to an automated daily digest without editing files or learning the whole console first."
+        title={revisitMode ? "Setup Guide" : "Guided Setup"}
+        description={
+          revisitMode
+            ? "Review or adjust your activation choices without resetting the workspace."
+            : "Move from zero setup to an automated daily digest without editing files or learning the whole console first."
+        }
         badges={[
           { label: onboarding?.preflight.ok ? "preflight ready" : "preflight needs attention", variant: onboarding?.preflight.ok ? "success" : "warning" },
           { label: `${onboarding?.progress.completed ?? 0}/${onboarding?.progress.total ?? 0} steps` },
@@ -102,28 +110,37 @@ export function OnboardingPage({
 
       <InlineNotice notice={notice} onDismiss={onDismissNotice} />
 
+      {revisitMode ? (
+        <Alert>
+          <AlertTitle>Active workspace</AlertTitle>
+          <AlertDescription>
+            Your digest is already configured. Use this guide to review setup decisions or change them without resetting the workspace.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <Card>
         <CardHeader>
-          <CardTitle className="font-display">Customer Setup Progress</CardTitle>
+          <CardTitle className="font-display">Activation Milestones</CardTitle>
           <CardDescription>
-            The setup is complete only after your outputs, sources, preferences, daily schedule, preview, and first live run are ready.
+            Keep setup focused on the few actions that unlock a useful recurring digest. Detailed controls stay below.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">Current focus: {firstPending}</Badge>
+            <Badge variant="secondary">Current focus: {firstPendingMilestoneLabel}</Badge>
             <Badge variant={scheduleStatus?.enabled ? "success" : "warning"}>
               {scheduleStatus?.enabled ? "Automation configured" : "Automation required"}
             </Badge>
           </div>
           <Progress value={setupPercent} />
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {(onboarding?.steps ?? []).map((step, index) => (
+            {milestoneRows.map((step, index) => (
               <div key={step.id} className="rounded-xl border bg-muted/15 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Step {index + 1}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Milestone {index + 1}</p>
                 <div className="mt-2 flex items-start justify-between gap-2">
                   <p className="text-sm font-semibold leading-tight">{step.label}</p>
-                  <Badge variant={step.status === "complete" ? "success" : step.id === firstPending ? "warning" : "secondary"}>{step.status}</Badge>
+                  <Badge variant={step.status === "complete" ? "success" : step.id === firstPendingMilestone ? "warning" : "secondary"}>{step.status}</Badge>
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">{step.detail}</p>
               </div>
@@ -447,6 +464,51 @@ function ModeButton({ active, label, onClick }: { active: boolean; label: string
 function stepStatus(onboarding: OnboardingStatus | null, stepId: string): "complete" | "pending" {
   const row = onboarding?.steps.find((step) => step.id === stepId)
   return row?.status === "complete" ? "complete" : "pending"
+}
+
+function milestoneSummaries(steps: OnboardingStatus["steps"]): Array<{
+  id: string
+  label: string
+  status: "complete" | "pending"
+  detail: string
+}> {
+  const byId = new Map(steps.map((step) => [step.id, step]))
+  const groups = [
+    {
+      id: "prepare",
+      label: "Prepare workspace",
+      detail: "Preflight checks and at least one delivery target must be ready.",
+      stepIds: ["preflight", "outputs"],
+    },
+    {
+      id: "sources",
+      label: "Choose sources",
+      detail: "Add a starter source set so the first digest is useful immediately.",
+      stepIds: ["sources"],
+    },
+    {
+      id: "preferences",
+      label: "Set preferences and schedule",
+      detail: "Save digest preferences and choose the daily automation time.",
+      stepIds: ["profile", "schedule"],
+    },
+    {
+      id: "launch",
+      label: "Preview and launch",
+      detail: "Preview safely, then run the first live digest and confirm health.",
+      stepIds: ["preview", "activate", "health"],
+    },
+  ] as const
+
+  return groups.map((group) => {
+    const status = group.stepIds.every((stepId) => byId.get(stepId)?.status === "complete") ? "complete" : "pending"
+    return {
+      id: group.id,
+      label: group.label,
+      status,
+      detail: group.detail,
+    }
+  })
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
