@@ -12,18 +12,43 @@ function expectSource(source, pattern, message) {
   assert.match(source, pattern, message)
 }
 
-test("digest policy panel exposes required controls", () => {
-  expectSource(profileSource, /Digest Policy/, "Digest policy panel title missing")
-  expectSource(profileSource, /Configure digest strictness and seen-item behavior/, "Digest policy description missing")
-  expectSource(profileSource, /<SelectItem value="fresh_only">fresh_only \(strict new\)<\/SelectItem>/, "fresh_only mode option missing")
-  expectSource(profileSource, /<SelectItem value="balanced">balanced \(recommended\)<\/SelectItem>/, "balanced mode option missing")
-  expectSource(profileSource, /<SelectItem value="replay_recent">replay_recent<\/SelectItem>/, "replay_recent mode option missing")
-  expectSource(profileSource, /<SelectItem value="backfill">backfill \(advanced\)<\/SelectItem>/, "backfill mode option missing")
-  expectSource(profileSource, /allow_run_override/, "run override toggle wiring missing")
-  expectSource(profileSource, /seen_reset_guard/, "seen reset guard wiring missing")
-  expectSource(profileSource, /Confirm seen reset/, "seen reset confirmation control missing")
+test("profile setup uses guided sections and inline apply actions", () => {
+  expectSource(profileSource, /title="Profile Setup"/, "profile setup header missing")
+  expectSource(profileSource, /Digest Goal/, "digest goal section missing")
+  expectSource(profileSource, /Focus/, "focus section missing")
+  expectSource(profileSource, /Quality And Cost/, "quality section missing")
+  expectSource(profileSource, /Output/, "output section missing")
+  expectSource(profileSource, /Apply Changes/, "compact apply panel missing")
+  expectSource(profileSource, /Maintenance tools/, "maintenance utility section missing")
+  expectSource(profileSource, /Expert mode/, "expert mode utility section missing")
+  expectSource(profileSource, /Fresh only/, "fresh_only guided label missing")
+  expectSource(profileSource, /Balanced/, "balanced guided label missing")
+  expectSource(profileSource, /Catch up/, "replay_recent guided label missing")
+  expectSource(profileSource, /Backfill/, "backfill guided label missing")
+  expectSource(profileSource, /Save Changes/, "inline save action missing")
+  expectSource(profileSource, /Diff tools/, "profile diff tools missing")
+  expectSource(profileSource, /Compute diff/, "profile diff action missing")
   expectSource(profileSource, /Preview Reset/, "seen reset preview action missing")
   expectSource(profileSource, /Apply Reset/, "seen reset apply action missing")
+})
+
+test("profile route receives inline profile workflow handlers", () => {
+  expectSource(appSource, /runPolicyChangeCount/, "run policy dirty tracking missing")
+  expectSource(appSource, /const profileWorkspaceDirty = localDiffCount > 0 \|\| Boolean\(profileJsonParseError\)/, "profile dirty-state guard missing")
+  expectSource(appSource, /function saveProfileWorkspace\(\)/, "profile workspace save handler missing")
+  expectSource(appSource, /if \(!runPolicyDirty\) \{\s*setRunPolicy\(policyData\.run_policy\)\s*setRunPolicyBaseline\(policyData\.run_policy\)/s, "polling should not clobber dirty run policy state")
+  expectSource(appSource, /async function refreshAll\(options\?: \{ preserveProfileWorkspace\?: boolean; preserveRunPolicyWorkspace\?: boolean \}\)/, "refreshAll preserve options missing")
+  expectSource(appSource, /if \(!preserveProfileWorkspace \|\| !profileWorkspaceDirty \|\| !profile\) \{\s*setProfile\(profileData\.profile\)/s, "profile refresh dirty-state guard missing")
+  expectSource(appSource, /onValidateProfile=\{\(\) => void validateProfile\("profile"\)\}/, "profile validate handler missing")
+  expectSource(appSource, /onComputeProfileDiff=\{\(\) => void computeProfileDiff\("profile"\)\}/, "profile diff handler missing")
+  expectSource(appSource, /onSaveProfileWorkspace=\{\(\) => void saveProfileWorkspace\(\)\}/, "profile inline save wiring missing")
+  expectSource(profileSource, /This replaces the old standalone Review page/, "review removal migration copy missing")
+})
+
+test("review route is removed and diff stays inside profile", () => {
+  assert.doesNotMatch(appSource, /path="\/review"/, "review route should be removed")
+  assert.doesNotMatch(appSource, /ReviewPage/, "review page import should be removed")
+  expectSource(profileSource, /Need deeper payload inspection\? Open Expert mode and use the Diff tab\./, "profile diff guidance missing")
 })
 
 test("policy and run-now API contracts are wired", () => {

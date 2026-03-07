@@ -52,7 +52,6 @@ import { DashboardPage } from "@/features/dashboard/DashboardPage"
 import { HistoryPage } from "@/features/history/HistoryPage"
 import { OnboardingPage } from "@/features/onboarding/OnboardingPage"
 import { ProfilePage } from "@/features/profile/ProfilePage"
-import { ReviewPage } from "@/features/review/ReviewPage"
 import { RunCenterPage } from "@/features/run-center/RunCenterPage"
 import { SourcesPage } from "@/features/sources/SourcesPage"
 import { TimelinePage } from "@/features/timeline/TimelinePage"
@@ -75,6 +74,7 @@ function App() {
   const [profileJson, setProfileJson] = useState("")
   const [profileDiff, setProfileDiff] = useState<Record<string, unknown>>({})
   const [profileDiffComputedAt, setProfileDiffComputedAt] = useState("")
+  const [runPolicyBaseline, setRunPolicyBaseline] = useState<RunPolicy | null>(null)
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [runStatus, setRunStatus] = useState<RunStatus | null>(null)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
@@ -183,6 +183,17 @@ function App() {
   }, [profileBaseline, profileJson, profileJsonParseError])
   const localDiffCount = useMemo(() => Object.keys(localProfileDiff).length, [localProfileDiff])
   const serverDiffCount = useMemo(() => Object.keys(profileDiff).length, [profileDiff])
+  const profileWorkspaceDirty = localDiffCount > 0 || Boolean(profileJsonParseError)
+  const runPolicyChangeCount = useMemo(() => {
+    if (!runPolicyBaseline) return 0
+    let count = 0
+    if (runPolicy.default_mode !== runPolicyBaseline.default_mode) count += 1
+    if (runPolicy.allow_run_override !== runPolicyBaseline.allow_run_override) count += 1
+    if (runPolicy.seen_reset_guard !== runPolicyBaseline.seen_reset_guard) count += 1
+    return count
+  }, [runPolicy, runPolicyBaseline])
+  const runPolicyDirty = runPolicyChangeCount > 0
+  const profileWorkspaceChangeCount = localDiffCount + runPolicyChangeCount
   const selectedTimelineEvent = useMemo(
     () => timelineEvents.find((row) => row.id === timelineSelectedEventId) ?? null,
     [timelineEvents, timelineSelectedEventId],
@@ -344,7 +355,10 @@ function App() {
           setSourceHealth(health.items)
           setOnboarding(onboardingStatus)
           setTimelineRuns(timelineData.runs)
-          setRunPolicy(policyData.run_policy)
+          if (!runPolicyDirty) {
+            setRunPolicy(policyData.run_policy)
+            setRunPolicyBaseline(policyData.run_policy)
+          }
           if (!timelineRunId && timelineData.runs.length > 0) {
             setTimelineRunId(timelineData.runs[0].run_id)
           }
@@ -352,7 +366,7 @@ function App() {
         .catch(() => undefined)
     }, 8000)
     return () => clearInterval(timer)
-  }, [timelineRunId])
+  }, [runPolicyDirty, timelineRunId])
 
   useEffect(() => {
     const activeRunId = runStatus?.active?.run_id || runProgress?.run_id
@@ -489,7 +503,7 @@ function App() {
     return () => clearInterval(timer)
   }, [currentSurface, runStatus?.active?.run_id, timelineLivePaused, timelineOrder, timelineRunId, timelineSeverityFilter, timelineStageFilter])
 
-  async function refreshAll() {
+  async function refreshAll(options?: { preserveProfileWorkspace?: boolean; preserveRunPolicyWorkspace?: boolean }) {
     setLoading(true)
     try {
       const [
@@ -517,11 +531,15 @@ function App() {
         api<{ runs: TimelineRun[] }>("/api/timeline/runs?limit=50"),
         api<{ run_policy: RunPolicy }>("/api/config/run-policy"),
       ])
+      const preserveProfileWorkspace = options?.preserveProfileWorkspace ?? true
+      const preserveRunPolicyWorkspace = options?.preserveRunPolicyWorkspace ?? true
       setSourceTypes(typeData.types)
       setSources(sourceData.sources)
-      setProfile(profileData.profile)
-      setProfileBaseline(profileData.profile)
-      setProfileJson(JSON.stringify(profileData.profile, null, 2))
+      if (!preserveProfileWorkspace || !profileWorkspaceDirty || !profile) {
+        setProfile(profileData.profile)
+        setProfileBaseline(profileData.profile)
+        setProfileJson(JSON.stringify(profileData.profile, null, 2))
+      }
       setProfileDiff({})
       setProfileDiffComputedAt("")
       setHistory(historyData.snapshots)
@@ -530,7 +548,10 @@ function App() {
       setSourceHealth(healthData.items)
       setOnboarding(onboardingData)
       setSourcePacks(sourcePackData.packs)
-      setRunPolicy(policyData.run_policy)
+      if (!preserveRunPolicyWorkspace || !runPolicyDirty || !runPolicyBaseline) {
+        setRunPolicy(policyData.run_policy)
+        setRunPolicyBaseline(policyData.run_policy)
+      }
       setTimelineRuns(timelineData.runs)
       if (timelineData.runs.length > 0) {
         const preferred = timelineRunId && timelineData.runs.some((row) => row.run_id === timelineRunId)
@@ -581,7 +602,7 @@ function App() {
         method: "POST",
         body: JSON.stringify({ source_type: sourceType, value: sourceValue }),
       })
-      await refreshAll()
+      await refreshAll({ preserveProfileWorkspace: false, preserveRunPolicyWorkspace: false })
       setSourceValue("")
       setScopedNotice("sources", "ok", `Source ${action} completed.`)
     } catch (error) {
@@ -607,7 +628,7 @@ function App() {
         method: "POST",
         body: JSON.stringify({ source_type: row.type, value: row.source }),
       })
-      await refreshAll()
+      await refreshAll({ preserveProfileWorkspace: false, preserveRunPolicyWorkspace: false })
       setScopedNotice("sources", "ok", `Removed ${row.type}: ${row.source}`)
     } catch (error) {
       setScopedNotice("sources", "error", String(error))
@@ -679,7 +700,7 @@ function App() {
           body: JSON.stringify({ pack_id: packId }),
         },
       )
-      await refreshAll()
+      await refreshAll({ preserveProfileWorkspace: false, preserveRunPolicyWorkspace: false })
       setScopedNotice(
         "onboarding",
         result.error_count > 0 ? "error" : "ok",
@@ -737,7 +758,7 @@ function App() {
     }
   }
 
-  async function validateProfile() {
+  async function validateProfile(scope: "profile" = "profile") {
     if (!profile) return
     setSaveAction("profile-validate")
     setSaving(true)
@@ -749,16 +770,16 @@ function App() {
       })
       setProfile(result.profile)
       setProfileJson(JSON.stringify(result.profile, null, 2))
-      setScopedNotice("review", "ok", "Profile validated.")
+      setScopedNotice(scope, "ok", "Profile validated.")
     } catch (error) {
-      setScopedNotice("review", "error", String(error))
+      setScopedNotice(scope, "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
     }
   }
 
-  async function computeProfileDiff() {
+  async function computeProfileDiff(scope: "profile" = "profile") {
     setSaveAction("profile-diff")
     setSaving(true)
     try {
@@ -769,35 +790,16 @@ function App() {
       })
       setProfileDiff(result.diff)
       setProfileDiffComputedAt(new Date().toISOString())
-      setScopedNotice("review", "ok", "Diff updated.")
+      setScopedNotice(scope, "ok", "Diff updated.")
     } catch (error) {
-      setScopedNotice("review", "error", String(error))
+      setScopedNotice(scope, "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
     }
   }
 
-  async function saveProfile() {
-    setSaveAction("profile-save")
-    setSaving(true)
-    try {
-      const parsed = parseProfilePayload(profileJson)
-      await api("/api/config/profile/save", {
-        method: "POST",
-        body: JSON.stringify({ profile: parsed }),
-      })
-      await refreshAll()
-      setScopedNotice("review", "ok", "Profile overlay saved.")
-    } catch (error) {
-      setScopedNotice("review", "error", String(error))
-    } finally {
-      setSaveAction("")
-      setSaving(false)
-    }
-  }
-
-  async function saveRunPolicy() {
+  async function saveRunPolicy(scope: "profile" = "profile") {
     setSaveAction("run-policy-save")
     setSaving(true)
     try {
@@ -810,9 +812,56 @@ function App() {
         }),
       })
       setRunPolicy(result.run_policy)
-      setScopedNotice("profile", "ok", "Run policy saved.")
+      setRunPolicyBaseline(result.run_policy)
+      setScopedNotice(scope, "ok", "Run policy saved.")
     } catch (error) {
-      setScopedNotice("profile", "error", String(error))
+      setScopedNotice(scope, "error", String(error))
+    } finally {
+      setSaveAction("")
+      setSaving(false)
+    }
+  }
+
+  async function saveProfileWorkspace() {
+    const dirtyProfile = localDiffCount > 0
+    const dirtyPolicy = runPolicyDirty
+    if (!dirtyProfile && !dirtyPolicy) {
+      setScopedNotice("profile", "ok", "No profile changes to save.")
+      return
+    }
+    setSaveAction("profile-save")
+    setSaving(true)
+    const savedParts: string[] = []
+    try {
+      if (dirtyPolicy) {
+        const policyResult = await api<{ run_policy: RunPolicy }>("/api/config/run-policy", {
+          method: "POST",
+          body: JSON.stringify({
+            default_mode: runPolicy.default_mode,
+            allow_run_override: runPolicy.allow_run_override,
+            seen_reset_guard: runPolicy.seen_reset_guard,
+          }),
+        })
+        setRunPolicy(policyResult.run_policy)
+        setRunPolicyBaseline(policyResult.run_policy)
+        savedParts.push("digest policy")
+      }
+      if (dirtyProfile) {
+        const parsed = parseProfilePayload(profileJson)
+        await api("/api/config/profile/save", {
+          method: "POST",
+          body: JSON.stringify({ profile: parsed }),
+        })
+        savedParts.push("profile changes")
+        await refreshAll({ preserveProfileWorkspace: false, preserveRunPolicyWorkspace: false })
+      }
+      setScopedNotice("profile", "ok", `Saved ${savedParts.join(" and ")}.`)
+    } catch (error) {
+      if (savedParts.length > 0) {
+        setScopedNotice("profile", "error", `Saved ${savedParts.join(" and ")}, but a later step failed: ${String(error)}`)
+      } else {
+        setScopedNotice("profile", "error", String(error))
+      }
     } finally {
       setSaveAction("")
       setSaving(false)
@@ -855,7 +904,7 @@ function App() {
       setSeenResetPreviewCount(null)
       setSeenResetConfirm(false)
       setScopedNotice("profile", "ok", `Seen reset applied: ${result.deleted_count} keys removed.`)
-      await refreshAll()
+      await refreshAll({ preserveProfileWorkspace: false, preserveRunPolicyWorkspace: false })
     } catch (error) {
       setScopedNotice("profile", "error", String(error))
     } finally {
@@ -873,7 +922,7 @@ function App() {
         method: "POST",
         body: JSON.stringify({ snapshot_id: snapshotId }),
       })
-      await refreshAll()
+      await refreshAll({ preserveProfileWorkspace: false, preserveRunPolicyWorkspace: false })
       setScopedNotice("history", "ok", `Rolled back to ${snapshotId}.`)
     } catch (error) {
       setScopedNotice("history", "error", String(error))
@@ -1358,6 +1407,13 @@ function App() {
                       updateProfileField={updateProfileField}
                       runPolicy={runPolicy}
                       setRunPolicy={setRunPolicy}
+                      runPolicyDirty={runPolicyDirty}
+                      runPolicyChangeCount={runPolicyChangeCount}
+                      profileJsonParseError={profileJsonParseError}
+                      profileWorkspaceChangeCount={profileWorkspaceChangeCount}
+                      localProfileDiff={localProfileDiff}
+                      profileDiff={profileDiff}
+                      profileDiffComputedAt={profileDiffComputedAt}
                       seenResetDays={seenResetDays}
                       setSeenResetDays={setSeenResetDays}
                       seenResetConfirm={seenResetConfirm}
@@ -1365,29 +1421,11 @@ function App() {
                       seenResetPreviewCount={seenResetPreviewCount}
                       saveAction={saveAction}
                       saving={saving}
-                      onSaveRunPolicy={() => void saveRunPolicy()}
+                      onValidateProfile={() => void validateProfile("profile")}
+                      onComputeProfileDiff={() => void computeProfileDiff("profile")}
+                      onSaveProfileWorkspace={() => void saveProfileWorkspace()}
                       onPreviewSeenReset={() => void previewSeenReset()}
                       onApplySeenReset={() => void applySeenReset()}
-                    />
-                  }
-                />
-                <Route
-                  path="/review"
-                  element={
-                    <ReviewPage
-                      notice={localNotices.review}
-                      onDismissNotice={() => clearScopedNotice("review")}
-                      saveAction={saveAction}
-                      saving={saving}
-                      profileJsonParseError={profileJsonParseError}
-                      localDiffCount={localDiffCount}
-                      localProfileDiff={localProfileDiff}
-                      serverDiffCount={serverDiffCount}
-                      profileDiff={profileDiff}
-                      profileDiffComputedAt={profileDiffComputedAt}
-                      onValidateProfile={() => void validateProfile()}
-                      onComputeProfileDiff={() => void computeProfileDiff()}
-                      onSaveProfile={() => void saveProfile()}
                     />
                   }
                 />

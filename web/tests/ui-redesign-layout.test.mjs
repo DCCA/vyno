@@ -20,7 +20,6 @@ test("redesign exposes focused navigation surfaces", () => {
   expectSource(navSource, /label: "Onboarding"/, "onboarding surface missing")
   expectSource(navSource, /label: "Sources"/, "sources surface missing")
   expectSource(navSource, /label: "Profile"/, "profile surface missing")
-  expectSource(navSource, /label: "Review"/, "review surface missing")
   expectSource(navSource, /label: "Timeline"/, "timeline surface missing")
   expectSource(navSource, /label: "History"/, "history surface missing")
   expectSource(navSource, /dashboard: "\/"/, "dashboard route missing")

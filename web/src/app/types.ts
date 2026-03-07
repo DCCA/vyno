@@ -237,6 +237,6 @@ export type SaveAction =
   | "rollback"
 
 export type Notice = { kind: "ok" | "error"; text: string }
-export type NoticeScope = "global" | "run" | "onboarding" | "sources" | "profile" | "review" | "timeline" | "history"
+export type NoticeScope = "global" | "run" | "onboarding" | "sources" | "profile" | "timeline" | "history"
 
-export type ConsoleSurface = "dashboard" | "run" | "onboarding" | "sources" | "profile" | "review" | "timeline" | "history"
+export type ConsoleSurface = "dashboard" | "run" | "onboarding" | "sources" | "profile" | "timeline" | "history"
