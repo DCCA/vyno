@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import re
+import socket
+import time
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -12,13 +14,17 @@ from digest.models import Item
 
 TAG_RE = re.compile(r"<[^>]+>")
 ATOM_NS = "{http://www.w3.org/2005/Atom}"
+DEFAULT_RSS_TIMEOUT = 20
+DEFAULT_RSS_RETRY_BACKOFF_SECONDS = 1.0
 
 
 def _strip_html(text: str) -> str:
     return TAG_RE.sub(" ", text or "").strip()
 
 
-def fetch_rss_items(feed_urls: list[str], timeout: int = 15, retries: int = 2) -> list[Item]:
+def fetch_rss_items(
+    feed_urls: list[str], timeout: int = DEFAULT_RSS_TIMEOUT, retries: int = 2
+) -> list[Item]:
     items: list[Item] = []
     for feed_url in feed_urls:
         content = _fetch_with_retry(feed_url, timeout=timeout, retries=retries)
@@ -28,7 +34,7 @@ def fetch_rss_items(feed_urls: list[str], timeout: int = 15, retries: int = 2) -
 
 def _fetch_with_retry(feed_url: str, timeout: int, retries: int) -> bytes:
     last_err: Exception | None = None
-    for _ in range(retries + 1):
+    for attempt in range(retries + 1):
         req = urllib.request.Request(
             feed_url,
             headers={
@@ -46,6 +52,12 @@ def _fetch_with_retry(feed_url: str, timeout: int, retries: int) -> bytes:
             last_err = exc
         except urllib.error.URLError as exc:
             last_err = exc
+        except TimeoutError as exc:
+            last_err = exc
+        except socket.timeout as exc:
+            last_err = exc
+        if attempt < retries:
+            time.sleep(DEFAULT_RSS_RETRY_BACKOFF_SECONDS * (attempt + 1))
     if last_err is not None:
         raise last_err
     raise RuntimeError(f"Failed to fetch feed: {feed_url}")

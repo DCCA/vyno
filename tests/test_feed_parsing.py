@@ -1,9 +1,27 @@
 import unittest
+from unittest.mock import MagicMock, patch
 
-from digest.connectors.rss import parse_feed_items
+from digest.connectors.rss import _fetch_with_retry, parse_feed_items
 
 
 class TestFeedParsing(unittest.TestCase):
+    def test_fetch_retries_timeout_then_succeeds(self):
+        response = MagicMock()
+        response.read.return_value = b"<rss><channel></channel></rss>"
+        context = MagicMock()
+        context.__enter__.return_value = response
+        context.__exit__.return_value = False
+
+        with patch(
+            "digest.connectors.rss.urllib.request.urlopen",
+            side_effect=[TimeoutError("timed out"), context],
+        ) as urlopen, patch("digest.connectors.rss.time.sleep") as sleep:
+            content = _fetch_with_retry("https://example.com/feed.xml", timeout=5, retries=2)
+
+        self.assertEqual(content, b"<rss><channel></channel></rss>")
+        self.assertEqual(urlopen.call_count, 2)
+        sleep.assert_called_once_with(1.0)
+
     def test_atom_feed_parses_entries(self):
         xml = b"""<?xml version='1.0' encoding='UTF-8'?>
 <feed xmlns='http://www.w3.org/2005/Atom'>

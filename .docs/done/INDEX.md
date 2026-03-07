@@ -25,6 +25,7 @@ Core history index (summary-first). Full details remain in git history.
 - online-mustread-quality-repair: Added online Must-read quality judge + conditional repair in runtime. ([summary](./online-mustread-quality-repair/completion-summary.md))
 - output-format-hardening: Completed Firehose artifacts for ".docs/done/output-format-hardening/" (proposal, spec, design, tasks). ([summary](./output-format-hardening/completion-summary.md))
 - reduce-llm-call-volume: Added profile guardrails for LLM volume in `src/digest/config.py`: ([summary](./reduce-llm-call-volume/completion-summary.md))
+- rss-feed-hardening: Normalized redirecting RSS feeds and hardened RSS timeout retry behavior. ([summary](./rss-feed-hardening/completion-summary.md))
 - remove-admin-panels: Removed both admin panel stacks (HTTP and Streamlit) from source, CLI, tests, and docs. ([summary](./remove-admin-panels/completion-summary.md))
 - run-observability-logs: Added structured JSON logging with rotating file handler in `src/digest/logging_utils.py`. ([summary](./run-observability-logs/completion-summary.md))
 - scoring-cache-and-source-quality: Added score cache persistence and 24h cache reuse for agent-scored items. ([summary](./scoring-cache-and-source-quality/completion-summary.md))
