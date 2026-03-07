@@ -41,6 +41,7 @@ Core history index (summary-first). Full details remain in git history.
 - web-api-secret-redaction-auth: Added token-based API auth enforcement for web API routes in `src/digest/web/app.py`. ([summary](./web-api-secret-redaction-auth/completion-summary.md))
 - web-console-density-fixes: Implemented a density-focused redesign for the `Sources` surface in `web/src/App.tsx`. ([summary](./web-console-density-fixes/completion-summary.md))
 - web-console-ui-redesign: Redesigned `web/src/App.tsx` into focused surfaces with a navigation shell: ([summary](./web-console-ui-redesign/completion-summary.md))
+- web-console-route-ux-restructure: Replaced the single-surface console with route-based workspaces and feature modules. ([summary](./web-console-route-ux-restructure/completion-summary.md))
 - web-live-run-incremental-defaults: Web-triggered live runs now use incremental defaults in `src/digest/web/app.py`: ([summary](./web-live-run-incremental-defaults/completion-summary.md))
 - web-timeline-observability: Added persisted timeline events and notes in SQLite: ([summary](./web-timeline-observability/completion-summary.md))
 - x-and-github-ingestion: Added X manual inbox connector: `src/digest/connectors/x_inbox.py`. ([summary](./x-and-github-ingestion/completion-summary.md))

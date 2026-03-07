@@ -1,437 +1,65 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Activity,
-  CheckCircle2,
   Clock3,
-  Database,
-  History,
-  LayoutDashboard,
   Loader2,
   Menu,
   Play,
   RefreshCcw,
-  Rocket,
-  Save,
-  ScrollText,
-  ShieldCheck,
-  SlidersHorizontal,
-  Undo2,
   X,
 } from "lucide-react"
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
+import { InlineNotice } from "@/components/system/notice"
+import { api } from "@/lib/api"
+import {
+  diffObjects,
+  formatElapsed,
+  parseProfilePayload,
+  sourceHealthMatches,
+  surfaceFromLegacyQuery,
+  toInt,
+} from "@/lib/console-utils"
+import { navItems, surfaceForPathname, surfacePaths } from "@/app/navigation"
+import type {
+  ConsoleSurface,
+  HistoryItem,
+  Notice,
+  NoticeScope,
+  OnboardingStatus,
+  PreviewResult,
+  PreflightReport,
+  RunPolicy,
+  RunProgress,
+  RunStatus,
+  SaveAction,
+  SourceHealthItem,
+  SourceMap,
+  SourcePack,
+  TimelineEvent,
+  TimelineNote,
+  TimelineRun,
+  TimelineSummary,
+  UnifiedSourceRow,
+} from "@/app/types"
+import { DashboardPage } from "@/features/dashboard/DashboardPage"
+import { HistoryPage } from "@/features/history/HistoryPage"
+import { OnboardingPage } from "@/features/onboarding/OnboardingPage"
+import { ProfilePage } from "@/features/profile/ProfilePage"
+import { ReviewPage } from "@/features/review/ReviewPage"
+import { RunCenterPage } from "@/features/run-center/RunCenterPage"
+import { SourcesPage } from "@/features/sources/SourcesPage"
+import { TimelinePage } from "@/features/timeline/TimelinePage"
 
-type SourceMap = Record<string, string[]>
-
-type SourceErrorDetail = {
-  kind: string
-  source: string
-  error: string
-  hint: string
-}
-
-type SourceHealthItem = {
-  kind: string
-  source: string
-  count: number
-  last_seen: string
-  last_run_id: string
-  last_error: string
-  hint: string
-}
-
-type SourceHealthStatus = "healthy" | "failing"
-
-type UnifiedSourceRow = {
-  key: string
-  type: string
-  source: string
-  count: number
-  health: SourceHealthStatus
-  last_error: string
-  last_seen: string
-  hint: string
-}
-
-type RunStatus = {
-  active: { run_id: string; started_at: string } | null
-  latest: {
-    run_id: string
-    status: string
-    started_at: string
-    source_error_count: number
-    summary_error_count: number
-  } | null
-  latest_completed: {
-    run_id: string
-    status: string
-    started_at: string
-    source_error_count: number
-    summary_error_count: number
-    source_errors: SourceErrorDetail[]
-  } | null
-}
-
-type RunProgress = {
-  available: boolean
-  run_id: string
-  pipeline_run_id: string
-  mode: string
-  stage: string
-  stage_label: string
-  message: string
-  stage_detail: string
-  elapsed_s: number
-  percent: number | null
-  status: string
-  is_active: boolean
-  started_at: string
-  updated_at: string
-  details: Record<string, unknown>
-  event_index: number
-}
-
-type HistoryItem = {
-  id: string
-  created_at: string
-  action: string
-  details: Record<string, unknown>
-}
-
-type PreflightCheck = {
-  id: string
-  label: string
-  status: "pass" | "warn" | "fail"
-  detail: string
-  hint: string
-  required: boolean
-}
-
-type PreflightReport = {
-  generated_at_utc: string
-  ok: boolean
-  pass_count: number
-  warn_count: number
-  fail_count: number
-  checks: PreflightCheck[]
-}
-
-type OnboardingStep = {
-  id: string
-  label: string
-  status: "complete" | "pending"
-  completed_at: string
-  detail: string
-}
-
-type OnboardingStatus = {
-  generated_at_utc: string
-  steps: OnboardingStep[]
-  progress: { completed: number; total: number }
-  preflight: {
-    ok: boolean
-    pass_count: number
-    warn_count: number
-    fail_count: number
-  }
-  latest_completed: {
-    run_id: string
-    status: string
-    started_at: string
-    source_error_count: number
-    summary_error_count: number
-  } | null
-}
-
-type SourcePack = {
-  id: string
-  name: string
-  description: string
-  item_count: number
-}
-
-type PreviewResult = {
-  run_id: string
-  status: string
-  source_error_count: number
-  summary_error_count: number
-  source_errors: string[]
-  summary_errors: string[]
-  source_count: number
-  must_read_count: number
-  skim_count: number
-  video_count: number
-  telegram_messages: string[]
-  obsidian_note: string
-}
-
-type TimelineRun = {
-  run_id: string
-  status: string
-  started_at: string
-  window_start: string
-  window_end: string
-  event_count: number
-}
-
-type TimelineEvent = {
-  id: number
-  run_id: string
-  event_index: number
-  ts_utc: string
-  stage: string
-  severity: "info" | "warn" | "error"
-  message: string
-  elapsed_s: number
-  details: Record<string, unknown>
-}
-
-type TimelineSummary = {
-  run_id: string
-  status: string
-  started_at: string
-  event_count: number
-  error_event_count: number
-  warn_event_count: number
-  duration_s: number
-  last_stage: string
-  last_message: string
-  final_item_count: number
-  must_read_count: number
-  skim_count: number
-  video_count: number
-  source_error_count: number
-  summary_error_count: number
-  mode?: {
-    name: string
-    use_last_completed_window: boolean
-    only_new: boolean
-    allow_seen_fallback: boolean
-  }
-  filter_funnel?: {
-    fetched: number
-    post_window: number
-    post_seen: number
-    post_block: number
-    selected: number
-  }
-  strictness_score?: number
-  strictness_level?: "low" | "medium" | "high" | string
-  restriction_reasons?: Array<{
-    key: string
-    label: string
-    dropped: number
-    ratio_pct: number
-  }>
-  recommendations?: string[]
-}
-
-type TimelineNote = {
-  id: number
-  run_id: string
-  created_at_utc: string
-  author: string
-  note: string
-  labels: string[]
-  actions: string[]
-}
-
-type RunPolicy = {
-  default_mode: "fresh_only" | "balanced" | "replay_recent" | "backfill"
-  allow_run_override: boolean
-  seen_reset_guard: "confirm" | "disabled"
-}
-
-type SaveAction =
-  | ""
-  | "source-add"
-  | "source-remove"
-  | "onboarding-preflight"
-  | "source-pack"
-  | "profile-validate"
-  | "profile-diff"
-  | "profile-save"
-  | "run-policy-save"
-  | "timeline-refresh"
-  | "timeline-export"
-  | "timeline-note"
-  | "seen-reset-preview"
-  | "seen-reset-apply"
-  | "rollback"
-
-type Notice = { kind: "ok" | "error"; text: string }
-type NoticeScope = "global" | "run" | "onboarding" | "sources" | "profile" | "review" | "timeline" | "history"
-
-type ConsoleSurface = "dashboard" | "run" | "onboarding" | "sources" | "profile" | "review" | "timeline" | "history"
-
-const CONSOLE_SURFACES: ConsoleSurface[] = [
-  "dashboard",
-  "run",
-  "onboarding",
-  "sources",
-  "profile",
-  "review",
-  "timeline",
-  "history",
-]
-
-const API_BASE = (import.meta.env.VITE_API_BASE ?? "").trim().replace(/\/$/, "")
-const API_TOKEN = import.meta.env.VITE_WEB_API_TOKEN ?? ""
-const API_TOKEN_HEADER = import.meta.env.VITE_WEB_API_TOKEN_HEADER ?? "X-Digest-Api-Token"
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers ?? undefined)
-  if (!headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json")
-  }
-  if (API_TOKEN) {
-    headers.set(API_TOKEN_HEADER, API_TOKEN)
-  }
-
-  const target = API_BASE ? `${API_BASE}${path}` : path
-  let response: Response
-  try {
-    response = await fetch(target, {
-      ...init,
-      headers,
-    })
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error)
-    throw new Error(`Network error calling ${target}. Check that API is running and reachable. (${reason})`)
-  }
-  if (!response.ok) {
-    const body = await response.text()
-    throw new Error(body || `request failed (${response.status})`)
-  }
-  return (await response.json()) as T
-}
-
-function toLines(values: string[] | undefined): string {
-  return (values ?? []).join("\n")
-}
-
-function fromLines(value: string): string[] {
-  return value
-    .split("\n")
-    .map((v) => v.trim())
-    .filter(Boolean)
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function diffObjects(base: Record<string, unknown>, target: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  const keys = new Set([...Object.keys(base), ...Object.keys(target)])
-  for (const key of keys) {
-    const left = base[key]
-    const right = target[key]
-    if (isRecord(left) && isRecord(right)) {
-      const nested = diffObjects(left, right)
-      if (Object.keys(nested).length > 0) {
-        out[key] = nested
-      }
-      continue
-    }
-    if (JSON.stringify(left) !== JSON.stringify(right)) {
-      out[key] = right
-    }
-  }
-  return out
-}
-
-function parseProfilePayload(value: string): Record<string, unknown> {
-  const parsed: unknown = JSON.parse(value)
-  if (!isRecord(parsed)) {
-    throw new Error("Profile JSON must be an object.")
-  }
-  return parsed
-}
-
-function formatElapsed(seconds: number | undefined): string {
-  const total = Math.max(0, Math.floor(seconds ?? 0))
-  const mins = Math.floor(total / 60)
-  const secs = total % 60
-  if (mins <= 0) return `${secs}s`
-  return `${mins}m ${secs}s`
-}
-
-function toInt(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value)
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number.parseInt(value, 10)
-    return Number.isFinite(parsed) ? parsed : null
-  }
-  return null
-}
-
-function truncateText(value: string, maxChars = 92): string {
-  const source = (value ?? "").trim()
-  if (source.length <= maxChars) return source
-  return `${source.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`
-}
-
-function statusHoverDetail(row: UnifiedSourceRow): string {
-  const details = [
-    `Type: ${row.type || "-"}`,
-    `Source: ${row.source || "-"}`,
-    `Last seen: ${row.last_seen || "-"}`,
-    `Last error: ${row.last_error || "-"}`,
-    `Hint: ${row.hint || "-"}`,
-  ]
-  return details.join("\n")
-}
-
-function sourceValuePlaceholderForType(sourceType: string): string {
-  const st = (sourceType || "").trim().toLowerCase()
-  if (st === "rss") return "https://news.ycombinator.com/rss"
-  if (st === "youtube_channel") return "UC_x5XG1OV2P6uZZ5FSM9Ttw"
-  if (st === "youtube_query") return "llm evals"
-  if (st === "x_author") return "@thdxr or https://x.com/thdxr"
-  if (st === "x_theme") return "ai agents"
-  if (st === "github_repo") return "openai/openai-cookbook"
-  if (st === "github_topic") return "llm-evals"
-  if (st === "github_query") return "agentic eval framework"
-  if (st === "github_org") return "vercel-labs or https://github.com/vercel-labs"
-  return "Enter source value"
-}
-
-function sourceHealthMatches(type: string, source: string, item: SourceHealthItem): boolean {
-  const t = (type || "").trim().toLowerCase()
-  const s = (source || "").trim().toLowerCase()
-  const k = (item.kind || "").trim().toLowerCase()
-  const src = (item.source || "").trim().toLowerCase()
-  if (!s) return false
-  if (t === "rss") return k === "rss" && src === s
-  if (t === "youtube_channel") return k === "youtube_channel" && src === s
-  if (t === "youtube_query") return k === "youtube_query" && src === s
-  if (t === "x_author") return k === "x_author" && src === s
-  if (t === "x_theme") return k === "x_theme" && src === s
-  if (t.startsWith("github_")) return k === "github" && src.includes(s)
-  return k === t && src === s
-}
-
-function readSurfaceFromUrl(): ConsoleSurface | null {
-  if (typeof window === "undefined") return null
-  const search = new URLSearchParams(window.location.search)
-  const value = (search.get("surface") || "").trim()
-  return CONSOLE_SURFACES.includes(value as ConsoleSurface) ? (value as ConsoleSurface) : null
-}
-
-
-export default function App() {
+function App() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const uiStateHydratedRef = useRef(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -484,10 +112,9 @@ export default function App() {
   const [timelineNoteText, setTimelineNoteText] = useState("")
   const [globalNotice, setGlobalNotice] = useState<Notice | null>(null)
   const [localNotices, setLocalNotices] = useState<Partial<Record<Exclude<NoticeScope, "global">, Notice>>>({})
-  const [surface, setSurface] = useState<ConsoleSurface>("dashboard")
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const [consoleModeOverride, setConsoleModeOverride] = useState<"setup" | "manage" | null>(null)
-  const [manageTab, setManageTab] = useState("sources")
+
+  const currentSurface = surfaceForPathname(location.pathname)
 
   const sortedSourceRows = useMemo(
     () => Object.entries(sources).sort((a, b) => a[0].localeCompare(b[0])),
@@ -511,12 +138,12 @@ export default function App() {
         key: `${row.type}:${row.source}`,
         type: row.type,
         source: row.source,
-        count: matches.reduce((sum, m) => sum + Math.max(0, m.count || 0), 0),
+        count: matches.reduce((sum, match) => sum + Math.max(0, match.count || 0), 0),
         health: matches.length > 0 ? "failing" : "healthy",
         last_error: latest?.last_error || "-",
         last_seen: latest?.last_seen || "-",
         hint: latest?.hint || "-",
-      } as UnifiedSourceRow
+      } satisfies UnifiedSourceRow
     })
   }, [sortedSourceRows, sourceHealth])
   const filteredUnifiedSourceRows = useMemo(() => {
@@ -545,7 +172,6 @@ export default function App() {
       return error instanceof Error ? error.message : String(error)
     }
   }, [profileJson])
-
   const localProfileDiff = useMemo(() => {
     if (!profileBaseline || profileJsonParseError) return {}
     try {
@@ -555,10 +181,8 @@ export default function App() {
       return {}
     }
   }, [profileBaseline, profileJson, profileJsonParseError])
-
   const localDiffCount = useMemo(() => Object.keys(localProfileDiff).length, [localProfileDiff])
   const serverDiffCount = useMemo(() => Object.keys(profileDiff).length, [profileDiff])
-  const sourceValuePlaceholder = useMemo(() => sourceValuePlaceholderForType(sourceType), [sourceType])
   const selectedTimelineEvent = useMemo(
     () => timelineEvents.find((row) => row.id === timelineSelectedEventId) ?? null,
     [timelineEvents, timelineSelectedEventId],
@@ -575,63 +199,45 @@ export default function App() {
     runNowLoading || activateLoading || previewLoading || runStatus?.active?.run_id || runProgress?.is_active,
   )
   const showRunActivity = Boolean(runProgress || digestBusy)
-
   const runActivityFacts = useMemo(() => {
     if (!runProgress) return [] as string[]
     const details = runProgress.details ?? {}
     const facts: string[] = []
-
     const fetchDone = toInt(details.fetch_done)
     const fetchTotal = toInt(details.fetch_total)
     if (fetchDone !== null && fetchTotal !== null && fetchTotal > 0) {
       facts.push(`Sources ${fetchDone}/${fetchTotal}`)
     }
-
     const processedCount = toInt(details.processed_count)
     const totalCount = toInt(details.total_count)
     if (processedCount !== null && totalCount !== null && totalCount > 0) {
       facts.push(`Items ${processedCount}/${totalCount}`)
     }
-
     const cacheHits = toInt(details.cache_hits)
     if (cacheHits !== null && cacheHits > 0) {
       facts.push(`Cache hits ${cacheHits}`)
     }
-
     const fallbackCount = toInt(details.fallback_count)
     if (fallbackCount !== null && fallbackCount > 0) {
       facts.push(`Fallbacks ${fallbackCount}`)
     }
-
     const sourceErrors = toInt(details.source_error_count)
     if (sourceErrors !== null && sourceErrors > 0) {
       facts.push(`Source errors ${sourceErrors}`)
     }
-
     const summaryErrors = toInt(details.summary_error_count)
     if (summaryErrors !== null && summaryErrors > 0) {
       facts.push(`Summary errors ${summaryErrors}`)
     }
-
     return facts.slice(0, 4)
   }, [runProgress])
 
   const onboardingDone = Boolean(
     onboarding && onboarding.progress.total > 0 && onboarding.progress.completed >= onboarding.progress.total,
   )
-  const consoleMode = consoleModeOverride ?? (onboardingDone ? "manage" : "setup")
-  const manageSurfaceToTab: Partial<Record<ConsoleSurface, string>> = {
-    sources: "sources",
-    profile: "profile",
-    review: "review",
-    timeline: "timeline",
-    history: "history",
-  }
-  const activeManageTab = manageSurfaceToTab[surface] ?? "sources"
   const setupPercent = onboarding?.progress.total
     ? Math.round((onboarding.progress.completed / onboarding.progress.total) * 100)
     : 0
-
   const digestLoadingMessage = runProgress
     ? `${runProgress.stage_label}: ${runProgress.stage_detail || runProgress.message}`
     : previewLoading
@@ -643,7 +249,6 @@ export default function App() {
           : runStatus?.active?.run_id
             ? "Digest run in progress. Waiting for progress details..."
             : ""
-
   const globalLoadingText =
     saveAction === "source-add"
       ? "Adding source..."
@@ -661,27 +266,27 @@ export default function App() {
                   ? "Saving profile overlay..."
                   : saveAction === "run-policy-save"
                     ? "Saving run policy..."
-                  : saveAction === "timeline-refresh"
-                    ? "Refreshing timeline..."
-                    : saveAction === "timeline-export"
-                      ? "Exporting timeline..."
-                    : saveAction === "timeline-note"
-                      ? "Saving timeline note..."
-                      : saveAction === "seen-reset-preview"
-                        ? "Previewing seen reset..."
-                        : saveAction === "seen-reset-apply"
-                          ? "Resetting seen history..."
-                    : saveAction === "rollback"
-                      ? "Rolling back to snapshot..."
-                    : runNowLoading
-                      ? "Starting digest run..."
-                      : activateLoading
-                        ? "Starting live run..."
-                        : previewLoading
-                          ? "Running onboarding preview..."
-                          : loading
-                            ? "Loading configuration..."
-                            : ""
+                    : saveAction === "timeline-refresh"
+                      ? "Refreshing timeline..."
+                      : saveAction === "timeline-export"
+                        ? "Exporting timeline..."
+                        : saveAction === "timeline-note"
+                          ? "Saving timeline note..."
+                          : saveAction === "seen-reset-preview"
+                            ? "Previewing seen reset..."
+                            : saveAction === "seen-reset-apply"
+                              ? "Resetting seen history..."
+                              : saveAction === "rollback"
+                                ? "Rolling back to snapshot..."
+                                : runNowLoading
+                                  ? "Starting digest run..."
+                                  : activateLoading
+                                    ? "Starting live run..."
+                                    : previewLoading
+                                      ? "Running onboarding preview..."
+                                      : loading
+                                        ? "Loading configuration..."
+                                        : ""
 
   function setScopedNotice(scope: NoticeScope, kind: Notice["kind"], text: string) {
     const next = { kind, text }
@@ -704,21 +309,23 @@ export default function App() {
     })
   }
 
-  function renderScopedNotice(scope: NoticeScope) {
-    const notice = scope === "global" ? globalNotice : localNotices[scope]
-    if (!notice) return null
-    return (
-      <Alert variant={notice.kind === "error" ? "destructive" : "default"} role="status" aria-live={notice.kind === "error" ? "assertive" : "polite"}>
-        <AlertTitle>{notice.kind === "error" ? "Action failed" : "Action completed"}</AlertTitle>
-        <AlertDescription className="flex items-start justify-between gap-3">
-          <span>{notice.text}</span>
-          <Button variant="ghost" size="sm" onClick={() => clearScopedNotice(scope)}>
-            Dismiss
-          </Button>
-        </AlertDescription>
-      </Alert>
+  useEffect(() => {
+    const legacySurface = surfaceFromLegacyQuery(location.search)
+    if (!legacySurface || legacySurface === "dashboard") {
+      uiStateHydratedRef.current = true
+      return
+    }
+    const params = new URLSearchParams(location.search)
+    params.delete("surface")
+    navigate(
+      {
+        pathname: surfacePaths[legacySurface],
+        search: params.toString() ? `?${params.toString()}` : "",
+      },
+      { replace: true },
     )
-  }
+    uiStateHydratedRef.current = true
+  }, [location.search, navigate])
 
   useEffect(() => {
     void refreshAll()
@@ -748,18 +355,9 @@ export default function App() {
   }, [timelineRunId])
 
   useEffect(() => {
-    const initialSurface = readSurfaceFromUrl()
-    if (initialSurface) {
-      setSurface(initialSurface)
-    }
-    uiStateHydratedRef.current = true
-  }, [])
-
-  useEffect(() => {
     const activeRunId = runStatus?.active?.run_id || runProgress?.run_id
     const shouldPollFast = Boolean(runStatus?.active?.run_id || runProgress?.is_active)
     if (!shouldPollFast) return
-
     let cancelled = false
     const poll = async () => {
       try {
@@ -775,7 +373,6 @@ export default function App() {
         // Keep last known progress when polling errors transiently.
       }
     }
-
     void poll()
     const timer = setInterval(() => {
       void poll()
@@ -785,6 +382,112 @@ export default function App() {
       clearInterval(timer)
     }
   }, [runStatus?.active?.run_id, runProgress?.is_active, runProgress?.run_id])
+
+  useEffect(() => {
+    if (!globalNotice || globalNotice.kind !== "ok") return
+    const timer = window.setTimeout(() => setGlobalNotice(null), 5000)
+    return () => window.clearTimeout(timer)
+  }, [globalNotice])
+
+  useEffect(() => {
+    const timers: number[] = []
+    for (const [scope, notice] of Object.entries(localNotices)) {
+      if (!notice || notice.kind !== "ok") continue
+      timers.push(
+        window.setTimeout(() => {
+          clearScopedNotice(scope as NoticeScope)
+        }, 5000),
+      )
+    }
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer))
+    }
+  }, [localNotices])
+
+  useEffect(() => {
+    setShowAllUnifiedSources(false)
+  }, [sourceSearch, sourceStatusFilter, sources, sourceHealth.length])
+
+  useEffect(() => {
+    setMobileNavOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    if (location.pathname !== surfacePaths.sources) return
+    const params = new URLSearchParams(location.search)
+    const nextSearch = params.get("q") ?? ""
+    const nextStatus = params.get("status")
+    if (nextSearch !== sourceSearch) {
+      setSourceSearch(nextSearch)
+    }
+    if (nextStatus === "healthy" || nextStatus === "failing" || nextStatus === "all") {
+      if (nextStatus !== sourceStatusFilter) {
+        setSourceStatusFilter(nextStatus)
+      }
+    }
+  }, [location.pathname, location.search, sourceSearch, sourceStatusFilter])
+
+  useEffect(() => {
+    if (location.pathname !== surfacePaths.sources || !uiStateHydratedRef.current) return
+    const params = new URLSearchParams(location.search)
+    if (sourceSearch) params.set("q", sourceSearch)
+    else params.delete("q")
+    if (sourceStatusFilter !== "all") params.set("status", sourceStatusFilter)
+    else params.delete("status")
+    const nextSearch = params.toString()
+    const normalized = nextSearch ? `?${nextSearch}` : ""
+    if (normalized !== location.search) {
+      navigate({ pathname: location.pathname, search: normalized }, { replace: true })
+    }
+  }, [location.pathname, location.search, navigate, sourceSearch, sourceStatusFilter])
+
+  useEffect(() => {
+    if (location.pathname !== surfacePaths.timeline) return
+    const params = new URLSearchParams(location.search)
+    const runId = params.get("run_id") ?? ""
+    const stage = params.get("stage") ?? "all"
+    const severity = params.get("severity") ?? "all"
+    const order = params.get("order") === "asc" ? "asc" : "desc"
+    if (runId && runId !== timelineRunId) setTimelineRunId(runId)
+    if (stage !== timelineStageFilter) setTimelineStageFilter(stage)
+    if (severity !== timelineSeverityFilter) setTimelineSeverityFilter(severity)
+    if (order !== timelineOrder) setTimelineOrder(order)
+  }, [location.pathname, location.search, timelineOrder, timelineRunId, timelineSeverityFilter, timelineStageFilter])
+
+  useEffect(() => {
+    if (location.pathname !== surfacePaths.timeline || !uiStateHydratedRef.current) return
+    const params = new URLSearchParams(location.search)
+    if (timelineRunId) params.set("run_id", timelineRunId)
+    else params.delete("run_id")
+    if (timelineStageFilter !== "all") params.set("stage", timelineStageFilter)
+    else params.delete("stage")
+    if (timelineSeverityFilter !== "all") params.set("severity", timelineSeverityFilter)
+    else params.delete("severity")
+    if (timelineOrder !== "desc") params.set("order", timelineOrder)
+    else params.delete("order")
+    const nextSearch = params.toString()
+    const normalized = nextSearch ? `?${nextSearch}` : ""
+    if (normalized !== location.search) {
+      navigate({ pathname: location.pathname, search: normalized }, { replace: true })
+    }
+  }, [location.pathname, location.search, navigate, timelineOrder, timelineRunId, timelineSeverityFilter, timelineStageFilter])
+
+  useEffect(() => {
+    if (!timelineRunId) return
+    void refreshTimeline({ silent: true })
+  }, [timelineRunId, timelineStageFilter, timelineSeverityFilter, timelineOrder])
+
+  useEffect(() => {
+    if (currentSurface !== "timeline" || !timelineRunId) return
+    if (timelineLivePaused) return
+    const activeRunId = runStatus?.active?.run_id ?? ""
+    const isLive = activeRunId !== "" && activeRunId === timelineRunId
+    if (!isLive) return
+    const timer = setInterval(() => {
+      void refreshTimeline({ silent: true })
+    }, 2500)
+    return () => clearInterval(timer)
+  }, [currentSurface, runStatus?.active?.run_id, timelineLivePaused, timelineOrder, timelineRunId, timelineSeverityFilter, timelineStageFilter])
 
   async function refreshAll() {
     setLoading(true)
@@ -801,8 +504,7 @@ export default function App() {
         sourcePackData,
         timelineData,
         policyData,
-      ] =
-        await Promise.all([
+      ] = await Promise.all([
         api<{ types: string[] }>("/api/config/source-types"),
         api<{ sources: SourceMap }>("/api/config/sources"),
         api<{ profile: Record<string, unknown> }>("/api/config/profile"),
@@ -932,9 +634,7 @@ export default function App() {
       }
       const [status, progress] = await Promise.all([
         api<RunStatus>("/api/run-status"),
-        api<RunProgress>(
-          `/api/run-progress${result.run_id ? `?run_id=${encodeURIComponent(result.run_id)}` : ""}`,
-        ),
+        api<RunProgress>(`/api/run-progress${result.run_id ? `?run_id=${encodeURIComponent(result.run_id)}` : ""}`),
       ])
       setRunStatus(status)
       setRunProgress(progress.available ? progress : null)
@@ -957,9 +657,7 @@ export default function App() {
       setScopedNotice(
         "onboarding",
         result.ok ? "ok" : "error",
-        result.ok
-          ? `Preflight passed (${result.pass_count} checks).`
-          : `Preflight found ${result.fail_count} failing checks.`,
+        result.ok ? `Preflight passed (${result.pass_count} checks).` : `Preflight found ${result.fail_count} failing checks.`,
       )
     } catch (error) {
       setScopedNotice("onboarding", "error", String(error))
@@ -1015,17 +713,12 @@ export default function App() {
     setActivateLoading(true)
     setSaving(true)
     try {
-      const result = await api<{ started: boolean; run_id?: string; active_run_id?: string }>(
-        "/api/onboarding/activate",
-        {
-          method: "POST",
-        },
-      )
+      const result = await api<{ started: boolean; run_id?: string; active_run_id?: string }>("/api/onboarding/activate", {
+        method: "POST",
+      })
       const [status, progress, onboardingStatus] = await Promise.all([
         api<RunStatus>("/api/run-status"),
-        api<RunProgress>(
-          `/api/run-progress${result.run_id ? `?run_id=${encodeURIComponent(result.run_id)}` : ""}`,
-        ),
+        api<RunProgress>(`/api/run-progress${result.run_id ? `?run_id=${encodeURIComponent(result.run_id)}` : ""}`),
         api<OnboardingStatus>("/api/onboarding/status"),
       ])
       setRunStatus(status)
@@ -1034,9 +727,7 @@ export default function App() {
       setScopedNotice(
         "onboarding",
         result.started ? "ok" : "error",
-        result.started
-          ? `Live run started: ${result.run_id}`
-          : `Run already active: ${result.active_run_id}`,
+        result.started ? `Live run started: ${result.run_id}` : `Run already active: ${result.active_run_id}`,
       )
     } catch (error) {
       setScopedNotice("onboarding", "error", String(error))
@@ -1134,13 +825,10 @@ export default function App() {
     try {
       const days = Number.parseInt(seenResetDays, 10)
       const payload = Number.isFinite(days) && days > 0 ? { older_than_days: days } : {}
-      const result = await api<{ affected_count: number; scope: string; older_than_days: number | null }>(
-        "/api/seen/reset/preview",
-        {
-          method: "POST",
-          body: JSON.stringify(payload),
-        },
-      )
+      const result = await api<{ affected_count: number }>("/api/seen/reset/preview", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      })
       setSeenResetPreviewCount(result.affected_count)
       setScopedNotice("profile", "ok", `Preview complete: ${result.affected_count} seen keys affected.`)
     } catch (error) {
@@ -1211,18 +899,13 @@ export default function App() {
     try {
       const runIdQuery = encodeURIComponent(timelineRunId)
       const stageQuery = timelineStageFilter === "all" ? "" : `&stage=${encodeURIComponent(timelineStageFilter)}`
-      const severityQuery =
-        timelineSeverityFilter === "all" ? "" : `&severity=${encodeURIComponent(timelineSeverityFilter)}`
+      const severityQuery = timelineSeverityFilter === "all" ? "" : `&severity=${encodeURIComponent(timelineSeverityFilter)}`
       const orderQuery = `&order=${encodeURIComponent(timelineOrder)}`
-
       const [eventsResult, notesResult, summaryResult] = await Promise.all([
-        api<{ events: TimelineEvent[] }>(
-          `/api/timeline/events?run_id=${runIdQuery}&limit=400${stageQuery}${severityQuery}${orderQuery}`,
-        ),
+        api<{ events: TimelineEvent[] }>(`/api/timeline/events?run_id=${runIdQuery}&limit=400${stageQuery}${severityQuery}${orderQuery}`),
         api<{ notes: TimelineNote[] }>(`/api/timeline/notes?run_id=${runIdQuery}&limit=200`),
-        api<{ summary: TimelineSummary }>(`/api/timeline/summary?run_id=${runIdQuery}`).catch(() => ({ summary: null })),
+        api<{ summary: TimelineSummary }>(`/api/timeline/summary?run_id=${runIdQuery}`).catch(() => ({ summary: null as TimelineSummary | null })),
       ])
-
       const nextEvents = eventsResult.events ?? []
       setTimelineEvents(nextEvents)
       setTimelineSelectedEventId((current) => {
@@ -1239,6 +922,29 @@ export default function App() {
         setSaveAction("")
         setSaving(false)
       }
+    }
+  }
+
+  async function exportTimeline() {
+    if (!timelineRunId) return
+    setSaveAction("timeline-export")
+    setSaving(true)
+    try {
+      const runIdQuery = encodeURIComponent(timelineRunId)
+      const payload = await api<Record<string, unknown>>(`/api/timeline/export?run_id=${runIdQuery}`)
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = `timeline-${timelineRunId}.json`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      setScopedNotice("timeline", "ok", "Timeline JSON exported.")
+    } catch (error) {
+      setScopedNotice("timeline", "error", String(error))
+    } finally {
+      setSaveAction("")
+      setSaving(false)
     }
   }
 
@@ -1269,105 +975,15 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    if (surface === "onboarding") {
-      setConsoleModeOverride("setup")
-      return
-    }
-    if (surface === "dashboard" || surface === "run") {
-      return
-    }
-    setConsoleModeOverride("manage")
-    setManageTab(activeManageTab)
-  }, [activeManageTab, surface])
-
-  useEffect(() => {
-    setMobileNavOpen(false)
-  }, [surface])
-
-  useEffect(() => {
-    if (!globalNotice || globalNotice.kind !== "ok") return
-    const timer = window.setTimeout(() => setGlobalNotice(null), 5000)
-    return () => window.clearTimeout(timer)
-  }, [globalNotice])
-
-  useEffect(() => {
-    const timers: number[] = []
-    for (const [scope, notice] of Object.entries(localNotices)) {
-      if (!notice || notice.kind !== "ok") continue
-      timers.push(
-        window.setTimeout(() => {
-          clearScopedNotice(scope as NoticeScope)
-        }, 5000),
-      )
-    }
-    return () => {
-      timers.forEach((timer) => window.clearTimeout(timer))
-    }
-  }, [localNotices])
-
-  useEffect(() => {
-    setShowAllUnifiedSources(false)
-  }, [sourceSearch, sourceStatusFilter, sources, sourceHealth.length])
-
-  useEffect(() => {
-    if (!uiStateHydratedRef.current || typeof window === "undefined") return
-    const search = new URLSearchParams(window.location.search)
-    search.set("surface", surface)
-    const nextSearch = search.toString()
-    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`
-    window.history.replaceState({}, "", nextUrl)
-  }, [surface])
-
-  useEffect(() => {
-    if (!timelineRunId) return
-    void refreshTimeline({ silent: true })
-  }, [timelineRunId, timelineStageFilter, timelineSeverityFilter, timelineOrder])
-
-  async function exportTimeline() {
-    if (!timelineRunId) return
-    setSaveAction("timeline-export")
-    setSaving(true)
-    try {
-      const runIdQuery = encodeURIComponent(timelineRunId)
-      const payload = await api<Record<string, unknown>>(`/api/timeline/export?run_id=${runIdQuery}`)
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement("a")
-      anchor.href = url
-      anchor.download = `timeline-${timelineRunId}.json`
-      anchor.click()
-      URL.revokeObjectURL(url)
-      setScopedNotice("timeline", "ok", "Timeline JSON exported.")
-    } catch (error) {
-      setScopedNotice("timeline", "error", String(error))
-    } finally {
-      setSaveAction("")
-      setSaving(false)
-    }
+  function navigateToSurface(surface: ConsoleSurface) {
+    navigate(surfacePaths[surface])
   }
-
-  useEffect(() => {
-    if (surface !== "timeline" || !timelineRunId) return
-    if (timelineLivePaused) return
-    const activeRunId = runStatus?.active?.run_id ?? ""
-    const isLive = activeRunId !== "" && activeRunId === timelineRunId
-    if (!isLive) return
-    const timer = setInterval(() => {
-      void refreshTimeline({ silent: true })
-    }, 2500)
-    return () => clearInterval(timer)
-  }, [runStatus?.active?.run_id, surface, timelineLivePaused, timelineOrder, timelineRunId, timelineSeverityFilter, timelineStageFilter])
 
   function renderSetupStepAction(stepId: string) {
     if (stepId === "preflight") {
       return (
         <Button variant="outline" size="sm" onClick={() => void runOnboardingPreflight()} disabled={saving}>
-          {saveAction === "onboarding-preflight" ? (
-            <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" />
-          ) : (
-            <ShieldCheck className="h-3.5 w-3.5" />
-          )}
+          {saveAction === "onboarding-preflight" ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" /> : null}
           {saveAction === "onboarding-preflight" ? "Running..." : "Run preflight"}
         </Button>
       )
@@ -1384,91 +1000,37 @@ export default function App() {
           </Button>
         )
       }
-      return (
-        <Button variant="outline" size="sm" onClick={() => setSurface("sources")}>
-          Open sources
-        </Button>
-      )
+      return <Button variant="outline" size="sm" onClick={() => navigateToSurface("sources")}>Open sources</Button>
     }
     if (stepId === "outputs" || stepId === "profile") {
-      return (
-        <Button variant="outline" size="sm" onClick={() => setSurface("profile")}>
-          Open profile
-        </Button>
-      )
+      return <Button variant="outline" size="sm" onClick={() => navigateToSurface("profile")}>Open profile</Button>
     }
     if (stepId === "preview") {
       return (
         <Button variant="outline" size="sm" onClick={() => void runOnboardingPreview()} disabled={previewLoading || saving}>
-          {previewLoading ? (
-            <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" />
-          ) : (
-            <Play className="h-3.5 w-3.5" />
-          )}
+          {previewLoading ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" /> : <Play className="h-3.5 w-3.5" />}
           {previewLoading ? "Running..." : "Run preview"}
         </Button>
       )
     }
     if (stepId === "activate") {
       return (
-        <Button
-          size="sm"
-          onClick={() => void activateOnboarding()}
-          disabled={saving || previewLoading || activateLoading || Boolean(runStatus?.active?.run_id)}
-        >
-          {activateLoading ? (
-            <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" />
-          ) : (
-            <Play className="h-3.5 w-3.5" />
-          )}
+        <Button size="sm" onClick={() => void activateOnboarding()} disabled={saving || previewLoading || activateLoading || Boolean(runStatus?.active?.run_id)}>
+          {activateLoading ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" /> : <Play className="h-3.5 w-3.5" />}
           {activateLoading ? "Starting..." : "Activate"}
         </Button>
       )
     }
     if (stepId === "health") {
       return (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void runNow()}
-          disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}
-        >
-          {runNowLoading ? (
-            <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" />
-          ) : (
-            <RefreshCcw className="h-3.5 w-3.5" />
-          )}
+        <Button variant="outline" size="sm" onClick={() => void runNow()} disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}>
+          {runNowLoading ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" /> : <RefreshCcw className="h-3.5 w-3.5" />}
           Re-check with run
         </Button>
       )
     }
     return null
   }
-
-  const navItems: Array<{
-    id: ConsoleSurface
-    label: string
-    hint: string
-    icon: typeof LayoutDashboard
-    badge?: string
-  }> = [
-    { id: "dashboard", label: "Dashboard", hint: "status and alerts", icon: LayoutDashboard },
-    { id: "run", label: "Run Center", hint: "manual run control", icon: Rocket },
-    {
-      id: "onboarding",
-      label: "Onboarding",
-      hint: "preflight and activation",
-      icon: SlidersHorizontal,
-      badge: onboardingDone ? "Ready" : `${onboarding?.progress.completed ?? 0}/${onboarding?.progress.total ?? 0}`,
-    },
-    { id: "sources", label: "Sources", hint: "inputs and health", icon: Database },
-    { id: "profile", label: "Profile", hint: "policy and runtime", icon: ShieldCheck },
-    { id: "review", label: "Review", hint: "validate and apply", icon: ScrollText },
-    { id: "timeline", label: "Timeline", hint: "events and notes", icon: Activity },
-    { id: "history", label: "History", hint: "snapshots and rollback", icon: History },
-  ]
-
-  const isManageSurface = surface === "sources" || surface === "profile" || surface === "review" || surface === "timeline" || surface === "history"
 
   return (
     <main className="min-h-screen bg-console-canvas pb-10" aria-label="Digest Control Center">
@@ -1491,26 +1053,18 @@ export default function App() {
               </div>
               <h1 className="font-display text-3xl tracking-tight text-foreground md:text-4xl">Control Center</h1>
               <p className="max-w-3xl text-sm text-muted-foreground">
-                Status-first workspace for daily operations, onboarding, and advanced maintenance without losing feature coverage.
+                Route-based operator workspace for onboarding, run control, and long-term maintenance without losing feature coverage.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-              {runStatus?.active ? (
-                <Badge variant="warning">Active: {runStatus.active.run_id}</Badge>
-              ) : (
-                <Badge variant="success">No active run</Badge>
-              )}
+              {runStatus?.active ? <Badge variant="warning">Active: {runStatus.active.run_id}</Badge> : <Badge variant="success">No active run</Badge>}
               {runStatus?.latest ? <Badge variant="secondary">Last: {runStatus.latest.status}</Badge> : null}
               {runStatus?.latest_completed && runStatus.latest_completed.source_error_count > 0 ? (
                 <Badge variant="warning">Source errors: {runStatus.latest_completed.source_error_count}</Badge>
               ) : null}
               <Button variant="outline" onClick={() => void refreshAll()} disabled={loading || saving}>
-                {loading ? (
-                  <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <RefreshCcw className="h-4 w-4" />
-                )}
+                {loading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" /> : <RefreshCcw className="h-4 w-4" />}
                 {loading ? "Refreshing..." : "Refresh"}
               </Button>
               <div className="min-w-[190px]">
@@ -1532,11 +1086,7 @@ export default function App() {
                 </Select>
               </div>
               <Button onClick={() => void runNow()} disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}>
-                {runNowLoading ? (
-                  <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <Play className="h-4 w-4" />
-                )}
+                {runNowLoading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" /> : <Play className="h-4 w-4" />}
                 {runNowLoading ? "Starting..." : "Run now"}
               </Button>
             </div>
@@ -1546,14 +1096,12 @@ export default function App() {
         <section className="console-status-ribbon rounded-2xl px-4 py-3 animate-surface-enter [animation-delay:40ms]" aria-label="Run status ribbon">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={runStatus?.active ? "warning" : "success"}>{runStatus?.active ? "Run active" : "Run idle"}</Badge>
-            <Badge variant="secondary">surface: {surface}</Badge>
+            <Badge variant="secondary">surface: {currentSurface}</Badge>
             <Badge variant="secondary">mode default: {runPolicy.default_mode}</Badge>
             <Badge variant={sourceHealth.length > 0 ? "warning" : "success"}>
               {sourceHealth.length > 0 ? `source issues: ${sourceHealth.length}` : "source health clear"}
             </Badge>
-            {runStatus?.latest_completed ? (
-              <Badge variant="secondary">latest completed: {runStatus.latest_completed.status}</Badge>
-            ) : null}
+            {runStatus?.latest_completed ? <Badge variant="secondary">latest completed: {runStatus.latest_completed.status}</Badge> : null}
           </div>
         </section>
 
@@ -1575,9 +1123,7 @@ export default function App() {
                   <CardTitle className="font-display text-base">Digest Activity</CardTitle>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={digestBusy ? "warning" : "success"}>
-                    {digestBusy ? "Running" : "Completed"}
-                  </Badge>
+                  <Badge variant={digestBusy ? "warning" : "success"}>{digestBusy ? "Running" : "Completed"}</Badge>
                   <Badge variant="secondary">run_id: {runProgress?.run_id || runStatus?.active?.run_id || "-"}</Badge>
                 </div>
               </div>
@@ -1597,7 +1143,6 @@ export default function App() {
                   <p className="text-xs text-muted-foreground">{digestLoadingMessage || "Waiting for digest activity."}</p>
                 </div>
               )}
-
               {runProgress ? (
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <span className="inline-flex items-center gap-1">
@@ -1614,45 +1159,53 @@ export default function App() {
           </Card>
         ) : null}
 
-        {renderScopedNotice("global")}
+        <InlineNotice notice={globalNotice} onDismiss={() => clearScopedNotice("global")} />
 
         <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
           <aside className={`${mobileNavOpen ? "block" : "hidden"} space-y-4 lg:block`}>
             <Card className="border-border/80 bg-card/95 animate-surface-enter">
               <CardHeader className="pb-3">
                 <CardTitle className="font-display text-base">Workspace Navigation</CardTitle>
-                <CardDescription>Focused surfaces for daily operations and advanced controls.</CardDescription>
+                <CardDescription>Route-based surfaces for daily operations and advanced controls.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
                 <nav aria-label="Workspace surfaces" className="space-y-2">
-                {navItems.map((item, index) => {
-                  const Icon = item.icon
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setSurface(item.id)}
-                      aria-current={surface === item.id ? "page" : undefined}
-                      className={`group flex min-h-[52px] w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-all duration-200 ${
-                        surface === item.id
-                          ? "border-primary/40 bg-primary/10 shadow-sm"
-                          : "border-border/70 bg-background/60 hover:border-primary/20 hover:bg-primary/5"
-                      }`}
-                      style={{ animationDelay: `${index * 35}ms` }}
-                    >
-                      <span className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-primary" />
-                        <span>
-                          <span className="block text-sm font-semibold">{item.label}</span>
-                          <span className="block text-[11px] text-muted-foreground">{item.hint}</span>
-                        </span>
-                      </span>
-                      {item.badge ? (
-                        <Badge variant={item.id === "onboarding" && !onboardingDone ? "warning" : "secondary"}>{item.badge}</Badge>
-                      ) : null}
-                    </button>
-                  )
-                })}
+                  {navItems.map((item, index) => {
+                    const Icon = item.icon
+                    const badge =
+                      item.id === "onboarding"
+                        ? onboardingDone
+                          ? "Ready"
+                          : `${onboarding?.progress.completed ?? 0}/${onboarding?.progress.total ?? 0}`
+                        : undefined
+                    return (
+                      <NavLink
+                        key={item.id}
+                        to={surfacePaths[item.id]}
+                        className={({ isActive }) =>
+                          `group flex min-h-[52px] w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-all duration-200 ${
+                            isActive
+                              ? "border-primary/40 bg-primary/10 shadow-sm"
+                              : "border-border/70 bg-background/60 hover:border-primary/20 hover:bg-primary/5"
+                          }`
+                        }
+                        style={{ animationDelay: `${index * 35}ms` }}
+                      >
+                        {({ isActive }) => (
+                          <>
+                            <span className="flex items-center gap-2">
+                              <Icon className="h-4 w-4 text-primary" />
+                              <span>
+                                <span className="block text-sm font-semibold">{item.label}</span>
+                                <span className="block text-[11px] text-muted-foreground">{item.hint}</span>
+                              </span>
+                            </span>
+                            {badge ? <Badge variant={item.id === "onboarding" && !onboardingDone ? "warning" : "secondary"}>{badge}</Badge> : isActive ? <Badge variant="secondary">Open</Badge> : null}
+                          </>
+                        )}
+                      </NavLink>
+                    )
+                  })}
                 </nav>
               </CardContent>
             </Card>
@@ -1675,7 +1228,7 @@ export default function App() {
                 {sourceHealth.length > 0 ? (
                   <div className="rounded-lg border border-amber-300/50 bg-amber-50/60 p-3">
                     <p className="text-xs font-semibold text-amber-900">Source health alerts: {sourceHealth.length}</p>
-                    <p className="mt-1 text-xs text-amber-800">Open Sources page to inspect diagnostics and apply fixes.</p>
+                    <p className="mt-1 text-xs text-amber-800">Open Sources workspace to inspect diagnostics and apply fixes.</p>
                   </div>
                 ) : (
                   <div className="rounded-lg border border-emerald-300/50 bg-emerald-50/60 p-3">
@@ -1703,1273 +1256,194 @@ export default function App() {
                   <div className="h-44 rounded-xl skeleton-shimmer" />
                 </CardContent>
               </Card>
-            ) : surface === "dashboard" ? (
-              <>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <Card className="border-border/80 bg-card/95">
-                    <CardHeader className="pb-2">
-                      <CardDescription>Latest run</CardDescription>
-                      <CardTitle className="font-display text-2xl">{runStatus?.latest?.status ?? "n/a"}</CardTitle>
-                    </CardHeader>
-                  </Card>
-                  <Card className="border-border/80 bg-card/95">
-                    <CardHeader className="pb-2">
-                      <CardDescription>Source alerts</CardDescription>
-                      <CardTitle className="font-display text-2xl">{sourceHealth.length}</CardTitle>
-                    </CardHeader>
-                  </Card>
-                  <Card className="border-border/80 bg-card/95">
-                    <CardHeader className="pb-2">
-                      <CardDescription>Setup completion</CardDescription>
-                      <CardTitle className="font-display text-2xl">{setupPercent}%</CardTitle>
-                    </CardHeader>
-                  </Card>
-                  <Card className="border-border/80 bg-card/95">
-                    <CardHeader className="pb-2">
-                      <CardDescription>Timeline runs</CardDescription>
-                      <CardTitle className="font-display text-2xl">{timelineRuns.length}</CardTitle>
-                    </CardHeader>
-                  </Card>
-                </div>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="font-display">Operational Focus</CardTitle>
-                    <CardDescription>Start with status and move into focused workflows.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    <Button className="justify-between" onClick={() => setSurface("run")}>
-                      Open Run Center
-                      <Rocket className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" className="justify-between" onClick={() => setSurface("sources")}>
-                      Open Sources
-                      <Database className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" className="justify-between" onClick={() => setSurface("timeline")}>
-                      Open Timeline
-                      <Activity className="h-4 w-4" />
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                {sourceHealth.length > 0 ? (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="font-display">Source health alerts</CardTitle>
-                      <CardDescription>Recent ingestion failures that can reduce digest quality.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {sourceHealth.slice(0, 6).map((item) => (
-                        <div key={`${item.kind}:${item.source}`} className="rounded-lg border border-amber-300/40 bg-amber-50/30 p-2.5">
-                          <p className="truncate font-mono text-[11px]">{item.source}</p>
-                          <p className="text-xs text-muted-foreground">{item.count} failures in recent runs</p>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                ) : null}
-              </>
-            ) : surface === "run" ? (
-              <>
-                {renderScopedNotice("run")}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="font-display">Run Center</CardTitle>
-                    <CardDescription>Manual runs, mode overrides, and live progress visibility.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid gap-4 md:grid-cols-[1fr,auto,auto]">
-                    <div className="space-y-2">
-                      <Label>One-time mode override</Label>
-                      <Select
-                        value={runNowModeOverride}
-                        onValueChange={setRunNowModeOverride}
-                        disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id) || !runPolicy.allow_run_override}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="default">Run now: default ({runPolicy.default_mode})</SelectItem>
-                          <SelectItem value="fresh_only">Run now: fresh_only</SelectItem>
-                          <SelectItem value="balanced">Run now: balanced</SelectItem>
-                          <SelectItem value="replay_recent">Run now: replay_recent</SelectItem>
-                          <SelectItem value="backfill">Run now: backfill</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-end">
-                      <Button variant="outline" onClick={() => void refreshAll()} disabled={loading || saving}>
-                        {loading ? (
-                          <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                        ) : (
-                          <RefreshCcw className="h-4 w-4" />
-                        )}
-                        {loading ? "Refreshing..." : "Refresh"}
-                      </Button>
-                    </div>
-                    <div className="flex items-end">
-                      <Button onClick={() => void runNow()} disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}>
-                        {runNowLoading ? (
-                          <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                        ) : (
-                          <Play className="h-4 w-4" />
-                        )}
-                        {runNowLoading ? "Starting..." : "Run now"}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="font-display">Latest Completion Snapshot</CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex flex-wrap gap-2">
-                    <Badge variant="secondary">run_id: {runStatus?.latest_completed?.run_id ?? "-"}</Badge>
-                    <Badge variant="secondary">status: {runStatus?.latest_completed?.status ?? "-"}</Badge>
-                    <Badge variant="secondary">
-                      source errors: {runStatus?.latest_completed?.source_error_count ?? 0}
-                    </Badge>
-                    <Badge variant="secondary">
-                      summary errors: {runStatus?.latest_completed?.summary_error_count ?? 0}
-                    </Badge>
-                    <Button variant="outline" size="sm" onClick={() => setSurface("timeline")}>
-                      Open timeline details
-                    </Button>
-                  </CardContent>
-                </Card>
-              </>
-            ) : surface === "onboarding" ? (
-              <>
-                {renderScopedNotice("onboarding")}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="font-display">Setup Journey</CardTitle>
-                    <CardDescription>Move from preflight to first healthy run using guided actions.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={onboarding?.preflight.ok ? "success" : "warning"}>
-                        Preflight {onboarding?.preflight.ok ? "ready" : "needs attention"}
-                      </Badge>
-                      <Badge variant="secondary">
-                        Steps {onboarding?.progress.completed ?? 0}/{onboarding?.progress.total ?? 0}
-                      </Badge>
-                    </div>
-                    <Progress value={setupPercent} />
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {(onboarding?.steps ?? []).map((step) => (
-                        <div key={step.id} className="space-y-2 rounded-xl border bg-muted/20 p-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm font-semibold leading-tight">{step.label}</p>
-                            <Badge variant={step.status === "complete" ? "success" : "warning"}>
-                              {step.status === "complete" ? <CheckCircle2 className="h-3 w-3" /> : null}
-                              {step.status}
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">{step.detail}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {step.completed_at ? `Completed at ${step.completed_at}` : "Not completed yet"}
-                          </p>
-                          <div>{renderSetupStepAction(step.id)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="font-display">Preflight Checks</CardTitle>
-                    <CardDescription>Validate environment, config, and writable paths before activation.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {preflight ? (
-                      <>
-                        <div className="mb-3 flex flex-wrap items-center gap-2">
-                          <Badge variant={preflight.ok ? "success" : "warning"}>
-                            {preflight.ok ? "Ready to activate" : "Fix required items"}
-                          </Badge>
-                          <Badge variant="secondary">pass: {preflight.pass_count}</Badge>
-                          <Badge variant="secondary">warn: {preflight.warn_count}</Badge>
-                          <Badge variant={preflight.fail_count > 0 ? "warning" : "secondary"}>fail: {preflight.fail_count}</Badge>
-                        </div>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Check</TableHead>
-                              <TableHead>Status</TableHead>
-                              <TableHead>Detail</TableHead>
-                              <TableHead>Hint</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {preflight.checks.map((check) => (
-                              <TableRow key={check.id}>
-                                <TableCell className="font-medium">{check.label}</TableCell>
-                                <TableCell>
-                                  <Badge
-                                    variant={
-                                      check.status === "pass"
-                                        ? "success"
-                                        : check.status === "warn"
-                                          ? "warning"
-                                          : "secondary"
-                                    }
-                                  >
-                                    {check.status}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-xs text-muted-foreground">{check.detail}</TableCell>
-                                <TableCell className="text-xs">{check.hint || "-"}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </>
-                    ) : (
-                      <div className="flex flex-wrap items-center gap-3">
-                        <p className="text-sm text-muted-foreground">Run preflight to load checks for this environment.</p>
-                        <Button variant="outline" onClick={() => void runOnboardingPreflight()} disabled={saving}>
-                          {saveAction === "onboarding-preflight" ? (
-                            <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                          ) : (
-                            <ShieldCheck className="h-4 w-4" />
-                          )}
-                          {saveAction === "onboarding-preflight" ? "Running..." : "Run preflight"}
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="font-display">Source Packs</CardTitle>
-                    <CardDescription>Apply curated source bundles to bootstrap ingestion quickly.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {sourcePacks.map((pack) => (
-                      <div
-                        key={pack.id}
-                        className="flex flex-col gap-2 rounded-xl border bg-muted/15 p-3 md:flex-row md:items-center md:justify-between"
-                      >
-                        <div className="space-y-1">
-                          <p className="text-sm font-semibold">{pack.name}</p>
-                          <p className="text-xs text-muted-foreground">{pack.description}</p>
-                          <p className="text-xs text-muted-foreground">{pack.item_count} sources</p>
-                        </div>
-                        <Button variant="outline" onClick={() => void applySourcePack(pack.id)} disabled={saving}>
-                          {saveAction === "source-pack" && activeSourcePackId === pack.id ? (
-                            <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                          ) : null}
-                          {saveAction === "source-pack" && activeSourcePackId === pack.id ? "Applying..." : "Apply pack"}
-                        </Button>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-
-                {previewResult ? (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="font-display">Preview Result</CardTitle>
-                      <CardDescription>Non-delivering output from the latest onboarding preview run.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="secondary">run_id: {previewResult.run_id}</Badge>
-                        <Badge variant={previewResult.status === "success" ? "success" : "warning"}>
-                          status: {previewResult.status}
-                        </Badge>
-                        <Badge variant="secondary">must-read: {previewResult.must_read_count}</Badge>
-                        <Badge variant="secondary">skim: {previewResult.skim_count}</Badge>
-                        <Badge variant="secondary">videos: {previewResult.video_count}</Badge>
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div>
-                          <Label>Telegram Preview</Label>
-                          <pre className="max-h-[260px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
-                            {(previewResult.telegram_messages ?? []).join("\n\n") || "-"}
-                          </pre>
-                        </div>
-                        <div>
-                          <Label>Obsidian Preview</Label>
-                          <pre className="max-h-[260px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
-                            {previewResult.obsidian_note || "-"}
-                          </pre>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : null}
-              </>
-            ) : isManageSurface ? (
-              <>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="font-display">
-                      {surface === "sources"
-                        ? "Sources"
-                        : surface === "profile"
-                          ? "Profile"
-                          : surface === "review"
-                            ? "Review"
-                            : surface === "timeline"
-                              ? "Timeline"
-                              : "History"}
-                    </CardTitle>
-                    <CardDescription>
-                      {surface === "sources"
-                        ? "Manage ingestion inputs and inspect source health."
-                        : surface === "profile"
-                          ? "Tune policy and runtime behavior with full parity."
-                          : surface === "review"
-                            ? "Validate, diff, and apply profile payload changes."
-                            : surface === "timeline"
-                              ? "Inspect live and historical run events."
-                              : "Review and rollback saved snapshots."}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-wrap items-center gap-2">
-                    <Badge variant={onboardingDone ? "success" : "warning"}>
-                      {onboardingDone ? "Setup complete" : "Setup incomplete"}
-                    </Badge>
-                    <Badge variant="secondary">
-                      Steps {onboarding?.progress.completed ?? 0}/{onboarding?.progress.total ?? 0}
-                    </Badge>
-                    {!onboardingDone ? <Button variant="outline" size="sm" onClick={() => setSurface("onboarding")}>Return to setup journey</Button> : null}
-                  </CardContent>
-                </Card>
-
-                <Tabs value={manageTab} onValueChange={setManageTab} className="w-full">
-                  <div className="sr-only">
-                    <TabsList>
-                      <TabsTrigger value="sources">Sources</TabsTrigger>
-                      <TabsTrigger value="profile">Profile</TabsTrigger>
-                      <TabsTrigger value="review">Review</TabsTrigger>
-                      <TabsTrigger value="timeline">Timeline</TabsTrigger>
-                      <TabsTrigger value="history">History</TabsTrigger>
-                    </TabsList>
-                  </div>
-
-                  <TabsContent value="sources" className="space-y-4">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Sources</CardTitle>
-                        <CardDescription>Manage inputs and triage source health in one unified workspace.</CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="secondary">types: {sortedSourceRows.length}</Badge>
-                          <Badge variant="secondary">total sources: {totalSourceCount}</Badge>
-                          <Badge variant={sourceHealth.length > 0 ? "warning" : "success"}>
-                            failing sources: {sourceHealth.length}
-                          </Badge>
-                        </div>
-
-                        <div className="grid gap-4 border-b border-border/70 pb-4 md:grid-cols-[1fr,2fr,auto,auto]">
-                          <div className="space-y-2">
-                            <Label>Source Type</Label>
-                            <Select value={sourceType} onValueChange={setSourceType}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select type" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {sourceTypes.map((type) => (
-                                  <SelectItem key={type} value={type}>
-                                    {type}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Value</Label>
-                            <Input
-                              placeholder={sourceValuePlaceholder}
-                              value={sourceValue}
-                              onChange={(event) => setSourceValue(event.target.value)}
-                            />
-                          </div>
-                          <div className="flex items-end">
-                            <Button onClick={() => void handleSourceMutation("add")} disabled={saving}>
-                              {saveAction === "source-add" ? (
-                                <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                              ) : null}
-                              {saveAction === "source-add" ? "Adding..." : "Add"}
-                            </Button>
-                          </div>
-                          <div className="flex items-end">
-                            <Button variant="outline" onClick={() => void handleSourceMutation("remove")} disabled={saving}>
-                              {saveAction === "source-remove" ? (
-                                <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                              ) : null}
-                              {saveAction === "source-remove" ? "Removing..." : "Remove"}
-                            </Button>
-                          </div>
-                        </div>
-                        {renderScopedNotice("sources")}
-
-                        <div className="space-y-3 pt-1">
-                          <div className="flex flex-wrap items-end gap-3">
-                            <div className="min-w-[240px] flex-1 space-y-2">
-                              <Label htmlFor="unified-source-search">Filter sources</Label>
-                              <Input
-                                id="unified-source-search"
-                                placeholder="Search type, source, error, or hint"
-                                value={sourceSearch}
-                                onChange={(event) => setSourceSearch(event.target.value)}
-                              />
-                            </div>
-                            <div className="min-w-[170px] space-y-2">
-                              <Label>Status</Label>
-                              <Select
-                                value={sourceStatusFilter}
-                                onValueChange={(value) =>
-                                  setSourceStatusFilter(value === "failing" ? "failing" : value === "healthy" ? "healthy" : "all")
-                                }
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="all">all</SelectItem>
-                                  <SelectItem value="healthy">healthy</SelectItem>
-                                  <SelectItem value="failing">failing</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <Badge variant="secondary">rows: {filteredUnifiedSourceRows.length}</Badge>
-                          </div>
-
-                          <div className="hidden overflow-y-auto rounded-md border md:block md:max-h-[520px]">
-                            <Table className="w-full table-fixed">
-                              <TableHeader className="sticky top-0 z-10 bg-card">
-                                <TableRow>
-                                  <TableHead className="w-[140px]">Type</TableHead>
-                                  <TableHead>Source</TableHead>
-                                  <TableHead className="w-[150px]">Status</TableHead>
-                                  <TableHead className="w-[180px] text-right">Actions</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {unifiedRowsVisible.map((row) => (
-                                  <TableRow key={row.key} className="align-top">
-                                    <TableCell className="font-semibold">{row.type}</TableCell>
-                                    <TableCell className="font-mono text-xs" title={row.source}>
-                                      {truncateText(row.source, 96)}
-                                    </TableCell>
-                                    <TableCell>
-                                      <span tabIndex={0} title={statusHoverDetail(row)} className="inline-flex cursor-help">
-                                        <Badge variant={row.health === "failing" ? "warning" : "success"}>
-                                          {row.health === "failing" ? `failing (${row.count})` : "healthy"}
-                                        </Badge>
-                                      </span>
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="flex items-center justify-end gap-2">
-                                        <Button variant="outline" size="sm" onClick={() => editUnifiedSourceRow(row)} disabled={saving}>
-                                          Edit
-                                        </Button>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => void deleteUnifiedSourceRow(row)}
-                                          disabled={saving}
-                                          className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                                        >
-                                          Delete
-                                        </Button>
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                                {unifiedRowsVisible.length === 0 ? (
-                                  <TableRow>
-                                    <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
-                                      No sources match the current filters.
-                                    </TableCell>
-                                  </TableRow>
-                                ) : null}
-                              </TableBody>
-                            </Table>
-                          </div>
-
-                          <div className="space-y-2 md:hidden">
-                            {unifiedRowsVisible.length > 0 ? (
-                              unifiedRowsVisible.map((row) => (
-                                <div key={`mobile:${row.key}`} className="rounded-lg border bg-muted/10 p-3">
-                                  <div className="mb-1 flex items-center justify-between gap-2">
-                                    <p className="text-sm font-semibold">{row.type}</p>
-                                    <Badge variant={row.health === "failing" ? "warning" : "success"}>
-                                      {row.health === "failing" ? `failing (${row.count})` : "healthy"}
-                                    </Badge>
-                                  </div>
-                                  <p className="font-mono text-xs text-muted-foreground" title={row.source}>
-                                    {truncateText(row.source, 150)}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground" title={row.last_error}>
-                                    error: {truncateText(row.last_error, 120)}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">last seen: {row.last_seen}</p>
-                                  <p className="text-xs" title={row.hint}>
-                                    hint: {truncateText(row.hint, 120)}
-                                  </p>
-                                  <div className="mt-2 flex items-center gap-2">
-                                    <Button variant="outline" size="sm" onClick={() => editUnifiedSourceRow(row)} disabled={saving}>
-                                      Edit
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => void deleteUnifiedSourceRow(row)}
-                                      disabled={saving}
-                                      className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                                    >
-                                      Delete
-                                    </Button>
-                                  </div>
-                                </div>
-                              ))
-                            ) : (
-                              <p className="text-sm text-muted-foreground">No sources match the current filters.</p>
-                            )}
-                          </div>
-
-                          {filteredUnifiedSourceRows.length > 12 ? (
-                            <div className="flex justify-end">
-                              <Button variant="outline" size="sm" onClick={() => setShowAllUnifiedSources((prev) => !prev)}>
-                                {showAllUnifiedSources ? "Show less" : `Show more (${filteredUnifiedSourceRows.length - 12})`}
-                              </Button>
-                            </div>
-                          ) : null}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-
-                  <TabsContent value="profile" className="space-y-4">
-                    {renderScopedNotice("profile")}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Digest Policy</CardTitle>
-                        <CardDescription>
-                          Configure digest strictness and seen-item behavior without editing YAML.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="grid gap-4 md:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label>Default Mode</Label>
-                          <Select
-                            value={runPolicy.default_mode}
-                            onValueChange={(value) =>
-                              setRunPolicy((prev) => ({
-                                ...prev,
-                                default_mode: (value as RunPolicy["default_mode"]) || "fresh_only",
-                              }))
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="fresh_only">fresh_only (strict new)</SelectItem>
-                              <SelectItem value="balanced">balanced (recommended)</SelectItem>
-                              <SelectItem value="replay_recent">replay_recent</SelectItem>
-                              <SelectItem value="backfill">backfill (advanced)</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <p className="text-xs text-muted-foreground">
-                            Current default for web-triggered runs. You can still override per run if enabled.
-                          </p>
-                        </div>
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between rounded-md border bg-muted/20 p-3">
-                            <div>
-                              <p className="text-sm font-medium">Allow run override</p>
-                              <p className="text-xs text-muted-foreground">
-                                Enables one-time mode selection in the Run now control.
-                              </p>
-                            </div>
-                            <Switch
-                              aria-label="allow_run_override"
-                              checked={runPolicy.allow_run_override}
-                              onCheckedChange={(checked) =>
-                                setRunPolicy((prev) => ({ ...prev, allow_run_override: checked }))
-                              }
-                            />
-                          </div>
-                          <div className="flex items-center justify-between rounded-md border bg-muted/20 p-3">
-                            <div>
-                              <p className="text-sm font-medium">Seen reset guard</p>
-                              <p className="text-xs text-muted-foreground">
-                                Require explicit confirmation before clearing seen history.
-                              </p>
-                            </div>
-                            <Select
-                              value={runPolicy.seen_reset_guard}
-                              onValueChange={(value) =>
-                                setRunPolicy((prev) => ({
-                                  ...prev,
-                                  seen_reset_guard: (value as RunPolicy["seen_reset_guard"]) || "confirm",
-                                }))
-                              }
-                            >
-                              <SelectTrigger className="w-[150px]">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="confirm">confirm</SelectItem>
-                                <SelectItem value="disabled">disabled</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="flex justify-end">
-                            <Button onClick={() => void saveRunPolicy()} disabled={saving}>
-                              {saveAction === "run-policy-save" ? (
-                                <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                              ) : (
-                                <Save className="h-4 w-4" />
-                              )}
-                              {saveAction === "run-policy-save" ? "Saving..." : "Save Policy"}
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Seen History Maintenance</CardTitle>
-                        <CardDescription>
-                          Preview and reset seen keys to reduce over-restrictive runs when content recycles.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div className="grid gap-3 md:grid-cols-[200px,auto,auto,1fr]">
-                          <div className="space-y-2">
-                            <Label htmlFor="seen-reset-days">Older Than (days)</Label>
-                            <Input
-                              id="seen-reset-days"
-                              inputMode="numeric"
-                              value={seenResetDays}
-                              onChange={(event) => setSeenResetDays(event.target.value)}
-                            />
-                          </div>
-                          <div className="flex items-end">
-                            <Button variant="outline" onClick={() => void previewSeenReset()} disabled={saving}>
-                              {saveAction === "seen-reset-preview" ? (
-                                <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                              ) : (
-                                <RefreshCcw className="h-4 w-4" />
-                              )}
-                              {saveAction === "seen-reset-preview" ? "Previewing..." : "Preview Reset"}
-                            </Button>
-                          </div>
-                          <div className="flex items-end">
-                            <Button
-                              variant="outline"
-                              onClick={() => void applySeenReset()}
-                              disabled={saving || runPolicy.seen_reset_guard === "confirm" && !seenResetConfirm}
-                            >
-                              {saveAction === "seen-reset-apply" ? (
-                                <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                              ) : (
-                                <Save className="h-4 w-4" />
-                              )}
-                              {saveAction === "seen-reset-apply" ? "Applying..." : "Apply Reset"}
-                            </Button>
-                          </div>
-                          <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3">
-                            <Switch aria-label="Confirm seen reset" checked={seenResetConfirm} onCheckedChange={setSeenResetConfirm} />
-                            <span className="text-xs text-muted-foreground">
-                              Confirm seen reset
-                            </span>
-                          </div>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {seenResetPreviewCount === null
-                            ? "No preview yet."
-                            : `Preview affected keys: ${seenResetPreviewCount}`}
-                        </p>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Core Runtime Controls</CardTitle>
-                        <CardDescription>Adjust scoring and online quality-repair behavior.</CardDescription>
-                      </CardHeader>
-                      <CardContent className="grid gap-6 md:grid-cols-2">
-                        <ToggleField
-                          label="LLM Summaries Enabled"
-                          checked={Boolean(profile.llm_enabled)}
-                          onChange={(value) => updateProfileField("llm_enabled", value)}
-                        />
-                        <ToggleField
-                          label="Agent Scoring Enabled"
-                          checked={Boolean(profile.agent_scoring_enabled)}
-                          onChange={(value) => updateProfileField("agent_scoring_enabled", value)}
-                        />
-                        <NumberField
-                          label="Max Agent Items Per Run"
-                          value={Number(profile.max_agent_items_per_run ?? 40)}
-                          onChange={(value) => updateProfileField("max_agent_items_per_run", value)}
-                        />
-                        <NumberField
-                          label="Must-read Max Per Source"
-                          value={Number(profile.must_read_max_per_source ?? 2)}
-                          onChange={(value) => updateProfileField("must_read_max_per_source", value)}
-                        />
-                        <NumberField
-                          label="Quality Repair Threshold"
-                          value={Number(profile.quality_repair_threshold ?? 80)}
-                          onChange={(value) => updateProfileField("quality_repair_threshold", value)}
-                        />
-                        <ToggleField
-                          label="Quality Repair Enabled"
-                          checked={Boolean(profile.quality_repair_enabled)}
-                          onChange={(value) => updateProfileField("quality_repair_enabled", value)}
-                        />
-                        <ToggleField
-                          label="Quality Learning Enabled"
-                          checked={Boolean(profile.quality_learning_enabled)}
-                          onChange={(value) => updateProfileField("quality_learning_enabled", value)}
-                        />
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Lists and Output</CardTitle>
-                        <CardDescription>Manage list fields and output settings.</CardDescription>
-                      </CardHeader>
-                      <CardContent className="grid gap-5 md:grid-cols-2">
-                        <ListField
-                          label="Topics"
-                          value={toLines(profile.topics as string[])}
-                          onChange={(value) => updateProfileField("topics", fromLines(value))}
-                        />
-                        <ListField
-                          label="Trusted Sources"
-                          value={toLines(profile.trusted_sources as string[])}
-                          onChange={(value) => updateProfileField("trusted_sources", fromLines(value))}
-                        />
-                        <ListField
-                          label="Exclusions"
-                          value={toLines(profile.exclusions as string[])}
-                          onChange={(value) => updateProfileField("exclusions", fromLines(value))}
-                        />
-                        <div className="space-y-2">
-                          <Label>Obsidian Folder</Label>
-                          <Input
-                            value={String(((profile.output as Record<string, unknown>)?.obsidian_folder as string) ?? "")}
-                            onChange={(event) => updateProfileField("output.obsidian_folder", event.target.value)}
-                          />
-                          <Label className="pt-2">Render Mode</Label>
-                          <Select
-                            value={String(((profile.output as Record<string, unknown>)?.render_mode as string) ?? "sectioned")}
-                            onValueChange={(value) => updateProfileField("output.render_mode", value)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="sectioned">sectioned</SelectItem>
-                              <SelectItem value="source_segmented">source_segmented</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Advanced Profile JSON</CardTitle>
-                        <CardDescription>Fine-tune full profile payload before validation and apply.</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <Textarea
-                          className="min-h-[280px] font-mono text-xs"
-                          value={profileJson}
-                          onChange={(event) => setProfileJson(event.target.value)}
-                        />
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-
-                  <TabsContent value="review" className="space-y-4">
-                    {renderScopedNotice("review")}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Review and Apply</CardTitle>
-                        <CardDescription>
-                          Validate changes, inspect local/server diff views, and apply overlay updates atomically.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="flex flex-wrap gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => void validateProfile()}
-                          disabled={saving || Boolean(profileJsonParseError)}
-                        >
-                          {saveAction === "profile-validate" ? (
-                            <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                          ) : (
-                            <ShieldCheck className="h-4 w-4" />
-                          )}
-                          {saveAction === "profile-validate" ? "Validating..." : "Validate"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => void computeProfileDiff()}
-                          disabled={saving || Boolean(profileJsonParseError)}
-                        >
-                          {saveAction === "profile-diff" ? (
-                            <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                          ) : (
-                            <RefreshCcw className="h-4 w-4" />
-                          )}
-                          {saveAction === "profile-diff" ? "Computing..." : "Compute Diff"}
-                        </Button>
-                        <Button onClick={() => void saveProfile()} disabled={saving || Boolean(profileJsonParseError)}>
-                          {saveAction === "profile-save" ? (
-                            <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                          ) : (
-                            <Save className="h-4 w-4" />
-                          )}
-                          {saveAction === "profile-save" ? "Saving..." : "Save Overlay"}
-                        </Button>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Pending Local Diff</CardTitle>
-                        <CardDescription>
-                          Live diff between the editor payload and the last loaded effective profile.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={localDiffCount > 0 ? "warning" : "success"}>
-                            local changes: {localDiffCount}
-                          </Badge>
-                          {profileJsonParseError ? <Badge variant="warning">invalid JSON</Badge> : null}
-                        </div>
-                        {profileJsonParseError ? (
-                          <Alert variant="destructive">
-                            <AlertTitle>Profile JSON is invalid</AlertTitle>
-                            <AlertDescription>{profileJsonParseError}</AlertDescription>
-                          </Alert>
-                        ) : localDiffCount === 0 ? (
-                          <p className="text-sm text-muted-foreground">No pending local changes.</p>
-                        ) : (
-                          <pre className="max-h-[340px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
-                            {JSON.stringify(localProfileDiff, null, 2)}
-                          </pre>
-                        )}
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Server Canonical Diff</CardTitle>
-                        <CardDescription>
-                          Result from <span className="font-semibold">Compute Diff</span> after server-side validation and
-                          redaction handling.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        {serverDiffCount === 0 ? (
-                          <p className="text-sm text-muted-foreground">
-                            {profileDiffComputedAt
-                              ? "No server-side diff. The editor payload matches the current effective profile."
-                              : "No computed diff yet. Click Compute Diff to generate a canonical server diff."}
-                          </p>
-                        ) : (
-                          <pre className="max-h-[340px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
-                            {JSON.stringify(profileDiff, null, 2)}
-                          </pre>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-
-                  <TabsContent value="timeline" className="space-y-4">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Run Timeline</CardTitle>
-                        <CardDescription>
-                          Monitor active run events and review historical timeline details after completion.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {renderScopedNotice("timeline")}
-                        <div className="grid gap-3 md:grid-cols-[2fr,1fr,1fr,1fr,auto]">
-                        <div className="space-y-2">
-                          <Label>Run</Label>
-                          <Select value={timelineRunId} onValueChange={setTimelineRunId}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select run" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {timelineRuns.map((row) => (
-                                <SelectItem key={row.run_id} value={row.run_id}>
-                                  {row.run_id} ({row.status})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Stage</Label>
-                          <Select value={timelineStageFilter} onValueChange={setTimelineStageFilter}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">all</SelectItem>
-                              {timelineStageOptions.map((stage) => (
-                                <SelectItem key={stage} value={stage}>
-                                  {stage}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Severity</Label>
-                          <Select value={timelineSeverityFilter} onValueChange={setTimelineSeverityFilter}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">all</SelectItem>
-                              <SelectItem value="info">info</SelectItem>
-                              <SelectItem value="warn">warn</SelectItem>
-                              <SelectItem value="error">error</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Order</Label>
-                          <Select
-                            value={timelineOrder}
-                            onValueChange={(value) => setTimelineOrder(value === "asc" ? "asc" : "desc")}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="desc">newest first</SelectItem>
-                              <SelectItem value="asc">oldest first</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex items-end gap-2">
-                          <Button variant="outline" onClick={() => void refreshTimeline()} disabled={saving || !timelineRunId}>
-                            {saveAction === "timeline-refresh" ? (
-                              <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                            ) : (
-                              <RefreshCcw className="h-4 w-4" />
-                            )}
-                            {saveAction === "timeline-refresh" ? "Refreshing..." : "Refresh"}
-                          </Button>
-                          <Button variant="outline" onClick={() => void exportTimeline()} disabled={saving || !timelineRunId}>
-                            {saveAction === "timeline-export" ? (
-                              <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                            ) : (
-                              <Save className="h-4 w-4" />
-                            )}
-                            {saveAction === "timeline-export" ? "Exporting..." : "Export JSON"}
-                          </Button>
-                        </div>
-                        <div className="col-span-full flex items-center justify-between rounded-md border bg-muted/20 p-3">
-                          <div>
-                            <p className="text-sm font-medium">Live polling</p>
-                            <p className="text-xs text-muted-foreground">
-                              Automatic refresh for active runs while Timeline is open.
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">{timelineLivePaused ? "Paused" : "Live"}</span>
-                            <Switch
-                              aria-label="Toggle live timeline polling"
-                              checked={!timelineLivePaused}
-                              onCheckedChange={(checked) => setTimelineLivePaused(!checked)}
-                            />
-                          </div>
-                        </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Timeline Summary</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {timelineSummary ? (
-                          <div className="space-y-3">
-                            <div className="flex flex-wrap gap-2">
-                              <Badge
-                                variant={
-                                  timelineSummary.status === "success"
-                                    ? "success"
-                                    : timelineSummary.status === "partial"
-                                      ? "warning"
-                                      : "outline"
-                                }
-                              >
-                                status: {timelineSummary.status}
-                              </Badge>
-                              <Badge variant="secondary">events: {timelineSummary.event_count}</Badge>
-                              <Badge variant="secondary">errors: {timelineSummary.error_event_count}</Badge>
-                              <Badge variant="secondary">warnings: {timelineSummary.warn_event_count}</Badge>
-                              <Badge variant="secondary">duration: {formatElapsed(timelineSummary.duration_s)}</Badge>
-                              <Badge variant="secondary">
-                                M/S/V: {timelineSummary.must_read_count}/{timelineSummary.skim_count}/{timelineSummary.video_count}
-                              </Badge>
-                              {timelineSummary.mode?.name ? (
-                                <Badge variant="secondary">mode: {timelineSummary.mode.name}</Badge>
-                              ) : null}
-                              {timelineSummary.strictness_level ? (
-                                <Badge
-                                  variant={
-                                    timelineSummary.strictness_level === "high"
-                                      ? "warning"
-                                      : timelineSummary.strictness_level === "medium"
-                                        ? "outline"
-                                        : "success"
-                                  }
-                                >
-                                  strictness: {timelineSummary.strictness_level}
-                                  {typeof timelineSummary.strictness_score === "number"
-                                    ? ` (${timelineSummary.strictness_score})`
-                                    : ""}
-                                </Badge>
-                              ) : null}
-                            </div>
-
-                            {timelineSummary.filter_funnel ? (
-                              <div className="rounded-md border bg-muted/20 p-3 text-xs">
-                                <p className="mb-1 font-semibold text-foreground">Filter funnel</p>
-                                <p className="font-mono text-muted-foreground">
-                                  fetched={timelineSummary.filter_funnel.fetched} -{" "}
-                                  post_window={timelineSummary.filter_funnel.post_window} -{" "}
-                                  post_seen={timelineSummary.filter_funnel.post_seen} -{" "}
-                                  post_block={timelineSummary.filter_funnel.post_block} -{" "}
-                                  selected={timelineSummary.filter_funnel.selected}
-                                </p>
-                              </div>
-                            ) : null}
-
-                            {(timelineSummary.restriction_reasons ?? []).length > 0 ? (
-                              <div className="space-y-1 text-xs">
-                                <p className="font-semibold text-foreground">Top restriction reasons</p>
-                                {(timelineSummary.restriction_reasons ?? []).map((reason) => (
-                                  <p key={`${reason.key}:${reason.dropped}`} className="text-muted-foreground">
-                                    {reason.label}: dropped {reason.dropped} ({reason.ratio_pct}%)
-                                  </p>
-                                ))}
-                              </div>
-                            ) : null}
-
-                            {(timelineSummary.recommendations ?? []).length > 0 ? (
-                              <div className="space-y-1 text-xs">
-                                <p className="font-semibold text-foreground">Recommended actions</p>
-                                {(timelineSummary.recommendations ?? []).map((line) => (
-                                  <p key={line} className="text-muted-foreground">
-                                    {line}
-                                  </p>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">No summary available for this run.</p>
-                        )}
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Timeline Events</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>#</TableHead>
-                              <TableHead>Time (UTC)</TableHead>
-                              <TableHead>Stage</TableHead>
-                              <TableHead>Severity</TableHead>
-                              <TableHead>Message</TableHead>
-                              <TableHead>Elapsed</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {timelineEvents.length > 0 ? (
-                              timelineEvents.map((row) => (
-                                <TableRow
-                                  key={`${row.run_id}:${row.id}`}
-                                  className="cursor-pointer"
-                                  data-state={row.id === timelineSelectedEventId ? "selected" : undefined}
-                                  onClick={() => setTimelineSelectedEventId(row.id)}
-                                >
-                                  <TableCell>{row.event_index}</TableCell>
-                                  <TableCell className="font-mono text-xs">{row.ts_utc}</TableCell>
-                                  <TableCell className="font-mono text-xs">{row.stage}</TableCell>
-                                  <TableCell>
-                                    <Badge
-                                      variant={
-                                        row.severity === "error"
-                                          ? "warning"
-                                          : row.severity === "warn"
-                                            ? "outline"
-                                            : "secondary"
-                                      }
-                                    >
-                                      {row.severity}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-xs">{row.message}</TableCell>
-                                  <TableCell>{formatElapsed(row.elapsed_s)}</TableCell>
-                                </TableRow>
-                              ))
-                            ) : (
-                              <TableRow>
-                                <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
-                                  No events for selected filters/run.
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Event Details</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        {selectedTimelineEvent ? (
-                          <div className="space-y-2">
-                            <p className="text-xs text-muted-foreground">
-                              #{selectedTimelineEvent.event_index} {selectedTimelineEvent.stage} at {selectedTimelineEvent.ts_utc}
-                            </p>
-                            <pre className="max-h-[280px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
-                              {JSON.stringify(selectedTimelineEvent.details ?? {}, null, 2)}
-                            </pre>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">Select an event row to inspect details.</p>
-                        )}
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Review Notes</CardTitle>
-                        <CardDescription>Capture run observations and follow-up actions for future improvements.</CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div className="grid gap-3 md:grid-cols-[180px,1fr,auto]">
-                          <div className="space-y-1">
-                            <Label htmlFor="timeline-note-author">Author</Label>
-                            <Input
-                              id="timeline-note-author"
-                              value={timelineNoteAuthor}
-                              onChange={(event) => setTimelineNoteAuthor(event.target.value)}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="timeline-note-text">Note</Label>
-                          <Input
-                            id="timeline-note-text"
-                            placeholder="Add note about this run..."
-                            value={timelineNoteText}
-                            onChange={(event) => setTimelineNoteText(event.target.value)}
-                          />
-                          </div>
-                          <Button onClick={() => void addTimelineNote()} disabled={saving || !timelineRunId || !timelineNoteText.trim()}>
-                            {saveAction === "timeline-note" ? (
-                              <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-                            ) : (
-                              <Save className="h-4 w-4" />
-                            )}
-                            {saveAction === "timeline-note" ? "Saving..." : "Add Note"}
-                          </Button>
-                        </div>
-                        <div className="space-y-2">
-                          {timelineNotes.length > 0 ? (
-                            timelineNotes.map((row) => (
-                              <div key={row.id} className="rounded-md border bg-muted/20 p-3">
-                                <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                  <span className="font-semibold text-foreground">{row.author || "admin"}</span>
-                                  <span>{row.created_at_utc}</span>
-                                </div>
-                                <p className="text-sm">{row.note}</p>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-sm text-muted-foreground">No notes for this run yet.</p>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-
-                  <TabsContent value="history">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="font-display">Snapshot History</CardTitle>
-                        <CardDescription>Rollback overlay state to a previous snapshot when needed.</CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {renderScopedNotice("history")}
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Created</TableHead>
-                              <TableHead>Action</TableHead>
-                              <TableHead>Snapshot</TableHead>
-                              <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {history.map((row) => (
-                              <TableRow key={row.id}>
-                                <TableCell>{row.created_at}</TableCell>
-                                <TableCell>{row.action}</TableCell>
-                                <TableCell className="font-mono text-xs">{row.id}</TableCell>
-                                <TableCell className="text-right">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => void rollback(row.id)}
-                                    disabled={saving}
-                                  >
-                                    {saveAction === "rollback" && activeRollbackId === row.id ? (
-                                      <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" />
-                                    ) : (
-                                      <Undo2 className="h-3.5 w-3.5" />
-                                    )}
-                                    {saveAction === "rollback" && activeRollbackId === row.id ? "Rolling back..." : "Rollback"}
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-                </Tabs>
-              </>
-            ) : null}
+            ) : (
+              <Routes>
+                <Route
+                  path="/"
+                  element={
+                    <DashboardPage
+                      runStatus={runStatus}
+                      sourceHealth={sourceHealth}
+                      setupPercent={setupPercent}
+                      timelineRuns={timelineRuns}
+                      onOpenRun={() => navigateToSurface("run")}
+                      onOpenSources={() => navigateToSurface("sources")}
+                      onOpenTimeline={() => navigateToSurface("timeline")}
+                    />
+                  }
+                />
+                <Route
+                  path="/run"
+                  element={
+                    <RunCenterPage
+                      notice={localNotices.run}
+                      onDismissNotice={() => clearScopedNotice("run")}
+                      runNowModeOverride={runNowModeOverride}
+                      setRunNowModeOverride={setRunNowModeOverride}
+                      runPolicy={runPolicy}
+                      runStatus={runStatus}
+                      saving={saving}
+                      runNowLoading={runNowLoading}
+                      loading={loading}
+                      saveAction={saveAction}
+                      onRefreshAll={() => void refreshAll()}
+                      onRunNow={() => void runNow()}
+                      onOpenTimeline={() => navigateToSurface("timeline")}
+                    />
+                  }
+                />
+                <Route
+                  path="/onboarding"
+                  element={
+                    <OnboardingPage
+                      notice={localNotices.onboarding}
+                      onDismissNotice={() => clearScopedNotice("onboarding")}
+                      onboarding={onboarding}
+                      setupPercent={setupPercent}
+                      preflight={preflight}
+                      sourcePacks={sourcePacks}
+                      previewResult={previewResult}
+                      saveAction={saveAction}
+                      activeSourcePackId={activeSourcePackId}
+                      previewLoading={previewLoading}
+                      activateLoading={activateLoading}
+                      saving={saving}
+                      runStatus={runStatus}
+                      onRunPreflight={() => void runOnboardingPreflight()}
+                      onApplySourcePack={(packId) => void applySourcePack(packId)}
+                      onRunPreview={() => void runOnboardingPreview()}
+                      onActivate={() => void activateOnboarding()}
+                      renderSetupStepAction={renderSetupStepAction}
+                    />
+                  }
+                />
+                <Route
+                  path="/sources"
+                  element={
+                    <SourcesPage
+                      notice={localNotices.sources}
+                      onDismissNotice={() => clearScopedNotice("sources")}
+                      sources={sources}
+                      sourceHealth={sourceHealth}
+                      sourceType={sourceType}
+                      setSourceType={setSourceType}
+                      sourceValue={sourceValue}
+                      setSourceValue={setSourceValue}
+                      sourceTypes={sourceTypes}
+                      saving={saving}
+                      saveAction={saveAction}
+                      onHandleSourceMutation={(action) => void handleSourceMutation(action)}
+                      sourceSearch={sourceSearch}
+                      setSourceSearch={setSourceSearch}
+                      sourceStatusFilter={sourceStatusFilter}
+                      setSourceStatusFilter={setSourceStatusFilter}
+                      filteredUnifiedSourceRows={filteredUnifiedSourceRows}
+                      unifiedRowsVisible={unifiedRowsVisible}
+                      showAllUnifiedSources={showAllUnifiedSources}
+                      setShowAllUnifiedSources={setShowAllUnifiedSources}
+                      onEditUnifiedSourceRow={editUnifiedSourceRow}
+                      onDeleteUnifiedSourceRow={(row) => void deleteUnifiedSourceRow(row)}
+                    />
+                  }
+                />
+                <Route
+                  path="/profile"
+                  element={
+                    <ProfilePage
+                      notice={localNotices.profile}
+                      onDismissNotice={() => clearScopedNotice("profile")}
+                      profile={profile}
+                      profileJson={profileJson}
+                      setProfileJson={setProfileJson}
+                      updateProfileField={updateProfileField}
+                      runPolicy={runPolicy}
+                      setRunPolicy={setRunPolicy}
+                      seenResetDays={seenResetDays}
+                      setSeenResetDays={setSeenResetDays}
+                      seenResetConfirm={seenResetConfirm}
+                      setSeenResetConfirm={setSeenResetConfirm}
+                      seenResetPreviewCount={seenResetPreviewCount}
+                      saveAction={saveAction}
+                      saving={saving}
+                      onSaveRunPolicy={() => void saveRunPolicy()}
+                      onPreviewSeenReset={() => void previewSeenReset()}
+                      onApplySeenReset={() => void applySeenReset()}
+                    />
+                  }
+                />
+                <Route
+                  path="/review"
+                  element={
+                    <ReviewPage
+                      notice={localNotices.review}
+                      onDismissNotice={() => clearScopedNotice("review")}
+                      saveAction={saveAction}
+                      saving={saving}
+                      profileJsonParseError={profileJsonParseError}
+                      localDiffCount={localDiffCount}
+                      localProfileDiff={localProfileDiff}
+                      serverDiffCount={serverDiffCount}
+                      profileDiff={profileDiff}
+                      profileDiffComputedAt={profileDiffComputedAt}
+                      onValidateProfile={() => void validateProfile()}
+                      onComputeProfileDiff={() => void computeProfileDiff()}
+                      onSaveProfile={() => void saveProfile()}
+                    />
+                  }
+                />
+                <Route
+                  path="/timeline"
+                  element={
+                    <TimelinePage
+                      notice={localNotices.timeline}
+                      onDismissNotice={() => clearScopedNotice("timeline")}
+                      timelineRunId={timelineRunId}
+                      setTimelineRunId={setTimelineRunId}
+                      timelineRuns={timelineRuns}
+                      timelineStageFilter={timelineStageFilter}
+                      setTimelineStageFilter={setTimelineStageFilter}
+                      timelineStageOptions={timelineStageOptions}
+                      timelineSeverityFilter={timelineSeverityFilter}
+                      setTimelineSeverityFilter={setTimelineSeverityFilter}
+                      timelineOrder={timelineOrder}
+                      setTimelineOrder={setTimelineOrder}
+                      timelineLivePaused={timelineLivePaused}
+                      setTimelineLivePaused={setTimelineLivePaused}
+                      saving={saving}
+                      saveAction={saveAction}
+                      onRefreshTimeline={() => void refreshTimeline()}
+                      onExportTimeline={() => void exportTimeline()}
+                      timelineSummary={timelineSummary}
+                      timelineEvents={timelineEvents}
+                      timelineSelectedEventId={timelineSelectedEventId}
+                      setTimelineSelectedEventId={setTimelineSelectedEventId}
+                      selectedTimelineEvent={selectedTimelineEvent}
+                      timelineNoteAuthor={timelineNoteAuthor}
+                      setTimelineNoteAuthor={setTimelineNoteAuthor}
+                      timelineNoteText={timelineNoteText}
+                      setTimelineNoteText={setTimelineNoteText}
+                      onAddTimelineNote={() => void addTimelineNote()}
+                      timelineNotes={timelineNotes}
+                    />
+                  }
+                />
+                <Route
+                  path="/history"
+                  element={
+                    <HistoryPage
+                      notice={localNotices.history}
+                      onDismissNotice={() => clearScopedNotice("history")}
+                      history={history}
+                      saveAction={saveAction}
+                      activeRollbackId={activeRollbackId}
+                      saving={saving}
+                      onRollback={(snapshotId) => void rollback(snapshotId)}
+                    />
+                  }
+                />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            )}
           </section>
         </div>
       </div>
@@ -2977,58 +1451,4 @@ export default function App() {
   )
 }
 
-function ToggleField({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string
-  checked: boolean
-  onChange: (value: boolean) => void
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border p-3">
-      <Label>{label}</Label>
-      <Switch aria-label={label} checked={checked} onCheckedChange={onChange} />
-    </div>
-  )
-}
-
-function NumberField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string
-  value: number
-  onChange: (value: number) => void
-}) {
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <Input
-        aria-label={label}
-        type="number"
-        value={Number.isFinite(value) ? String(value) : "0"}
-        onChange={(event) => onChange(Number(event.target.value))}
-      />
-    </div>
-  )
-}
-
-function ListField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <Textarea aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="min-h-[120px]" />
-    </div>
-  )
-}
+export default App

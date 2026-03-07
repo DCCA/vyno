@@ -6,34 +6,36 @@ import { fileURLToPath } from "node:url"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const appSource = readFileSync(resolve(here, "../src/App.tsx"), "utf8")
+const navSource = readFileSync(resolve(here, "../src/app/navigation.ts"), "utf8")
 const cssSource = readFileSync(resolve(here, "../src/index.css"), "utf8")
 
-function expectApp(pattern, message) {
-  assert.match(appSource, pattern, message)
-}
-
-function expectCss(pattern, message) {
-  assert.match(cssSource, pattern, message)
+function expectSource(source, pattern, message) {
+  assert.match(source, pattern, message)
 }
 
 test("redesign exposes focused navigation surfaces", () => {
-  expectApp(/Workspace Navigation/, "navigation panel title missing")
-  expectApp(/label: "Dashboard"/, "dashboard surface missing")
-  expectApp(/label: "Run Center"/, "run center surface missing")
-  expectApp(/label: "Onboarding"/, "onboarding surface missing")
-  expectApp(/label: "Sources"/, "sources surface missing")
-  expectApp(/label: "Profile"/, "profile surface missing")
-  expectApp(/label: "Review"/, "review surface missing")
-  expectApp(/label: "Timeline"/, "timeline surface missing")
-  expectApp(/label: "History"/, "history surface missing")
+  expectSource(appSource, /Workspace Navigation/, "navigation panel title missing")
+  expectSource(navSource, /label: "Dashboard"/, "dashboard surface missing")
+  expectSource(navSource, /label: "Run Center"/, "run center surface missing")
+  expectSource(navSource, /label: "Onboarding"/, "onboarding surface missing")
+  expectSource(navSource, /label: "Sources"/, "sources surface missing")
+  expectSource(navSource, /label: "Profile"/, "profile surface missing")
+  expectSource(navSource, /label: "Review"/, "review surface missing")
+  expectSource(navSource, /label: "Timeline"/, "timeline surface missing")
+  expectSource(navSource, /label: "History"/, "history surface missing")
+  expectSource(navSource, /dashboard: "\/"/, "dashboard route missing")
+  expectSource(navSource, /run: "\/run"/, "run route missing")
+  expectSource(navSource, /timeline: "\/timeline"/, "timeline route missing")
 })
 
 test("redesign includes responsive nav shell and animation hooks", () => {
-  expectApp(/setMobileNavOpen/, "mobile nav state missing")
-  expectApp(/lg:hidden/, "mobile menu button style missing")
-  expectApp(/animate-surface-enter/, "surface animation class missing")
+  expectSource(appSource, /setMobileNavOpen/, "mobile nav state missing")
+  expectSource(appSource, /lg:hidden/, "mobile menu button style missing")
+  expectSource(appSource, /animate-surface-enter/, "surface animation class missing")
+  expectSource(appSource, /NavLink/, "route-aware navigation missing")
+  expectSource(appSource, /<Routes>/, "route shell missing")
 
-  expectCss(/@keyframes surface-enter/, "surface-enter keyframe missing")
-  expectCss(/\.animate-surface-enter\s*\{/, "surface animation utility missing")
-  expectCss(/prefers-reduced-motion: reduce/, "reduced motion fallback missing")
+  expectSource(cssSource, /@keyframes surface-enter/, "surface-enter keyframe missing")
+  expectSource(cssSource, /\.animate-surface-enter\s*\{/, "surface animation utility missing")
+  expectSource(cssSource, /prefers-reduced-motion: reduce/, "reduced motion fallback missing")
 })
