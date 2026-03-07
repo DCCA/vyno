@@ -18,12 +18,12 @@ export function WorkspaceHeader({
 
   return (
     <Card className="overflow-hidden border-border/80">
-      <CardHeader className="gap-5 bg-gradient-to-br from-white/95 via-white/90 to-secondary/45 pb-5 lg:flex-row lg:items-start lg:justify-between">
+      <CardHeader className="gap-5 bg-gradient-to-br from-white/96 via-white/92 to-accent/10 pb-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/80">{eyebrow}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/72">{eyebrow}</p>
           <div className="space-y-2">
             <CardTitle className="font-display text-2xl md:text-[2rem]">{title}</CardTitle>
-            <CardDescription className="max-w-3xl text-[0.95rem] leading-7">{description}</CardDescription>
+            <CardDescription className="max-w-[58ch] text-[0.95rem] leading-7">{description}</CardDescription>
           </div>
           {badges && badges.length > 0 ? (
             <div className="flex flex-wrap gap-2">
@@ -36,7 +36,7 @@ export function WorkspaceHeader({
           ) : null}
         </div>
         {actions ? (
-          <CardContent className="rounded-[1.35rem] border border-border/80 bg-white/85 p-2 shadow-[0_18px_32px_-28px_rgba(15,23,42,0.5)]">
+          <CardContent className="rounded-[1.35rem] border border-border/80 bg-background/86 p-2 shadow-[0_18px_32px_-28px_rgba(19,23,30,0.24)]">
             {actions}
           </CardContent>
         ) : null}

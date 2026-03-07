@@ -1172,7 +1172,7 @@ function App() {
 
         <div className="flex min-w-0 flex-col gap-5">
         <header className="rounded-[2rem] border border-border/80 bg-panel-subtle p-5 animate-surface-enter">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+          <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_auto] 2xl:items-end">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Button
@@ -1195,8 +1195,8 @@ function App() {
               </p>
             </div>
 
-            <div className="rounded-[1.6rem] border border-border/80 bg-white/88 p-3 shadow-[0_22px_34px_-28px_rgba(15,23,42,0.35)]">
-              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+            <div className="rounded-[1.6rem] border border-border/80 bg-white/88 p-3 shadow-[0_22px_34px_-28px_rgba(15,23,42,0.35)] 2xl:max-w-[42rem] 2xl:justify-self-end">
+              <div className="flex flex-wrap items-center gap-2 2xl:justify-end">
                 {runStatus?.active ? <Badge variant="warning">Active {runStatus.active.run_id}</Badge> : <Badge variant="success">No active run</Badge>}
                 {runStatus?.latest ? <Badge variant="outline">Last {runStatus.latest.status}</Badge> : null}
                 {runStatus?.latest_completed && runStatus.latest_completed.source_error_count > 0 ? (

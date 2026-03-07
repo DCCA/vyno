@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700;800&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -6,24 +6,24 @@
 
 @layer base {
   :root {
-    --background: 220 32% 97%;
-    --foreground: 222 28% 13%;
+    --background: 60 8% 95%;
+    --foreground: 0 0% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 222 28% 13%;
-    --primary: 220 73% 46%;
+    --card-foreground: 0 0% 10%;
+    --primary: 217 23% 18%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 24% 93%;
-    --secondary-foreground: 222 32% 20%;
-    --muted: 220 18% 92%;
-    --muted-foreground: 220 14% 40%;
-    --accent: 33 96% 90%;
-    --accent-foreground: 28 84% 25%;
+    --secondary: 214 17% 92%;
+    --secondary-foreground: 217 18% 20%;
+    --muted: 210 12% 94%;
+    --muted-foreground: 218 8% 40%;
+    --accent: 6 75% 63%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 71% 52%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 18% 86%;
-    --input: 220 18% 84%;
-    --ring: 220 73% 46%;
-    --radius: 1.25rem;
+    --border: 218 11% 86%;
+    --input: 218 11% 84%;
+    --ring: 6 75% 63%;
+    --radius: 1.15rem;
   }
 
   * {
@@ -33,23 +33,11 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     background-image:
-      radial-gradient(circle at 0% 0%, rgba(89, 110, 255, 0.12), transparent 28%),
-      radial-gradient(circle at 100% 4%, rgba(244, 178, 79, 0.14), transparent 24%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(244, 247, 251, 0.98));
+      radial-gradient(circle at 12% -4%, rgba(232, 106, 91, 0.16), transparent 30%),
+      radial-gradient(circle at 100% 4%, rgba(35, 43, 56, 0.08), transparent 28%),
+      radial-gradient(circle at 52% 118%, rgba(232, 106, 91, 0.1), transparent 34%),
+      linear-gradient(135deg, rgba(251, 248, 244, 0.98) 0%, rgba(247, 241, 235, 0.98) 48%, rgba(243, 243, 241, 1) 100%);
     background-attachment: fixed;
-  }
-
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: -1;
-    opacity: 0.42;
-    background-image:
-      linear-gradient(rgba(15, 23, 42, 0.032) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(15, 23, 42, 0.032) 1px, transparent 1px);
-    background-size: 28px 28px;
   }
 }
 
@@ -76,9 +64,10 @@
 @layer utilities {
   .bg-console-canvas {
     background-image:
-      linear-gradient(to right, rgba(15, 23, 42, 0.03) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(15, 23, 42, 0.03) 1px, transparent 1px);
-    background-size: 36px 36px;
+      radial-gradient(circle at 10% 0%, rgba(232, 106, 91, 0.14), transparent 24%),
+      radial-gradient(circle at 88% 12%, rgba(35, 43, 56, 0.06), transparent 26%),
+      radial-gradient(circle at 48% 100%, rgba(232, 106, 91, 0.08), transparent 30%),
+      linear-gradient(180deg, rgba(255, 252, 248, 0.38), rgba(255, 255, 255, 0.08));
   }
 
   .animate-surface-enter {
@@ -87,19 +76,19 @@
 
   .bg-console-rail {
     background:
-      linear-gradient(180deg, rgba(14, 20, 38, 0.98), rgba(24, 33, 59, 0.96)),
-      radial-gradient(circle at top, rgba(96, 129, 255, 0.22), transparent 38%);
+      radial-gradient(circle at top, rgba(232, 106, 91, 0.12), transparent 36%),
+      linear-gradient(180deg, rgba(24, 31, 41, 0.99), rgba(33, 41, 54, 0.97));
   }
 
   .shadow-panel {
     box-shadow:
-      0 24px 60px -36px rgba(15, 23, 42, 0.34),
-      0 10px 26px -18px rgba(15, 23, 42, 0.16);
+      0 22px 56px -34px rgba(19, 23, 30, 0.22),
+      0 10px 24px -18px rgba(19, 23, 30, 0.1);
   }
 
   .bg-panel-subtle {
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 251, 255, 0.94));
+      linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(251, 248, 244, 0.92));
   }
 
   .skeleton-shimmer {
@@ -116,8 +105,8 @@
   .console-status-ribbon {
     border: 1px solid hsl(var(--primary) / 0.18);
     background:
-      linear-gradient(100deg, hsl(var(--primary) / 0.08), hsl(var(--accent) / 0.12), transparent 76%),
-      rgba(255, 255, 255, 0.72);
+      linear-gradient(100deg, hsl(var(--primary) / 0.06), hsl(var(--accent) / 0.12), transparent 80%),
+      rgba(255, 255, 255, 0.76);
   }
 }
 

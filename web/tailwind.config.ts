@@ -40,9 +40,9 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["Manrope", "ui-sans-serif", "system-ui"],
-        display: ["Fraunces", "Manrope", "ui-serif", "Georgia", "serif"],
-        mono: ["JetBrains Mono", "ui-monospace", "monospace"],
+        sans: ["Public Sans", "ui-sans-serif", "system-ui"],
+        display: ["Archivo", "Public Sans", "ui-sans-serif", "system-ui"],
+        mono: ["IBM Plex Mono", "ui-monospace", "monospace"],
       },
       backgroundImage: {
         "soft-grid":
