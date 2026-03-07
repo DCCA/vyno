@@ -8,6 +8,7 @@ Core history index (summary-first). Full details remain in git history.
 - admin-streamlit-migration: Completed Firehose artifacts for ".docs/done/admin-streamlit-migration/" (proposal, spec, design, tasks). ([summary](./admin-streamlit-migration/completion-summary.md))
 - admin-streamlit-ux-revision: Completed Firehose artifacts for ".docs/done/admin-streamlit-ux-revision/" (proposal, spec, design, tasks). ([summary](./admin-streamlit-ux-revision/completion-summary.md))
 - agent-scoring-tagging: Added agent-based scorer/tagger using OpenAI Responses API (`src/digest/scorers/agent.py`). ([summary](./agent-scoring-tagging/completion-summary.md))
+- app-start-boot-hardening: Hardened `make app` startup against incomplete web installs and unwritable default `uv` cache paths. ([summary](./app-start-boot-hardening/completion-summary.md))
 - bootstrap-firehose: Created and standardized the Firehose documentation workspace under `.docs/` with `todo`, `doing`, and `done` directories. ([summary](./bootstrap-firehose/completion-summary.md))
 - config-web-console: Added config web backend API (FastAPI) for source/profile management, validation, diff, run-now, status, history, and rollback. ([summary](./config-web-console/completion-summary.md))
 - cors-preflight-localhost: Updated CORS configuration in `src/digest/web/app.py` to support dynamic localhost/private-network origins via `allow_origin_regex`. ([summary](./cors-preflight-localhost/completion-summary.md))

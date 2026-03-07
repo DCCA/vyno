@@ -14,6 +14,7 @@ API_TOKEN=${DIGEST_WEB_API_TOKEN:-}
 API_TOKEN_HEADER=${DIGEST_WEB_API_TOKEN_HEADER:-X-Digest-Api-Token}
 API_LOG=${API_LOG:-${ROOT_DIR}/.runtime/app-api.log}
 UI_LOG=${UI_LOG:-${ROOT_DIR}/.runtime/app-ui.log}
+UV_CACHE_DIR=${UV_CACHE_DIR:-${ROOT_DIR}/.runtime/uv-cache}
 API_PID=""
 UI_PID=""
 
@@ -22,6 +23,25 @@ require_cmd() {
     printf "Missing required command: %s\n" "$1" >&2
     exit 1
   fi
+}
+
+web_deps_ready() {
+  if [ ! -x "${ROOT_DIR}/web/node_modules/.bin/vite" ]; then
+    return 1
+  fi
+
+  (
+    cd "${ROOT_DIR}/web"
+    node - <<'NODE'
+try {
+  require.resolve("react")
+  require.resolve("react-dom")
+  require.resolve("react-router-dom")
+} catch (error) {
+  process.exit(1)
+}
+NODE
+  ) >/dev/null 2>&1
 }
 
 generate_token() {
@@ -53,6 +73,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 require_cmd curl
+require_cmd node
 require_cmd npm
 
 if ! command -v uv >/dev/null 2>&1 && [ ! -x "${ROOT_DIR}/bin/digest" ]; then
@@ -60,9 +81,9 @@ if ! command -v uv >/dev/null 2>&1 && [ ! -x "${ROOT_DIR}/bin/digest" ]; then
   exit 1
 fi
 
-mkdir -p "${ROOT_DIR}/logs" "${ROOT_DIR}/.runtime"
+mkdir -p "${ROOT_DIR}/logs" "${ROOT_DIR}/.runtime" "${UV_CACHE_DIR}"
 
-if [ ! -d "${ROOT_DIR}/web/node_modules" ]; then
+if ! web_deps_ready; then
   printf "Installing web dependencies...\n"
   npm --prefix "${ROOT_DIR}/web" install
 fi
@@ -76,6 +97,7 @@ printf "Starting API at http://%s:%s (bind=%s) ...\n" "${API_PUBLIC_HOST}" "${AP
 if command -v uv >/dev/null 2>&1; then
   (
     cd "${ROOT_DIR}"
+    UV_CACHE_DIR="${UV_CACHE_DIR}" \
     DIGEST_WEB_API_AUTH_MODE="${API_AUTH_MODE}" \
     DIGEST_WEB_API_TOKEN="${API_TOKEN}" \
     DIGEST_WEB_API_TOKEN_HEADER="${API_TOKEN_HEADER}" \
