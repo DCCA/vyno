@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hmac
 import json
 import os
@@ -10,6 +10,7 @@ import re
 import threading
 import uuid
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from digest.constants import (
     DEFAULT_RUN_ID_LENGTH,
@@ -243,7 +244,7 @@ def _run_mode_options(mode: str) -> dict[str, bool]:
 
 
 def _web_live_run_options(*, trigger: str, mode: str = "") -> dict[str, bool]:
-    if trigger == "web":
+    if trigger in {"web", "schedule"}:
         return _run_mode_options(_resolve_run_mode(mode, fallback=DEFAULT_WEB_RUN_MODE))
     return {
         "use_last_completed_window": False,
@@ -263,6 +264,93 @@ class WebSettings:
     run_lock_stale_seconds: int = DEFAULT_RUN_LOCK_STALE_SECONDS
     history_dir: str = ".runtime/config-history"
     onboarding_state_path: str = ".runtime/onboarding-state.json"
+    schedule_state_path: str = ".runtime/schedule-state.json"
+
+
+def _read_json_dict(path: str) -> dict[str, Any]:
+    p = Path(path)
+    if not p.exists():
+        return {}
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _write_json_dict(path: str, payload: dict[str, Any]) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
+    tmp.replace(p)
+
+
+def _schedule_config_from_profile(profile_cfg: Any) -> dict[str, Any]:
+    schedule = getattr(profile_cfg, "schedule", None)
+    return {
+        "enabled": bool(getattr(schedule, "enabled", False)),
+        "time_local": str(getattr(schedule, "time_local", "09:00") or "09:00"),
+        "timezone": str(getattr(schedule, "timezone", "UTC") or "UTC"),
+    }
+
+
+def _schedule_due_slot_utc(
+    *,
+    time_local: str,
+    timezone_name: str,
+    now_utc: datetime | None = None,
+) -> tuple[datetime, datetime]:
+    now = now_utc or datetime.now(timezone.utc)
+    local_tz = ZoneInfo(timezone_name)
+    local_now = now.astimezone(local_tz)
+    hour, minute = [int(part) for part in time_local.split(":", 1)]
+    due_local = local_now.replace(
+        hour=hour,
+        minute=minute,
+        second=0,
+        microsecond=0,
+    )
+    if local_now < due_local:
+        due_local = due_local - timedelta(days=1)
+    next_local = due_local + timedelta(days=1)
+    return due_local.astimezone(timezone.utc), next_local.astimezone(timezone.utc)
+
+
+def _schedule_status_payload(
+    *,
+    profile_cfg: Any,
+    state: dict[str, Any],
+    active_run_id: str,
+    now_utc: datetime | None = None,
+) -> dict[str, Any]:
+    schedule = _schedule_config_from_profile(profile_cfg)
+    payload = {
+        "enabled": schedule["enabled"],
+        "time_local": schedule["time_local"],
+        "timezone": schedule["timezone"],
+        "scheduler_status": "disabled",
+        "next_run_at": "",
+        "last_triggered_at": str(state.get("last_triggered_at", "") or ""),
+        "last_attempted_run_id": str(state.get("last_attempted_run_id", "") or ""),
+        "last_result": str(state.get("last_result", "") or ""),
+        "last_error": str(state.get("last_error", "") or ""),
+        "active_run_id": active_run_id,
+    }
+    if not schedule["enabled"]:
+        return payload
+    _, next_slot = _schedule_due_slot_utc(
+        time_local=schedule["time_local"],
+        timezone_name=schedule["timezone"],
+        now_utc=now_utc,
+    )
+    payload["scheduler_status"] = "running"
+    payload["next_run_at"] = next_slot.isoformat()
+    if active_run_id:
+        payload["scheduler_status"] = "run_active"
+    if payload["last_error"]:
+        payload["scheduler_status"] = "error"
+    return payload
 
 
 def create_app(settings: WebSettings):
@@ -321,6 +409,19 @@ def create_app(settings: WebSettings):
     run_progress: dict[str, dict[str, Any]] = {}
     run_progress_order: list[str] = []
     latest_progress_run_id: str | None = None
+    schedule_state_lock = threading.Lock()
+    schedule_stop_event = threading.Event()
+
+    def _load_schedule_state() -> dict[str, Any]:
+        with schedule_state_lock:
+            return _read_json_dict(settings.schedule_state_path)
+
+    def _save_schedule_state(**updates: Any) -> dict[str, Any]:
+        with schedule_state_lock:
+            current = _read_json_dict(settings.schedule_state_path)
+            current.update(updates)
+            _write_json_dict(settings.schedule_state_path, current)
+            return dict(current)
 
     def _remember_progress_run(run_id: str) -> None:
         nonlocal latest_progress_run_id
@@ -709,6 +810,71 @@ def create_app(settings: WebSettings):
             },
         }
 
+    @app.get("/api/config/schedule")
+    def get_schedule() -> dict[str, Any]:
+        effective = load_effective_profile(
+            settings.profile_path,
+            settings.profile_overlay_path,
+        )
+        return {
+            "schedule": _schedule_config_from_profile(effective),
+        }
+
+    @app.post("/api/config/schedule")
+    def post_schedule(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        effective = load_effective_profile_dict(
+            settings.profile_path, settings.profile_overlay_path
+        )
+        current_schedule_raw = effective.get("schedule", {})
+        current_schedule = (
+            dict(current_schedule_raw) if isinstance(current_schedule_raw, dict) else {}
+        )
+        if "enabled" in payload:
+            current_schedule["enabled"] = bool(payload.get("enabled"))
+        if "time_local" in payload:
+            current_schedule["time_local"] = str(payload.get("time_local", "") or "").strip()
+        if "timezone" in payload:
+            current_schedule["timezone"] = str(payload.get("timezone", "") or "").strip()
+        next_profile = dict(effective)
+        next_profile["schedule"] = current_schedule
+        save_profile_overlay(
+            settings.profile_path,
+            settings.profile_overlay_path,
+            next_profile,
+        )
+        _save_snapshot(
+            settings,
+            action="schedule_save",
+            details={"schedule": current_schedule},
+        )
+        profile_cfg = load_effective_profile(
+            settings.profile_path, settings.profile_overlay_path
+        )
+        schedule_cfg = _schedule_config_from_profile(profile_cfg)
+        if schedule_cfg["enabled"]:
+            mark_step_completed(
+                settings.onboarding_state_path,
+                "schedule",
+                details=f"{schedule_cfg['time_local']} {schedule_cfg['timezone']}",
+            )
+        return {"saved": True, "schedule": schedule_cfg}
+
+    @app.get("/api/schedule/status")
+    def get_schedule_status() -> dict[str, Any]:
+        effective = load_effective_profile(
+            settings.profile_path,
+            settings.profile_overlay_path,
+        )
+        _sync_schedule_result_from_store()
+        active = lock.current()
+        state = _load_schedule_state()
+        payload = _schedule_status_payload(
+            profile_cfg=effective,
+            state=state,
+            active_run_id=active.run_id if active is not None else "",
+        )
+        return {"schedule_status": payload}
+
     @app.post("/api/config/profile/validate")
     def post_profile_validate(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         profile_data = payload.get("profile")
@@ -775,6 +941,13 @@ def create_app(settings: WebSettings):
                 settings.onboarding_state_path,
                 "outputs",
                 details="obsidian",
+            )
+        schedule_cfg = _schedule_config_from_profile(effective)
+        if schedule_cfg["enabled"]:
+            mark_step_completed(
+                settings.onboarding_state_path,
+                "schedule",
+                details=f"{schedule_cfg['time_local']} {schedule_cfg['timezone']}",
             )
         return {"saved": True, "overlay": _redact_secrets(overlay)}
 
@@ -850,7 +1023,7 @@ def create_app(settings: WebSettings):
         )
         return {"rolled_back": True}
 
-    def _start_live_run(*, mode_override: str = "") -> dict[str, Any]:
+    def _start_live_run(*, mode_override: str = "", trigger: str = "web") -> dict[str, Any]:
         run_request_id = uuid.uuid4().hex[:DEFAULT_RUN_ID_LENGTH]
         acquired, current = lock.acquire(run_request_id)
         if not acquired and current is not None:
@@ -867,7 +1040,7 @@ def create_app(settings: WebSettings):
             profile_cfg=profile,
             requested_mode=mode_override,
         )
-        run_options = _web_live_run_options(trigger="web", mode=resolved_mode)
+        run_options = _web_live_run_options(trigger=trigger, mode=resolved_mode)
 
         _init_run_progress(run_id=run_request_id, mode=resolved_mode)
 
@@ -905,6 +1078,120 @@ def create_app(settings: WebSettings):
         thread = threading.Thread(target=worker, daemon=True)
         thread.start()
         return {"started": True, "run_id": run_request_id, "mode": resolved_mode}
+
+    def _sync_schedule_result_from_store() -> None:
+        state = _load_schedule_state()
+        attempted_run_id = str(state.get("last_attempted_run_id", "") or "")
+        if not attempted_run_id:
+            return
+        store = SQLiteStore(settings.db_path)
+        latest = store.latest_run_details(completed_only=True)
+        if latest is None or str(latest[0]) != attempted_run_id:
+            return
+        _save_schedule_state(
+            last_result=str(latest[1]),
+            last_error="",
+        )
+
+    def _scheduler_loop() -> None:
+        while not schedule_stop_event.is_set():
+            try:
+                profile_cfg = load_effective_profile(
+                    settings.profile_path,
+                    settings.profile_overlay_path,
+                )
+                schedule_cfg = _schedule_config_from_profile(profile_cfg)
+                state = _load_schedule_state()
+                active = lock.current()
+                active_run_id = active.run_id if active is not None else ""
+                now_utc = datetime.now(timezone.utc)
+                status_payload = _schedule_status_payload(
+                    profile_cfg=profile_cfg,
+                    state=state,
+                    active_run_id=active_run_id,
+                    now_utc=now_utc,
+                )
+                if not schedule_cfg["enabled"]:
+                    _save_schedule_state(
+                        enabled=False,
+                        time_local=schedule_cfg["time_local"],
+                        timezone=schedule_cfg["timezone"],
+                        scheduler_status="disabled",
+                        next_run_at="",
+                        last_error="",
+                    )
+                    schedule_stop_event.wait(15)
+                    continue
+
+                due_slot, next_slot = _schedule_due_slot_utc(
+                    time_local=schedule_cfg["time_local"],
+                    timezone_name=schedule_cfg["timezone"],
+                    now_utc=now_utc,
+                )
+                _sync_schedule_result_from_store()
+                state = _save_schedule_state(
+                    enabled=True,
+                    time_local=schedule_cfg["time_local"],
+                    timezone=schedule_cfg["timezone"],
+                    scheduler_status=status_payload["scheduler_status"],
+                    next_run_at=next_slot.isoformat(),
+                )
+                last_triggered_slot = str(state.get("last_triggered_slot", "") or "")
+                due_slot_iso = due_slot.isoformat()
+                if now_utc >= due_slot and last_triggered_slot != due_slot_iso:
+                    result = _start_live_run(trigger="schedule")
+                    if result.get("started", False):
+                        _save_schedule_state(
+                            enabled=True,
+                            time_local=schedule_cfg["time_local"],
+                            timezone=schedule_cfg["timezone"],
+                            scheduler_status="run_active",
+                            next_run_at=next_slot.isoformat(),
+                            last_triggered_slot=due_slot_iso,
+                            last_triggered_at=now_utc.isoformat(),
+                            last_attempted_run_id=str(result.get("run_id", "")),
+                            last_result="started",
+                            last_error="",
+                        )
+                    else:
+                        active_run_id = str(result.get("active_run_id", "") or "")
+                        _save_schedule_state(
+                            enabled=True,
+                            time_local=schedule_cfg["time_local"],
+                            timezone=schedule_cfg["timezone"],
+                            scheduler_status="waiting_for_run_lock" if active_run_id else "error",
+                            next_run_at=next_slot.isoformat(),
+                            last_error=(
+                                f"Delayed by active run {active_run_id}"
+                                if active_run_id
+                                else "Scheduled run could not start"
+                            ),
+                        )
+                elif active_run_id:
+                    _save_schedule_state(
+                        enabled=True,
+                        time_local=schedule_cfg["time_local"],
+                        timezone=schedule_cfg["timezone"],
+                        scheduler_status="run_active",
+                        next_run_at=next_slot.isoformat(),
+                    )
+            except Exception as exc:
+                _save_schedule_state(
+                    scheduler_status="error",
+                    last_error=str(exc),
+                )
+            schedule_stop_event.wait(15)
+
+    @app.on_event("startup")
+    def _start_scheduler() -> None:
+        schedule_stop_event.clear()
+        thread = threading.Thread(target=_scheduler_loop, daemon=True)
+        thread.start()
+        app.state.schedule_thread = thread
+
+    @app.on_event("shutdown")
+    def _stop_scheduler() -> None:
+        schedule_stop_event.set()
 
     @app.post("/api/run-now")
     def post_run_now(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:

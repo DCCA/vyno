@@ -7,7 +7,7 @@ API_PUBLIC_HOST=${API_PUBLIC_HOST:-127.0.0.1}
 API_PORT=${API_PORT:-8787}
 UI_HOST=${UI_HOST:-127.0.0.1}
 UI_PORT=${UI_PORT:-5173}
-VITE_API_BASE=${VITE_API_BASE:-http://${API_PUBLIC_HOST}:${API_PORT}}
+VITE_API_BASE=${VITE_API_BASE:-}
 API_HEALTH_URL=${API_HEALTH_URL:-http://${API_PUBLIC_HOST}:${API_PORT}/api/health}
 API_AUTH_MODE=${DIGEST_WEB_API_AUTH_MODE:-required}
 API_TOKEN=${DIGEST_WEB_API_TOKEN:-}
@@ -21,6 +21,28 @@ UI_PID=""
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     printf "Missing required command: %s\n" "$1" >&2
+    exit 1
+  fi
+}
+
+port_in_use() {
+  port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1
+    return $?
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn "sport = :${port}" | tail -n +2 | grep -q .
+    return $?
+  fi
+  return 1
+}
+
+ensure_port_available() {
+  port="$1"
+  label="$2"
+  if port_in_use "${port}"; then
+    printf "%s port %s is already in use. Stop the existing process or choose a different port.\n" "${label}" "${port}" >&2
     exit 1
   fi
 }
@@ -82,6 +104,9 @@ if ! command -v uv >/dev/null 2>&1 && [ ! -x "${ROOT_DIR}/bin/digest" ]; then
 fi
 
 mkdir -p "${ROOT_DIR}/logs" "${ROOT_DIR}/.runtime" "${UV_CACHE_DIR}"
+
+ensure_port_available "${API_PORT}" "API"
+ensure_port_available "${UI_PORT}" "UI"
 
 if ! web_deps_ready; then
   printf "Installing web dependencies...\n"
@@ -153,11 +178,18 @@ printf "Tip: Press Ctrl+C to stop both API and UI.\n"
 
 (
   cd "${ROOT_DIR}/web"
-  VITE_API_BASE="${VITE_API_BASE}" \
-  VITE_DEV_API_PROXY_TARGET="http://${API_PUBLIC_HOST}:${API_PORT}" \
-  VITE_WEB_API_TOKEN="${API_TOKEN}" \
-  VITE_WEB_API_TOKEN_HEADER="${API_TOKEN_HEADER}" \
-  ./node_modules/.bin/vite --host "${UI_HOST}" --port "${UI_PORT}" --strictPort >>"${UI_LOG}" 2>&1
+  if [ -n "${VITE_API_BASE}" ]; then
+    VITE_API_BASE="${VITE_API_BASE}" \
+    VITE_DEV_API_PROXY_TARGET="http://${API_PUBLIC_HOST}:${API_PORT}" \
+    VITE_WEB_API_TOKEN="${API_TOKEN}" \
+    VITE_WEB_API_TOKEN_HEADER="${API_TOKEN_HEADER}" \
+    ./node_modules/.bin/vite --host "${UI_HOST}" --port "${UI_PORT}" --strictPort >>"${UI_LOG}" 2>&1
+  else
+    VITE_DEV_API_PROXY_TARGET="http://${API_PUBLIC_HOST}:${API_PORT}" \
+    VITE_WEB_API_TOKEN="${API_TOKEN}" \
+    VITE_WEB_API_TOKEN_HEADER="${API_TOKEN_HEADER}" \
+    ./node_modules/.bin/vite --host "${UI_HOST}" --port "${UI_PORT}" --strictPort >>"${UI_LOG}" 2>&1
+  fi
 ) &
 UI_PID=$!
 

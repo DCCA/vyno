@@ -38,6 +38,7 @@ import type {
   RunPolicy,
   RunProgress,
   RunStatus,
+  ScheduleStatus,
   SaveAction,
   SourceHealthItem,
   SourceMap,
@@ -80,6 +81,7 @@ function App() {
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [sourceHealth, setSourceHealth] = useState<SourceHealthItem[]>([])
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null)
+  const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus | null>(null)
   const [preflight, setPreflight] = useState<PreflightReport | null>(null)
   const [sourcePacks, setSourcePacks] = useState<SourcePack[]>([])
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null)
@@ -346,14 +348,16 @@ function App() {
         api<RunProgress>("/api/run-progress"),
         api<{ items: SourceHealthItem[] }>("/api/source-health"),
         api<OnboardingStatus>("/api/onboarding/status"),
+        api<{ schedule_status: ScheduleStatus }>("/api/schedule/status"),
         api<{ runs: TimelineRun[] }>("/api/timeline/runs?limit=50"),
         api<{ run_policy: RunPolicy }>("/api/config/run-policy"),
       ])
-        .then(([status, progress, health, onboardingStatus, timelineData, policyData]) => {
+        .then(([status, progress, health, onboardingStatus, scheduleData, timelineData, policyData]) => {
           setRunStatus(status)
           setRunProgress(progress.available ? progress : null)
           setSourceHealth(health.items)
           setOnboarding(onboardingStatus)
+          setScheduleStatus(scheduleData.schedule_status)
           setTimelineRuns(timelineData.runs)
           if (!runPolicyDirty) {
             setRunPolicy(policyData.run_policy)
@@ -515,6 +519,7 @@ function App() {
         progressData,
         healthData,
         onboardingData,
+        scheduleData,
         sourcePackData,
         timelineData,
         policyData,
@@ -527,6 +532,7 @@ function App() {
         api<RunProgress>("/api/run-progress"),
         api<{ items: SourceHealthItem[] }>("/api/source-health"),
         api<OnboardingStatus>("/api/onboarding/status"),
+        api<{ schedule_status: ScheduleStatus }>("/api/schedule/status"),
         api<{ packs: SourcePack[] }>("/api/onboarding/source-packs"),
         api<{ runs: TimelineRun[] }>("/api/timeline/runs?limit=50"),
         api<{ run_policy: RunPolicy }>("/api/config/run-policy"),
@@ -547,6 +553,7 @@ function App() {
       setRunProgress(progressData.available ? progressData : null)
       setSourceHealth(healthData.items)
       setOnboarding(onboardingData)
+      setScheduleStatus(scheduleData.schedule_status)
       setSourcePacks(sourcePackData.packs)
       if (!preserveRunPolicyWorkspace || !runPolicyDirty || !runPolicyBaseline) {
         setRunPolicy(policyData.run_policy)
@@ -1028,59 +1035,6 @@ function App() {
     navigate(surfacePaths[surface])
   }
 
-  function renderSetupStepAction(stepId: string) {
-    if (stepId === "preflight") {
-      return (
-        <Button variant="outline" size="sm" onClick={() => void runOnboardingPreflight()} disabled={saving}>
-          {saveAction === "onboarding-preflight" ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" /> : null}
-          {saveAction === "onboarding-preflight" ? "Running..." : "Run preflight"}
-        </Button>
-      )
-    }
-    if (stepId === "sources") {
-      const topPack = sourcePacks[0]
-      if (topPack) {
-        return (
-          <Button variant="outline" size="sm" onClick={() => void applySourcePack(topPack.id)} disabled={saving}>
-            {saveAction === "source-pack" && activeSourcePackId === topPack.id ? (
-              <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" />
-            ) : null}
-            {saveAction === "source-pack" && activeSourcePackId === topPack.id ? "Applying..." : `Apply ${topPack.name}`}
-          </Button>
-        )
-      }
-      return <Button variant="outline" size="sm" onClick={() => navigateToSurface("sources")}>Open sources</Button>
-    }
-    if (stepId === "outputs" || stepId === "profile") {
-      return <Button variant="outline" size="sm" onClick={() => navigateToSurface("profile")}>Open profile</Button>
-    }
-    if (stepId === "preview") {
-      return (
-        <Button variant="outline" size="sm" onClick={() => void runOnboardingPreview()} disabled={previewLoading || saving}>
-          {previewLoading ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" /> : <Play className="h-3.5 w-3.5" />}
-          {previewLoading ? "Running..." : "Run preview"}
-        </Button>
-      )
-    }
-    if (stepId === "activate") {
-      return (
-        <Button size="sm" onClick={() => void activateOnboarding()} disabled={saving || previewLoading || activateLoading || Boolean(runStatus?.active?.run_id)}>
-          {activateLoading ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" /> : <Play className="h-3.5 w-3.5" />}
-          {activateLoading ? "Starting..." : "Activate"}
-        </Button>
-      )
-    }
-    if (stepId === "health") {
-      return (
-        <Button variant="outline" size="sm" onClick={() => void runNow()} disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}>
-          {runNowLoading ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin motion-reduce:animate-none" /> : <RefreshCcw className="h-3.5 w-3.5" />}
-          Re-check with run
-        </Button>
-      )
-    }
-    return null
-  }
-
   return (
     <main className="min-h-screen bg-console-canvas pb-10" aria-label="Digest Control Center">
       <div className="mx-auto flex w-full max-w-[1380px] flex-col gap-5 px-4 py-6 md:px-6 lg:px-8 lg:py-8">
@@ -1284,6 +1238,19 @@ function App() {
                     <p className="text-xs font-semibold text-emerald-900">No source alerts in recent runs.</p>
                   </div>
                 )}
+                <div className="rounded-lg border border-border/70 bg-muted/15 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Automation</p>
+                  <p className="mt-1 text-xs text-foreground">
+                    {scheduleStatus?.enabled
+                      ? scheduleStatus.next_run_at
+                        ? `Next run ${scheduleStatus.next_run_at}`
+                        : "Daily schedule enabled"
+                      : "Daily schedule not enabled"}
+                  </p>
+                  {scheduleStatus?.last_error ? (
+                    <p className="mt-1 text-xs text-amber-800">{scheduleStatus.last_error}</p>
+                  ) : null}
+                </div>
               </CardContent>
             </Card>
           </aside>
@@ -1310,15 +1277,22 @@ function App() {
                 <Route
                   path="/"
                   element={
-                    <DashboardPage
-                      runStatus={runStatus}
-                      sourceHealth={sourceHealth}
-                      setupPercent={setupPercent}
-                      timelineRuns={timelineRuns}
-                      onOpenRun={() => navigateToSurface("run")}
-                      onOpenSources={() => navigateToSurface("sources")}
-                      onOpenTimeline={() => navigateToSurface("timeline")}
-                    />
+                    onboardingDone ? (
+                      <DashboardPage
+                        runStatus={runStatus}
+                        sourceHealth={sourceHealth}
+                        setupPercent={setupPercent}
+                        timelineRuns={timelineRuns}
+                        scheduleStatus={scheduleStatus}
+                        onboardingDone={onboardingDone}
+                        onOpenRun={() => navigateToSurface("run")}
+                        onOpenSources={() => navigateToSurface("sources")}
+                        onOpenTimeline={() => navigateToSurface("timeline")}
+                        onOpenOnboarding={() => navigateToSurface("onboarding")}
+                      />
+                    ) : (
+                      <Navigate to={surfacePaths.onboarding} replace />
+                    )
                   }
                 />
                 <Route
@@ -1349,20 +1323,25 @@ function App() {
                       onDismissNotice={() => clearScopedNotice("onboarding")}
                       onboarding={onboarding}
                       setupPercent={setupPercent}
+                      scheduleStatus={scheduleStatus}
                       preflight={preflight}
                       sourcePacks={sourcePacks}
                       previewResult={previewResult}
+                      profile={profile}
+                      updateProfileField={updateProfileField}
+                      runPolicy={runPolicy}
+                      setRunPolicy={setRunPolicy}
                       saveAction={saveAction}
                       activeSourcePackId={activeSourcePackId}
                       previewLoading={previewLoading}
                       activateLoading={activateLoading}
                       saving={saving}
                       runStatus={runStatus}
+                      onSaveProfileWorkspace={() => void saveProfileWorkspace()}
                       onRunPreflight={() => void runOnboardingPreflight()}
                       onApplySourcePack={(packId) => void applySourcePack(packId)}
                       onRunPreview={() => void runOnboardingPreview()}
                       onActivate={() => void activateOnboarding()}
-                      renderSetupStepAction={renderSetupStepAction}
                     />
                   }
                 />
@@ -1402,6 +1381,7 @@ function App() {
                       notice={localNotices.profile}
                       onDismissNotice={() => clearScopedNotice("profile")}
                       profile={profile}
+                      scheduleStatus={scheduleStatus}
                       profileJson={profileJson}
                       setProfileJson={setProfileJson}
                       updateProfileField={updateProfileField}

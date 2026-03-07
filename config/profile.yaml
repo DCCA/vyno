@@ -48,6 +48,10 @@ run_policy:
   default_mode: fresh_only
   allow_run_override: true
   seen_reset_guard: confirm
+schedule:
+  enabled: false
+  time_local: "09:00"
+  timezone: "UTC"
 output:
   telegram_chat_id: ""
   telegram_bot_token: ""

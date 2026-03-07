@@ -128,6 +128,47 @@ class TestOnboarding(unittest.TestCase):
             self.assertEqual(by_id["activate"]["status"], "complete")
             self.assertGreaterEqual(status["progress"]["completed"], 2)
 
+    def test_onboarding_status_requires_schedule_step(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = self._write_base_files(tmp, safe_profile=True)
+
+            pending = build_onboarding_status(settings)
+            pending_by_id = {row["id"]: row for row in pending["steps"]}
+            self.assertEqual(pending_by_id["schedule"]["status"], "pending")
+
+            overlay_profile = Path(settings.profile_overlay_path)
+            overlay_profile.write_text(
+                yaml.safe_dump(
+                    {
+                        "schedule": {
+                            "enabled": True,
+                            "time_local": "08:30",
+                            "timezone": "UTC",
+                        }
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+
+            complete = build_onboarding_status(settings)
+            complete_by_id = {row["id"]: row for row in complete["steps"]}
+            self.assertEqual(complete_by_id["schedule"]["status"], "complete")
+            self.assertIn("08:30", complete_by_id["schedule"]["detail"])
+
+    def test_onboarding_profile_step_still_completes_when_profile_overlay_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = self._write_base_files(tmp, safe_profile=True)
+            overlay_profile = Path(settings.profile_overlay_path)
+            overlay_profile.write_text(
+                yaml.safe_dump({"topics": ["agents"]}, sort_keys=False),
+                encoding="utf-8",
+            )
+
+            status = build_onboarding_status(settings)
+            by_id = {row["id"]: row for row in status["steps"]}
+            self.assertEqual(by_id["profile"]["status"], "complete")
+
 
 if __name__ == "__main__":
     unittest.main()

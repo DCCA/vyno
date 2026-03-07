@@ -13,15 +13,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
 import { fromLines, toLines } from "@/lib/console-utils"
-import type { Notice, RunPolicy, SaveAction } from "@/app/types"
+import type { Notice, RunPolicy, SaveAction, ScheduleStatus } from "@/app/types"
 
 type ProfileRecord = Record<string, unknown>
-type ProfileSectionId = "goal" | "focus" | "quality" | "output"
+type ProfileSectionId = "goal" | "focus" | "quality" | "output" | "automation"
 
 export function ProfilePage({
   notice,
   onDismissNotice,
   profile,
+  scheduleStatus,
   profileJson,
   setProfileJson,
   updateProfileField,
@@ -50,6 +51,7 @@ export function ProfilePage({
   notice: Notice | null | undefined
   onDismissNotice: () => void
   profile: Record<string, unknown> | null
+  scheduleStatus: ScheduleStatus | null
   profileJson: string
   setProfileJson: (value: string) => void
   updateProfileField: (path: string, value: unknown) => void
@@ -90,8 +92,12 @@ export function ProfilePage({
   const trustedGithubOrgs = asStringArray(profile.trusted_orgs_github)
   const blockedGithubOrgs = asStringArray(profile.blocked_orgs_github)
   const output = asRecord(profile.output)
+  const schedule = asRecord(profile.schedule)
   const obsidianFolder = asString(output.obsidian_folder, "AI Digest")
   const renderMode = asString(output.render_mode, "sectioned")
+  const scheduleEnabled = asBoolean(schedule.enabled, false)
+  const scheduleTime = asString(schedule.time_local, "09:00")
+  const scheduleTimezone = asString(schedule.timezone, "UTC")
   const selectionMode = asBoolean(profile.agent_scoring_enabled, true) ? "smart" : "basic"
   const summaryMode = asBoolean(profile.llm_enabled, false) ? "standard" : "lightweight"
   const qualityRepairEnabled = asBoolean(profile.quality_repair_enabled, false)
@@ -103,10 +109,12 @@ export function ProfilePage({
   const focusSummary = `${topics.length} topics, ${trustedSources.length} trusted, ${exclusions.length} excluded`
   const qualitySummary = describeQuality(selectionMode, summaryMode, diversityMode, qualityRepairEnabled)
   const outputSummary = renderMode === "source_segmented" ? `Source-grouped notes in ${obsidianFolder}` : `Sectioned digest in ${obsidianFolder}`
+  const automationSummary = scheduleEnabled ? `Daily at ${scheduleTime} (${scheduleTimezone})` : "Daily automation is off"
   const setupFacts = [
     `Mode: ${titleForMode(runPolicy.default_mode)}`,
     `Focus: ${focusSummary}`,
     `Output: ${renderMode === "source_segmented" ? "Grouped by source" : "Sectioned digest"}`,
+    `Automation: ${automationSummary}`,
   ]
 
   return (
@@ -299,8 +307,8 @@ export function ProfilePage({
             summary={outputSummary}
             description="Keep this small: folder and layout only."
             open={openSection === "output"}
-            onToggle={() => setOpenSection((current) => (current === "output" ? "output" : "output"))}
-            actionLabel="Edit"
+            onToggle={() => setOpenSection((current) => (current === "output" ? "automation" : "output"))}
+            actionLabel={openSection === "output" ? "Next section" : "Edit"}
           >
             <div className="space-y-2">
               <Label htmlFor="obsidian-folder">Obsidian folder</Label>
@@ -329,6 +337,50 @@ export function ProfilePage({
               />
             </CompactChoiceGroup>
             <InlineEffect title="Current effect" text={renderMode === "source_segmented" ? "Delivered notes will group items by source." : "Delivered notes will stay grouped by digest sections."} />
+          </SectionCard>
+
+          <SectionCard
+            title="Automation"
+            summary={automationSummary}
+            description="Choose when the web app should run the digest automatically every day."
+            open={openSection === "automation"}
+            onToggle={() => setOpenSection("automation")}
+            actionLabel="Edit"
+          >
+            <ToggleRow
+              label="Enable daily automation"
+              description="When enabled, the web app schedules one daily digest while the app process is running."
+              checked={scheduleEnabled}
+              onChange={(checked) => updateProfileField("schedule.enabled", checked)}
+            />
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2 rounded-xl border p-4">
+                <Label htmlFor="profile-schedule-time">Daily time</Label>
+                <Input
+                  id="profile-schedule-time"
+                  value={scheduleTime}
+                  onChange={(event) => updateProfileField("schedule.time_local", event.target.value)}
+                  placeholder="09:00"
+                />
+              </div>
+              <div className="space-y-2 rounded-xl border p-4">
+                <Label htmlFor="profile-schedule-timezone">Timezone</Label>
+                <Input
+                  id="profile-schedule-timezone"
+                  value={scheduleTimezone}
+                  onChange={(event) => updateProfileField("schedule.timezone", event.target.value)}
+                  placeholder="America/Sao_Paulo"
+                />
+              </div>
+            </div>
+            <InlineEffect
+              title="Current effect"
+              text={
+                scheduleStatus?.enabled && scheduleStatus.next_run_at
+                  ? `The next scheduled run is ${scheduleStatus.next_run_at}.`
+                  : "No automated daily run is active yet."
+              }
+            />
           </SectionCard>
 
           <UtilityCard

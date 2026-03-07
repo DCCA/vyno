@@ -32,6 +32,7 @@ ONBOARDING_STEPS: list[tuple[str, str]] = [
     ("outputs", "Connect outputs (Telegram or Obsidian)"),
     ("sources", "Choose starter sources"),
     ("profile", "Tune profile basics"),
+    ("schedule", "Enable daily automation"),
     ("preview", "Run preview digest"),
     ("activate", "Activate live run"),
     ("health", "Confirm run health"),
@@ -516,6 +517,10 @@ def build_onboarding_status(settings: OnboardingSettings) -> dict[str, Any]:
     preflight = run_preflight(settings, check_network=False)
     state = load_onboarding_state(settings.onboarding_state_path)
     step_state = state.get("steps", {}) if isinstance(state.get("steps"), dict) else {}
+    effective_profile = load_effective_profile(
+        settings.profile_path,
+        settings.profile_overlay_path,
+    )
 
     latest_completed_payload: dict[str, Any] | None = None
     try:
@@ -535,6 +540,9 @@ def build_onboarding_status(settings: OnboardingSettings) -> dict[str, Any]:
     profile_overlay = _read_yaml_dict(settings.profile_overlay_path)
     sources_total = int(preflight.get("derived", {}).get("source_count", 0) or 0)
     outputs_ready = bool(preflight.get("derived", {}).get("outputs_ready", False))
+    schedule_enabled = bool(getattr(getattr(effective_profile, "schedule", None), "enabled", False))
+    schedule_time = str(getattr(getattr(effective_profile, "schedule", None), "time_local", "09:00") or "09:00")
+    schedule_timezone = str(getattr(getattr(effective_profile, "schedule", None), "timezone", "UTC") or "UTC")
 
     def step_completed(step_id: str, derived: bool = False) -> tuple[bool, str]:
         entry = step_state.get(step_id)
@@ -596,6 +604,21 @@ def build_onboarding_status(settings: OnboardingSettings) -> dict[str, Any]:
                 f"Profile overlay keys: {', '.join(sorted(profile_overlay.keys()))}"
                 if profile_overlay
                 else "Profile overlay has no local overrides yet."
+            ),
+        }
+    )
+
+    completed, completed_at = step_completed("schedule", schedule_enabled)
+    step_rows.append(
+        {
+            "id": "schedule",
+            "label": "Enable daily automation",
+            "status": "complete" if completed else "pending",
+            "completed_at": completed_at,
+            "detail": (
+                f"Daily schedule enabled at {schedule_time} ({schedule_timezone})."
+                if schedule_enabled
+                else "Daily schedule is not enabled yet."
             ),
         }
     )

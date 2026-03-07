@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from dataclasses import dataclass, field
+from datetime import datetime
 import os
 from pathlib import Path
 import urllib.parse
+import re
+from zoneinfo import ZoneInfo
 
 from digest.constants import DEFAULT_OPENAI_MODEL
 
@@ -46,6 +49,13 @@ class RunPolicySettings:
 
 
 @dataclass(slots=True)
+class ScheduleSettings:
+    enabled: bool = False
+    time_local: str = "09:00"
+    timezone: str = "UTC"
+
+
+@dataclass(slots=True)
 class ProfileConfig:
     topics: list[str] = field(default_factory=list)
     entities: list[str] = field(default_factory=list)
@@ -84,6 +94,7 @@ class ProfileConfig:
     quality_learning_half_life_days: int = 14
     must_read_max_per_source: int = 2
     run_policy: RunPolicySettings = field(default_factory=RunPolicySettings)
+    schedule: ScheduleSettings = field(default_factory=ScheduleSettings)
 
 
 def _read_yaml(path: str | Path) -> dict:
@@ -219,6 +230,26 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         allow_run_override=bool(policy_raw.get("allow_run_override", True)),
         seen_reset_guard=seen_reset_guard,
     )
+    schedule_raw = data.get("schedule", {})
+    if schedule_raw is None:
+        schedule_raw = {}
+    if not isinstance(schedule_raw, dict):
+        raise ValueError("schedule must be an object")
+    time_local = str(schedule_raw.get("time_local", "09:00")).strip()
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", time_local):
+        raise ValueError("schedule.time_local must be in HH:MM 24-hour format")
+    timezone_name = str(
+        schedule_raw.get("timezone", _default_schedule_timezone())
+    ).strip() or _default_schedule_timezone()
+    try:
+        ZoneInfo(timezone_name)
+    except Exception as exc:
+        raise ValueError("schedule.timezone must be a valid IANA timezone") from exc
+    schedule = ScheduleSettings(
+        enabled=bool(schedule_raw.get("enabled", False)),
+        time_local=time_local,
+        timezone=timezone_name,
+    )
     return ProfileConfig(
         topics=_as_str_list(data, "topics"),
         entities=_as_str_list(data, "entities"),
@@ -281,6 +312,7 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
             1, int(data.get("must_read_max_per_source", 2) or 2)
         ),
         run_policy=run_policy,
+        schedule=schedule,
     )
 
 
@@ -319,3 +351,10 @@ def _normalize_github_org(value: str) -> str:
     else:
         raw = raw.split("/", 1)[0].lstrip("@")
     return raw.lower()
+
+
+def _default_schedule_timezone() -> str:
+    local = datetime.now().astimezone().tzinfo
+    if isinstance(local, ZoneInfo):
+        return local.key
+    return "UTC"

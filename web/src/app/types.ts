@@ -120,6 +120,25 @@ export type OnboardingStatus = {
   } | null
 }
 
+export type ScheduleConfig = {
+  enabled: boolean
+  time_local: string
+  timezone: string
+}
+
+export type ScheduleStatus = {
+  enabled: boolean
+  time_local: string
+  timezone: string
+  scheduler_status: string
+  next_run_at: string
+  last_triggered_at: string
+  last_attempted_run_id: string
+  last_result: string
+  last_error: string
+  active_run_id: string
+}
+
 export type SourcePack = {
   id: string
   name: string
