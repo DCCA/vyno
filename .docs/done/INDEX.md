@@ -49,4 +49,5 @@ Core history index (summary-first). Full details remain in git history.
 - web-timeline-observability: Added persisted timeline events and notes in SQLite: ([summary](./web-timeline-observability/completion-summary.md))
 - x-and-github-ingestion: Added X manual inbox connector: `src/digest/connectors/x_inbox.py`. ([summary](./x-and-github-ingestion/completion-summary.md))
 - x-follow-people-themes-ingestion: Added new X selector source types: ([summary](./x-follow-people-themes-ingestion/completion-summary.md))
+- x-selector-search-modernization: Moved both `x_author` and `x_theme` onto the official recent-search Search Posts API path. ([summary](./x-selector-search-modernization/completion-summary.md))
 - youtube-noise-sanitization: Completed Firehose artifacts for ".docs/done/youtube-noise-sanitization/" (proposal, spec, design, tasks). ([summary](./youtube-noise-sanitization/completion-summary.md))

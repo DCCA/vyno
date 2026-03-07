@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import urllib.parse
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime
@@ -69,7 +70,6 @@ class XApiProvider(XProvider):
         if not self._bearer_token:
             raise RuntimeError("X_BEARER_TOKEN is required for DIGEST_X_PROVIDER=x_api")
         self._timeout = max(5, int(timeout))
-        self._username_cache: dict[str, str] = {}
 
     def fetch_author_posts(
         self,
@@ -79,26 +79,31 @@ class XApiProvider(XProvider):
         limit: int,
     ) -> tuple[list[XPostPayload], str | None]:
         username = author.strip().lstrip("@").lower()
-        user_id = self._resolve_user_id(username)
-        params: dict[str, str] = {
-            "max_results": str(_bound_limit(limit)),
-            "exclude": "retweets,replies",
-            "tweet.fields": "created_at,entities",
-        }
-        if cursor:
-            params["pagination_token"] = cursor
-        payload = self._request_json(f"/2/users/{user_id}/tweets", params)
-        data = payload.get("data", []) if isinstance(payload, dict) else []
-        posts = [
-            _map_tweet_to_payload(row, fallback_username=username)
-            for row in data
-            if isinstance(row, dict)
-        ]
-        posts = [p for p in posts if p is not None]
-        next_cursor = _extract_next_cursor(payload)
-        return posts, next_cursor
+        if not username:
+            raise RuntimeError("x_author requires a non-empty handle")
+        return self._search_posts(
+            query=f"from:{username} -is:retweet -is:reply",
+            cursor=cursor,
+            limit=limit,
+        )
 
     def fetch_theme_posts(
+        self,
+        *,
+        query: str,
+        cursor: str | None,
+        limit: int,
+    ) -> tuple[list[XPostPayload], str | None]:
+        search_query = query.strip()
+        if not search_query:
+            raise RuntimeError("x_theme requires a non-empty query")
+        return self._search_posts(
+            query=search_query,
+            cursor=cursor,
+            limit=limit,
+        )
+
+    def _search_posts(
         self,
         *,
         query: str,
@@ -111,6 +116,7 @@ class XApiProvider(XProvider):
             "tweet.fields": "created_at,author_id,entities",
             "expansions": "author_id",
             "user.fields": "username",
+            "sort_order": "recency",
         }
         if cursor:
             params["next_token"] = cursor
@@ -135,20 +141,6 @@ class XApiProvider(XProvider):
         next_cursor = _extract_next_cursor(payload)
         return posts, next_cursor
 
-    def _resolve_user_id(self, username: str) -> str:
-        if username in self._username_cache:
-            return self._username_cache[username]
-        payload = self._request_json(
-            f"/2/users/by/username/{urllib.parse.quote(username, safe='')}",
-            {"user.fields": "username"},
-        )
-        data = payload.get("data", {}) if isinstance(payload, dict) else {}
-        user_id = str(data.get("id") or "").strip()
-        if not user_id:
-            raise RuntimeError(f"X API user lookup failed for @{username}")
-        self._username_cache[username] = user_id
-        return user_id
-
     def _request_json(self, path: str, params: dict[str, str]) -> dict:
         query = urllib.parse.urlencode(params)
         url = f"https://api.x.com{path}"
@@ -162,8 +154,11 @@ class XApiProvider(XProvider):
                 "User-Agent": "ai-digest/1.0",
             },
         )
-        with urllib.request.urlopen(req, timeout=self._timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(f"X search HTTP Error {exc.code}") from exc
         if not isinstance(data, dict):
             raise RuntimeError("Unexpected X API response payload")
         return data

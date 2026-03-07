@@ -1596,11 +1596,11 @@ def _error_hint(kind: str, error_text: str) -> str:
         return "Inbox file path/content issue. Check x_inbox_path and file permissions."
     if kind == "x_author":
         return (
-            "X author selector fetch failed. Verify DIGEST_X_PROVIDER=x_api, X_BEARER_TOKEN, and selector handle."
+            "X author selector fetch failed. Verify DIGEST_X_PROVIDER=x_api, X_BEARER_TOKEN, recent-search access, and selector handle."
         )
     if kind == "x_theme":
         return (
-            "X theme selector fetch failed. Verify provider auth, query syntax, and recent-search tier limits."
+            "X theme selector fetch failed. Verify provider auth, query syntax, and recent-search access or rate limits."
         )
     if kind == "github" and "httperror: 403" in text:
         return (

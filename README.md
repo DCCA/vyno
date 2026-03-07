@@ -176,7 +176,9 @@ Manual check example:
 - `x_inbox_path`
 - `x_authors`, `x_themes`
   - `x_authors` accepts X handles (`openai`, `@openai`) and profile URLs (`https://x.com/openai`)
+  - `x_authors` are fetched through X recent search using `from:<handle>` semantics
   - `x_themes` accepts free-text recent-search queries
+  - X selector search is recent-search only (last 7 days), not full account history
 - `github_repos`, `github_topics`, `github_search_queries`, `github_orgs`
   - `github_orgs` accepts either `org-login` or `https://github.com/org-login`
   - Org ingestion includes repo updates + releases (not issues/PRs)
@@ -227,6 +229,7 @@ Most used:
   - `DIGEST_X_PROVIDER=inbox_only|x_api` (default: `inbox_only`)
   - `X_BEARER_TOKEN` (required when `DIGEST_X_PROVIDER=x_api`)
   - `DIGEST_X_MAX_ITEMS_PER_SELECTOR` (optional cap, default `25`, max `100`)
+  - `x_api` selector mode requires X Search Posts / recent-search access for both `x_author` and `x_theme`
 - `DIGEST_WEB_API_AUTH_MODE`, `DIGEST_WEB_API_TOKEN` (web config API auth)
 - Bot admin controls:
   - `TELEGRAM_ADMIN_CHAT_IDS` (comma-separated)
