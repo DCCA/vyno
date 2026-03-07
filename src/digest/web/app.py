@@ -1235,30 +1235,32 @@ def create_app(settings: WebSettings):
     @app.get("/api/source-health")
     def get_source_health() -> dict[str, Any]:
         store = SQLiteStore(settings.db_path)
-        rows = store.recent_source_error_runs(limit=20)
+        latest_completed = store.latest_run_details(completed_only=True)
+        if latest_completed is None:
+            return {"items": []}
+
+        run_id, _status, started_at, errors, _summary_errors = latest_completed
         aggregate: dict[tuple[str, str], dict[str, Any]] = {}
-        for run_id, started_at, errors in rows:
-            for raw in errors:
-                parsed = _parse_source_error(raw)
-                key = (parsed["kind"], parsed["source"])
-                current = aggregate.get(key)
-                if current is None:
-                    aggregate[key] = {
-                        "kind": parsed["kind"],
-                        "source": parsed["source"],
-                        "count": 1,
-                        "last_seen": started_at,
-                        "last_run_id": run_id,
-                        "last_error": parsed["error"],
-                        "hint": parsed["hint"],
-                    }
-                else:
-                    current["count"] = int(current["count"]) + 1
+        for raw in errors:
+            parsed = _parse_source_error(raw)
+            key = (parsed["kind"], parsed["source"])
+            current = aggregate.get(key)
+            if current is None:
+                aggregate[key] = {
+                    "kind": parsed["kind"],
+                    "source": parsed["source"],
+                    "count": 1,
+                    "last_seen": started_at,
+                    "last_run_id": run_id,
+                    "last_error": parsed["error"],
+                    "hint": parsed["hint"],
+                }
+            else:
+                current["count"] = int(current["count"]) + 1
 
         items = sorted(
             aggregate.values(),
-            key=lambda r: (int(r["count"]), str(r["last_seen"])),
-            reverse=True,
+            key=lambda r: (str(r["kind"]), str(r["source"])),
         )
         return {"items": items}
 

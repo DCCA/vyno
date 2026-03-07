@@ -46,3 +46,4 @@ web/*.js
 .pi/
 skills-lock.json
 .dmux/
+.dmux-hooks/

@@ -18,6 +18,7 @@ Core history index (summary-first). Full details remain in git history.
 - hardcode-hygiene-guardrails: Centralized core constants in `src/digest/constants.py` and migrated dependent modules. ([summary](./hardcode-hygiene-guardrails/completion-summary.md))
 - high-impact-github-issues: Added deterministic GitHub issue impact gate in `src/digest/pipeline/github_issue_impact.py`. ([summary](./high-impact-github-issues/completion-summary.md))
 - incremental-video-presence: Added targeted video supplement logic in `src/digest/runtime.py` for incremental runs: ([summary](./incremental-video-presence/completion-summary.md))
+- latest-run-source-health: Source health now reflects only the latest completed run, clearing stale alerts after a newer clean run. ([summary](./latest-run-source-health/completion-summary.md))
 - must-read-source-diversity: Added configurable `must_read_max_per_source` to profile config. ([summary](./must-read-source-diversity/completion-summary.md))
 - mvp-digest-pipeline: Implemented a Python MVP digest application with modular connectors, pipeline, delivery, storage, and CLI runtime. ([summary](./mvp-digest-pipeline/completion-summary.md))
 - onboarding-setup-flow: Added onboarding domain logic in `src/digest/ops/onboarding.py` for preflight checks, source packs, onboarding status, and step-state persistence. ([summary](./onboarding-setup-flow/completion-summary.md))
