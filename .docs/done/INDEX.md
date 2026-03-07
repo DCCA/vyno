@@ -16,6 +16,7 @@ Core history index (summary-first). Full details remain in git history.
 - digest-context-feedback: Added contextual run feedback payload to `RunReport` in `src/digest/models.py`. ([summary](./digest-context-feedback/completion-summary.md))
 - dockerize-bot-runtime: Added and documented Docker runtime assets for bot-first operations: ([summary](./dockerize-bot-runtime/completion-summary.md))
 - github-org-releases-repo-updates: Completed Firehose artifacts for ".docs/done/github-org-releases-repo-updates/" (proposal, spec, design, tasks). ([summary](./github-org-releases-repo-updates/completion-summary.md))
+- github-owner-fallback: Added `/users/{login}/repos` fallback so `github_org` selectors work for GitHub user owners as well as organizations. ([summary](./github-owner-fallback/completion-summary.md))
 - hardcode-hygiene-guardrails: Centralized core constants in `src/digest/constants.py` and migrated dependent modules. ([summary](./hardcode-hygiene-guardrails/completion-summary.md))
 - high-impact-github-issues: Added deterministic GitHub issue impact gate in `src/digest/pipeline/github_issue_impact.py`. ([summary](./high-impact-github-issues/completion-summary.md))
 - incremental-video-presence: Added targeted video supplement logic in `src/digest/runtime.py` for incremental runs: ([summary](./incremental-video-presence/completion-summary.md))

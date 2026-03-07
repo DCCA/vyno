@@ -173,7 +173,7 @@ def canonicalize_source_value(source_type: str, value: str) -> str:
     if st == "github_org":
         org = normalize_github_org(raw)
         if not org:
-            raise ValueError("github_org must be a valid GitHub org login or URL")
+            raise ValueError("github_org must be a valid GitHub owner login or URL")
         return org
 
     raise ValueError(f"unsupported source type: {source_type}")

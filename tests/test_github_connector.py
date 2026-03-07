@@ -147,6 +147,59 @@ class TestGitHubConnector(unittest.TestCase):
         self.assertEqual(types, {"github_repo", "github_release"})
         self.assertEqual(len(items), 2)
 
+    def test_owner_ingestion_falls_back_to_user_repos_on_org_404(self):
+        fresh = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+        def fake_request(path, token, timeout):
+            if path.startswith("/orgs/kepano/repos"):
+                raise RuntimeError(
+                    "GitHub API HTTPError: 404 (/orgs/kepano/repos?sort=updated&direction=desc&per_page=20)"
+                )
+            if path.startswith("/users/kepano/repos"):
+                return [
+                    {
+                        "html_url": "https://github.com/kepano/obsidian-minimal",
+                        "full_name": "kepano/obsidian-minimal",
+                        "description": "Minimal theme",
+                        "updated_at": fresh,
+                        "stargazers_count": 8000,
+                        "fork": False,
+                        "archived": False,
+                        "language": "CSS",
+                        "owner": {"login": "kepano"},
+                    }
+                ]
+            if path.startswith("/repos/kepano/obsidian-minimal/releases"):
+                return [
+                    {
+                        "html_url": "https://github.com/kepano/obsidian-minimal/releases/tag/v1.0.0",
+                        "name": "v1.0.0",
+                        "body": "release notes",
+                        "published_at": fresh,
+                    }
+                ]
+            return {}
+
+        with patch("digest.connectors.github._request_json", side_effect=fake_request):
+            items = fetch_github_items(
+                repos=[],
+                topics=[],
+                queries=[],
+                orgs=["kepano"],
+                token="",
+                org_options={
+                    "min_stars": 1,
+                    "include_forks": False,
+                    "include_archived": False,
+                    "max_repos_per_org": 10,
+                    "max_items_per_org": 10,
+                },
+            )
+
+        types = {i.type for i in items}
+        self.assertEqual(types, {"github_repo", "github_release"})
+        self.assertEqual(len(items), 2)
+
     def test_quality_filters_drop_stale_and_low_star_results(self):
         now = datetime.now(timezone.utc)
         fresh = now.isoformat().replace("+00:00", "Z")

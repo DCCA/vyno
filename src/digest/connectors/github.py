@@ -167,7 +167,13 @@ def _fetch_org_repo_updates_and_releases(
 
 def _fetch_org_repos(org: str, token: str, timeout: int, per_page: int) -> list[dict]:
     path = f"/orgs/{org}/repos?sort=updated&direction=desc&per_page={per_page}"
-    data = _request_json(path, token, timeout)
+    try:
+        data = _request_json(path, token, timeout)
+    except RuntimeError as exc:
+        if "HTTPError: 404" not in str(exc):
+            raise
+        user_path = f"/users/{org}/repos?sort=updated&direction=desc&per_page={per_page}"
+        data = _request_json(user_path, token, timeout)
     return data if isinstance(data, list) else []
 
 

@@ -180,8 +180,8 @@ Manual check example:
   - `x_themes` accepts free-text recent-search queries
   - X selector search is recent-search only (last 7 days), not full account history
 - `github_repos`, `github_topics`, `github_search_queries`, `github_orgs`
-  - `github_orgs` accepts either `org-login` or `https://github.com/org-login`
-  - Org ingestion includes repo updates + releases (not issues/PRs)
+  - `github_orgs` accepts either owner login or URL (`org-login`, `user-login`, or `https://github.com/<owner>`)
+  - Owner ingestion includes repo updates + releases (not issues/PRs)
 
 ### `config/profile.yaml`
 - Scoring:
