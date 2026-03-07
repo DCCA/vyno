@@ -52,6 +52,7 @@ Core history index (summary-first). Full details remain in git history.
 - ui-loading-affordances: Added explicit loading-state typing and tracking for setup/manage actions in `web/src/App.tsx`. ([summary](./ui-loading-affordances/completion-summary.md))
 - ui-ux-console-redesign: Reworked `web/src/App.tsx` into a mode-first console UX with: ([summary](./ui-ux-console-redesign/completion-summary.md))
 - vault-timestamped-notes: Added configurable Obsidian naming mode: `output.obsidian_naming` (`timestamped` default, `daily` legacy). ([summary](./vault-timestamped-notes/completion-summary.md))
+- web-schedule-control-surface: Added a dedicated Schedule workspace with direct web controls for daily automation. ([summary](./web-schedule-control-surface/completion-summary.md))
 - web-api-secret-redaction-auth: Added token-based API auth enforcement for web API routes in `src/digest/web/app.py`. ([summary](./web-api-secret-redaction-auth/completion-summary.md))
 - web-console-density-fixes: Implemented a density-focused redesign for the `Sources` surface in `web/src/App.tsx`. ([summary](./web-console-density-fixes/completion-summary.md))
 - web-console-ui-redesign: Redesigned `web/src/App.tsx` into focused surfaces with a navigation shell: ([summary](./web-console-ui-redesign/completion-summary.md))

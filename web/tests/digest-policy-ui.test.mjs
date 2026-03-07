@@ -37,7 +37,11 @@ test("profile route receives inline profile workflow handlers", () => {
   expectSource(appSource, /const profileWorkspaceDirty = localDiffCount > 0 \|\| Boolean\(profileJsonParseError\)/, "profile dirty-state guard missing")
   expectSource(appSource, /function saveProfileWorkspace\(\)/, "profile workspace save handler missing")
   expectSource(appSource, /if \(!runPolicyDirty\) \{\s*setRunPolicy\(policyData\.run_policy\)\s*setRunPolicyBaseline\(policyData\.run_policy\)/s, "polling should not clobber dirty run policy state")
-  expectSource(appSource, /async function refreshAll\(options\?: \{ preserveProfileWorkspace\?: boolean; preserveRunPolicyWorkspace\?: boolean \}\)/, "refreshAll preserve options missing")
+  expectSource(
+    appSource,
+    /async function refreshAll\(options\?: \{ preserveProfileWorkspace\?: boolean; preserveRunPolicyWorkspace\?: boolean; preserveScheduleWorkspace\?: boolean \}\)/,
+    "refreshAll preserve options missing",
+  )
   expectSource(appSource, /if \(!preserveProfileWorkspace \|\| !profileWorkspaceDirty \|\| !profile\) \{\s*setProfile\(profileData\.profile\)/s, "profile refresh dirty-state guard missing")
   expectSource(appSource, /onValidateProfile=\{\(\) => void validateProfile\("profile"\)\}/, "profile validate handler missing")
   expectSource(appSource, /onComputeProfileDiff=\{\(\) => void computeProfileDiff\("profile"\)\}/, "profile diff handler missing")

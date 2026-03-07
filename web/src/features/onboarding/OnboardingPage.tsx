@@ -49,6 +49,7 @@ export function OnboardingPage({
   onApplySourcePack,
   onRunPreview,
   onActivate,
+  onOpenSchedule,
 }: {
   notice: Notice | null | undefined
   onDismissNotice: () => void
@@ -74,6 +75,7 @@ export function OnboardingPage({
   onApplySourcePack: (packId: string) => void
   onRunPreview: () => void
   onActivate: () => void
+  onOpenSchedule: () => void
 }) {
   const output = asRecord(profile?.output)
   const schedule = asRecord(profile?.schedule)
@@ -302,53 +304,34 @@ export function OnboardingPage({
 
       <StepCard
         number={5}
-        title="Enable daily automation"
+        title="Configure daily automation"
         detail="This product is not considered fully set up until a daily run time is configured."
         status={stepStatus(onboarding, "schedule")}
       >
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2 rounded-xl border p-4">
-            <Label htmlFor="schedule-enabled">Automation enabled</Label>
-            <select
-              id="schedule-enabled"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              value={String(asBoolean(schedule.enabled, false))}
-              onChange={(event) => updateProfileField("schedule.enabled", event.target.value === "true")}
-            >
-              <option value="true">Enabled</option>
-              <option value="false">Disabled</option>
-            </select>
+            <p className="text-sm font-semibold">Automation</p>
+            <p className="text-xs text-muted-foreground">
+              {asBoolean(schedule.enabled, false) ? "Enabled" : "Paused"}
+            </p>
           </div>
           <div className="space-y-2 rounded-xl border p-4">
-            <Label htmlFor="schedule-time">Daily time</Label>
-            <Input
-              id="schedule-time"
-              value={asString(schedule.time_local, "09:00")}
-              onChange={(event) => updateProfileField("schedule.time_local", event.target.value)}
-              placeholder="09:00"
-            />
+            <p className="text-sm font-semibold">Daily time</p>
+            <p className="text-xs text-muted-foreground">{asString(schedule.time_local, "09:00")}</p>
           </div>
           <div className="space-y-2 rounded-xl border p-4">
-            <Label htmlFor="schedule-timezone">Timezone</Label>
-            <Input
-              id="schedule-timezone"
-              value={asString(schedule.timezone, "UTC")}
-              onChange={(event) => updateProfileField("schedule.timezone", event.target.value)}
-              placeholder="America/Sao_Paulo"
-            />
+            <p className="text-sm font-semibold">Timezone</p>
+            <p className="text-xs text-muted-foreground">{asString(schedule.timezone, "UTC")}</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={onSaveProfileWorkspace} disabled={saving}>
-            {saveAction === "profile-save" || saveAction === "run-policy-save" ? (
-              <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
-            ) : null}
-            {saveAction === "profile-save" || saveAction === "run-policy-save" ? "Saving..." : "Save schedule"}
+          <Button onClick={onOpenSchedule} disabled={saving}>
+            Open schedule controls
           </Button>
           <div className="text-sm text-muted-foreground">
             {scheduleStatus?.enabled && scheduleStatus.next_run_at
               ? `Next scheduled run: ${scheduleStatus.next_run_at}`
-              : "Once enabled, the web app will run the digest every day at the chosen time."}
+              : "Open the schedule workspace to enable automation and set the daily run time."}
           </div>
         </div>
       </StepCard>

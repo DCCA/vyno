@@ -1,5 +1,6 @@
 import {
   Activity,
+  Clock3,
   Database,
   History,
   LayoutDashboard,
@@ -16,6 +17,7 @@ export const surfacePaths: Record<ConsoleSurface, string> = {
   onboarding: "/onboarding",
   sources: "/sources",
   profile: "/profile",
+  schedule: "/schedule",
   timeline: "/timeline",
   history: "/history",
 }
@@ -32,12 +34,13 @@ export function navItemsForLifecycle(lifecycle: "needs_setup" | "ready"): NavIte
     return [
       { id: "onboarding", label: "Setup", hint: "activation guide", icon: SlidersHorizontal },
       { id: "sources", label: "Sources", hint: "starter inputs", icon: Database },
-      { id: "profile", label: "Profile", hint: "preferences and schedule", icon: ShieldCheck },
+      { id: "profile", label: "Profile", hint: "preferences", icon: ShieldCheck },
     ]
   }
 
   return [
     { id: "dashboard", label: "Dashboard", hint: "status and alerts", icon: LayoutDashboard },
+    { id: "schedule", label: "Schedule", hint: "automation control", icon: Clock3 },
     { id: "run", label: "Run Center", hint: "manual run control", icon: Rocket },
     { id: "sources", label: "Sources", hint: "inputs and health", icon: Database },
     { id: "profile", label: "Profile", hint: "preferences and maintenance", icon: ShieldCheck },

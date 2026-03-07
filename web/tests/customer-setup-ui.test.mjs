@@ -10,6 +10,7 @@ const navigationSource = readFileSync(resolve(here, "../src/app/navigation.ts"),
 const onboardingSource = readFileSync(resolve(here, "../src/features/onboarding/OnboardingPage.tsx"), "utf8")
 const dashboardSource = readFileSync(resolve(here, "../src/features/dashboard/DashboardPage.tsx"), "utf8")
 const profileSource = readFileSync(resolve(here, "../src/features/profile/ProfilePage.tsx"), "utf8")
+const scheduleSource = readFileSync(resolve(here, "../src/features/schedule/SchedulePage.tsx"), "utf8")
 const apiSource = readFileSync(resolve(here, "../src/lib/api.ts"), "utf8")
 const startAppSource = readFileSync(resolve(here, "../../scripts/start-app.sh"), "utf8")
 
@@ -23,10 +24,10 @@ test("onboarding is a guided first-run setup flow", () => {
   expectSource(onboardingSource, /Connect at least one output/, "output step missing")
   expectSource(onboardingSource, /Choose starter sources/, "source pack step missing")
   expectSource(onboardingSource, /Set digest preferences/, "preferences step missing")
-  expectSource(onboardingSource, /Enable daily automation/, "schedule step missing")
+  expectSource(onboardingSource, /Configure daily automation/, "schedule step missing")
   expectSource(onboardingSource, /Preview the digest/, "preview step missing")
   expectSource(onboardingSource, /Start the first live digest/, "live run step missing")
-  expectSource(onboardingSource, /Save schedule/, "schedule save action missing")
+  expectSource(onboardingSource, /Open schedule controls/, "schedule workspace entry action missing")
 })
 
 test("app routes incomplete setups into onboarding", () => {
@@ -41,9 +42,13 @@ test("dashboard and profile expose automation status after setup", () => {
   expectSource(dashboardSource, /Automation Control/, "dashboard automation control module missing")
   expectSource(dashboardSource, /Current Posture/, "dashboard posture module missing")
   expectSource(dashboardSource, /Automation enabled|Automation not enabled/, "dashboard automation messaging missing")
+  expectSource(dashboardSource, /Manage Schedule/, "dashboard schedule quick action missing")
   expectSource(profileSource, /title="Automation"/, "profile automation section missing")
-  expectSource(profileSource, /Enable daily automation/, "profile schedule toggle missing")
+  expectSource(profileSource, /Open schedule controls/, "profile schedule workspace link missing")
   expectSource(profileSource, /Revisit setup guide/, "profile revisit setup action missing")
+  expectSource(scheduleSource, /title="Schedule"/, "schedule workspace header missing")
+  expectSource(scheduleSource, /Schedule Controls/, "schedule controls card missing")
+  expectSource(scheduleSource, /Automation Status/, "schedule status card missing")
   expectSource(onboardingSource, /Active workspace/, "onboarding revisit banner missing")
 })
 

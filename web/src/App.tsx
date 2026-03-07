@@ -38,6 +38,7 @@ import type {
   RunPolicy,
   RunProgress,
   RunStatus,
+  ScheduleConfig,
   ScheduleStatus,
   SaveAction,
   SourceHealthItem,
@@ -54,6 +55,7 @@ import { HistoryPage } from "@/features/history/HistoryPage"
 import { OnboardingPage } from "@/features/onboarding/OnboardingPage"
 import { ProfilePage } from "@/features/profile/ProfilePage"
 import { RunCenterPage } from "@/features/run-center/RunCenterPage"
+import { SchedulePage } from "@/features/schedule/SchedulePage"
 import { SourcesPage } from "@/features/sources/SourcesPage"
 import { TimelinePage } from "@/features/timeline/TimelinePage"
 
@@ -81,6 +83,12 @@ function App() {
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [sourceHealth, setSourceHealth] = useState<SourceHealthItem[]>([])
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null)
+  const [scheduleDraft, setScheduleDraft] = useState<ScheduleConfig>({
+    enabled: false,
+    time_local: "09:00",
+    timezone: "UTC",
+  })
+  const [scheduleBaseline, setScheduleBaseline] = useState<ScheduleConfig | null>(null)
   const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus | null>(null)
   const [preflight, setPreflight] = useState<PreflightReport | null>(null)
   const [sourcePacks, setSourcePacks] = useState<SourcePack[]>([])
@@ -200,6 +208,14 @@ function App() {
     return count
   }, [runPolicy, runPolicyBaseline])
   const runPolicyDirty = runPolicyChangeCount > 0
+  const scheduleDirty = useMemo(() => {
+    if (!scheduleBaseline) return false
+    return (
+      scheduleDraft.enabled !== scheduleBaseline.enabled ||
+      scheduleDraft.time_local !== scheduleBaseline.time_local ||
+      scheduleDraft.timezone !== scheduleBaseline.timezone
+    )
+  }, [scheduleBaseline, scheduleDraft])
   const profileWorkspaceChangeCount = localDiffCount + runPolicyChangeCount
   const selectedTimelineEvent = useMemo(
     () => timelineEvents.find((row) => row.id === timelineSelectedEventId) ?? null,
@@ -275,6 +291,8 @@ function App() {
           ? "Running preflight checks..."
           : saveAction === "source-pack"
             ? "Applying source pack..."
+            : saveAction === "schedule-save"
+              ? "Saving schedule..."
             : saveAction === "profile-validate"
               ? "Validating profile..."
               : saveAction === "profile-diff"
@@ -352,15 +370,20 @@ function App() {
         api<RunProgress>("/api/run-progress"),
         api<{ items: SourceHealthItem[] }>("/api/source-health"),
         api<OnboardingStatus>("/api/onboarding/status"),
+        api<{ schedule: ScheduleConfig }>("/api/config/schedule"),
         api<{ schedule_status: ScheduleStatus }>("/api/schedule/status"),
         api<{ runs: TimelineRun[] }>("/api/timeline/runs?limit=50"),
         api<{ run_policy: RunPolicy }>("/api/config/run-policy"),
       ])
-        .then(([status, progress, health, onboardingStatus, scheduleData, timelineData, policyData]) => {
+        .then(([status, progress, health, onboardingStatus, scheduleConfigData, scheduleData, timelineData, policyData]) => {
           setRunStatus(status)
           setRunProgress(progress.available ? progress : null)
           setSourceHealth(health.items)
           setOnboarding(onboardingStatus)
+          if (!scheduleDirty) {
+            setScheduleDraft(scheduleConfigData.schedule)
+            setScheduleBaseline(scheduleConfigData.schedule)
+          }
           setScheduleStatus(scheduleData.schedule_status)
           setTimelineRuns(timelineData.runs)
           if (!runPolicyDirty) {
@@ -374,7 +397,7 @@ function App() {
         .catch(() => undefined)
     }, 8000)
     return () => clearInterval(timer)
-  }, [runPolicyDirty, timelineRunId])
+  }, [runPolicyDirty, scheduleDirty, timelineRunId])
 
   useEffect(() => {
     const activeRunId = runStatus?.active?.run_id || runProgress?.run_id
@@ -511,7 +534,7 @@ function App() {
     return () => clearInterval(timer)
   }, [currentSurface, runStatus?.active?.run_id, timelineLivePaused, timelineOrder, timelineRunId, timelineSeverityFilter, timelineStageFilter])
 
-  async function refreshAll(options?: { preserveProfileWorkspace?: boolean; preserveRunPolicyWorkspace?: boolean }) {
+  async function refreshAll(options?: { preserveProfileWorkspace?: boolean; preserveRunPolicyWorkspace?: boolean; preserveScheduleWorkspace?: boolean }) {
     setLoading(true)
     try {
       const [
@@ -523,6 +546,7 @@ function App() {
         progressData,
         healthData,
         onboardingData,
+        scheduleConfigData,
         scheduleData,
         sourcePackData,
         timelineData,
@@ -536,6 +560,7 @@ function App() {
         api<RunProgress>("/api/run-progress"),
         api<{ items: SourceHealthItem[] }>("/api/source-health"),
         api<OnboardingStatus>("/api/onboarding/status"),
+        api<{ schedule: ScheduleConfig }>("/api/config/schedule"),
         api<{ schedule_status: ScheduleStatus }>("/api/schedule/status"),
         api<{ packs: SourcePack[] }>("/api/onboarding/source-packs"),
         api<{ runs: TimelineRun[] }>("/api/timeline/runs?limit=50"),
@@ -543,12 +568,17 @@ function App() {
       ])
       const preserveProfileWorkspace = options?.preserveProfileWorkspace ?? true
       const preserveRunPolicyWorkspace = options?.preserveRunPolicyWorkspace ?? true
+      const preserveScheduleWorkspace = options?.preserveScheduleWorkspace ?? true
       setSourceTypes(typeData.types)
       setSources(sourceData.sources)
       if (!preserveProfileWorkspace || !profileWorkspaceDirty || !profile) {
         setProfile(profileData.profile)
         setProfileBaseline(profileData.profile)
         setProfileJson(JSON.stringify(profileData.profile, null, 2))
+      }
+      if (!preserveScheduleWorkspace || !scheduleDirty || !scheduleBaseline) {
+        setScheduleDraft(scheduleConfigData.schedule)
+        setScheduleBaseline(scheduleConfigData.schedule)
       }
       setProfileDiff({})
       setProfileDiffComputedAt("")
@@ -597,6 +627,30 @@ function App() {
       }
       cursor[parts[parts.length - 1]] = value
       setProfileJson(JSON.stringify(next, null, 2))
+      return next
+    })
+  }
+
+  function updateScheduleField(field: keyof ScheduleConfig, value: string | boolean) {
+    setScheduleDraft((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function syncScheduleIntoProfile(nextSchedule: ScheduleConfig) {
+    setProfile((prev) => {
+      if (!prev) return prev
+      const next = structuredClone(prev)
+      next.schedule = nextSchedule
+      try {
+        setProfileJson(JSON.stringify(next, null, 2))
+      } catch {
+        // Keep the current editor text if the local expert payload cannot be regenerated safely.
+      }
+      return next
+    })
+    setProfileBaseline((prev) => {
+      if (!prev) return prev
+      const next = structuredClone(prev)
+      next.schedule = nextSchedule
       return next
     })
   }
@@ -825,6 +879,36 @@ function App() {
       setRunPolicy(result.run_policy)
       setRunPolicyBaseline(result.run_policy)
       setScopedNotice(scope, "ok", "Run policy saved.")
+    } catch (error) {
+      setScopedNotice(scope, "error", String(error))
+    } finally {
+      setSaveAction("")
+      setSaving(false)
+    }
+  }
+
+  async function saveSchedule(scope: "schedule" = "schedule") {
+    setSaveAction("schedule-save")
+    setSaving(true)
+    try {
+      const payload: ScheduleConfig = {
+        enabled: Boolean(scheduleDraft.enabled),
+        time_local: String(scheduleDraft.time_local || "").trim(),
+        timezone: String(scheduleDraft.timezone || "").trim(),
+      }
+      const result = await api<{ schedule: ScheduleConfig }>("/api/config/schedule", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      })
+      setScheduleDraft(result.schedule)
+      setScheduleBaseline(result.schedule)
+      syncScheduleIntoProfile(result.schedule)
+      await refreshAll({
+        preserveProfileWorkspace: true,
+        preserveRunPolicyWorkspace: true,
+        preserveScheduleWorkspace: false,
+      })
+      setScopedNotice(scope, "ok", result.schedule.enabled ? "Schedule saved." : "Schedule saved and paused.")
     } catch (error) {
       setScopedNotice(scope, "error", String(error))
     } finally {
@@ -1333,14 +1417,15 @@ function App() {
                     onboardingDone ? (
                       <DashboardPage
                         runStatus={runStatus}
-                        sourceHealth={sourceHealth}
-                        setupPercent={setupPercent}
-                        timelineRuns={timelineRuns}
-                        scheduleStatus={scheduleStatus}
-                        onboardingDone={onboardingDone}
-                        onOpenRun={() => navigateToSurface("run")}
-                        onOpenSources={() => navigateToSurface("sources")}
-                        onOpenTimeline={() => navigateToSurface("timeline")}
+                      sourceHealth={sourceHealth}
+                      setupPercent={setupPercent}
+                      timelineRuns={timelineRuns}
+                      scheduleStatus={scheduleStatus}
+                      onboardingDone={onboardingDone}
+                      onOpenSchedule={() => navigateToSurface("schedule")}
+                      onOpenRun={() => navigateToSurface("run")}
+                      onOpenSources={() => navigateToSurface("sources")}
+                      onOpenTimeline={() => navigateToSurface("timeline")}
                         onOpenOnboarding={() => navigateToSurface("onboarding")}
                       />
                     ) : (
@@ -1396,6 +1481,7 @@ function App() {
                       onApplySourcePack={(packId) => void applySourcePack(packId)}
                       onRunPreview={() => void runOnboardingPreview()}
                       onActivate={() => void activateOnboarding()}
+                      onOpenSchedule={() => navigateToSurface("schedule")}
                     />
                   }
                 />
@@ -1460,8 +1546,30 @@ function App() {
                       onComputeProfileDiff={() => void computeProfileDiff("profile")}
                       onSaveProfileWorkspace={() => void saveProfileWorkspace()}
                       onRevisitSetupGuide={() => navigate(`${surfacePaths.onboarding}?mode=revisit`)}
+                      onOpenSchedule={() => navigateToSurface("schedule")}
                       onPreviewSeenReset={() => void previewSeenReset()}
                       onApplySeenReset={() => void applySeenReset()}
+                    />
+                  }
+                />
+                <Route
+                  path="/schedule"
+                  element={
+                    <SchedulePage
+                      notice={localNotices.schedule}
+                      onDismissNotice={() => clearScopedNotice("schedule")}
+                      lifecycle={onboardingLifecycle}
+                      scheduleDraft={scheduleDraft}
+                      scheduleDirty={scheduleDirty}
+                      scheduleStatus={scheduleStatus}
+                      saveAction={saveAction}
+                      saving={saving}
+                      onChangeScheduleField={updateScheduleField}
+                      onSaveSchedule={() => void saveSchedule()}
+                      onRunNow={() => void runNow()}
+                      onOpenTimeline={() => navigateToSurface("timeline")}
+                      onOpenRun={() => navigateToSurface("run")}
+                      onOpenOnboarding={() => navigateToSurface("onboarding")}
                     />
                   }
                 />

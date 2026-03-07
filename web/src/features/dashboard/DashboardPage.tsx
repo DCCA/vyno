@@ -13,6 +13,7 @@ export function DashboardPage({
   timelineRuns,
   scheduleStatus,
   onboardingDone,
+  onOpenSchedule,
   onOpenRun,
   onOpenSources,
   onOpenTimeline,
@@ -24,6 +25,7 @@ export function DashboardPage({
   timelineRuns: TimelineRun[]
   scheduleStatus: ScheduleStatus | null
   onboardingDone: boolean
+  onOpenSchedule: () => void
   onOpenRun: () => void
   onOpenSources: () => void
   onOpenTimeline: () => void
@@ -71,7 +73,7 @@ export function DashboardPage({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {onboardingDone ? (
                 <Button className="justify-between" onClick={onOpenRun}>
                   Open Run Center
@@ -86,6 +88,10 @@ export function DashboardPage({
               <Button variant="outline" className="justify-between" onClick={onOpenSources}>
                 Open Sources
                 <Database className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" className="justify-between" onClick={onOpenSchedule}>
+                Manage Schedule
+                <Rocket className="h-4 w-4" />
               </Button>
               <Button variant="outline" className="justify-between" onClick={onOpenTimeline}>
                 Open Timeline

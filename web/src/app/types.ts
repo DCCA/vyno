@@ -245,6 +245,7 @@ export type SaveAction =
   | "source-remove"
   | "onboarding-preflight"
   | "source-pack"
+  | "schedule-save"
   | "profile-validate"
   | "profile-diff"
   | "profile-save"
@@ -257,6 +258,6 @@ export type SaveAction =
   | "rollback"
 
 export type Notice = { kind: "ok" | "error"; text: string }
-export type NoticeScope = "global" | "run" | "onboarding" | "sources" | "profile" | "timeline" | "history"
+export type NoticeScope = "global" | "run" | "onboarding" | "sources" | "profile" | "schedule" | "timeline" | "history"
 
-export type ConsoleSurface = "dashboard" | "run" | "onboarding" | "sources" | "profile" | "timeline" | "history"
+export type ConsoleSurface = "dashboard" | "run" | "onboarding" | "sources" | "profile" | "schedule" | "timeline" | "history"

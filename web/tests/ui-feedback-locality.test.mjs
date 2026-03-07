@@ -12,6 +12,7 @@ const runSource = readFileSync(resolve(here, "../src/features/run-center/RunCent
 const onboardingSource = readFileSync(resolve(here, "../src/features/onboarding/OnboardingPage.tsx"), "utf8")
 const sourcesSource = readFileSync(resolve(here, "../src/features/sources/SourcesPage.tsx"), "utf8")
 const profileSource = readFileSync(resolve(here, "../src/features/profile/ProfilePage.tsx"), "utf8")
+const scheduleSource = readFileSync(resolve(here, "../src/features/schedule/SchedulePage.tsx"), "utf8")
 const timelineSource = readFileSync(resolve(here, "../src/features/timeline/TimelinePage.tsx"), "utf8")
 const historySource = readFileSync(resolve(here, "../src/features/history/HistoryPage.tsx"), "utf8")
 
@@ -20,7 +21,7 @@ function expectSource(source, pattern, message) {
 }
 
 test("feedback uses scoped channels instead of a single global action banner", () => {
-  expectSource(typesSource, /type NoticeScope = "global" \| "run" \| "onboarding" \| "sources" \| "profile" \| "timeline" \| "history"/, "notice scope union missing")
+  expectSource(typesSource, /type NoticeScope = "global" \| "run" \| "onboarding" \| "sources" \| "profile" \| "schedule" \| "timeline" \| "history"/, "notice scope union missing")
   expectSource(appSource, /function setScopedNotice\(scope: NoticeScope, kind: Notice\["kind"\], text: string\)/, "scoped notice setter missing")
   expectSource(noticeSource, /export function InlineNotice/, "scoped notice renderer missing")
 })
@@ -30,6 +31,7 @@ test("each major surface renders local feedback near actions", () => {
   expectSource(onboardingSource, /<InlineNotice notice=\{notice\}/, "onboarding scoped notice render missing")
   expectSource(sourcesSource, /<InlineNotice notice=\{notice\}/, "sources scoped notice render missing")
   expectSource(profileSource, /<InlineNotice notice=\{notice\}/, "profile scoped notice render missing")
+  expectSource(scheduleSource, /<InlineNotice notice=\{notice\}/, "schedule scoped notice render missing")
   expectSource(timelineSource, /<InlineNotice notice=\{notice\}/, "timeline scoped notice render missing")
   expectSource(historySource, /<InlineNotice notice=\{notice\}/, "history scoped notice render missing")
 })

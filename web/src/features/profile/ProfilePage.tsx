@@ -47,6 +47,7 @@ export function ProfilePage({
   onComputeProfileDiff,
   onSaveProfileWorkspace,
   onRevisitSetupGuide,
+  onOpenSchedule,
   onPreviewSeenReset,
   onApplySeenReset,
 }: {
@@ -78,6 +79,7 @@ export function ProfilePage({
   onComputeProfileDiff: () => void
   onSaveProfileWorkspace: () => void
   onRevisitSetupGuide: () => void
+  onOpenSchedule: () => void
   onPreviewSeenReset: () => void
   onApplySeenReset: () => void
 }) {
@@ -346,36 +348,30 @@ export function ProfilePage({
           <SectionCard
             title="Automation"
             summary={automationSummary}
-            description="Choose when the web app should run the digest automatically every day."
+            description="Manage daily automation from the dedicated schedule workspace."
             open={openSection === "automation"}
             onToggle={() => setOpenSection("automation")}
             actionLabel="Edit"
           >
-            <ToggleRow
-              label="Enable daily automation"
-              description="When enabled, the web app schedules one daily digest while the app process is running."
-              checked={scheduleEnabled}
-              onChange={(checked) => updateProfileField("schedule.enabled", checked)}
-            />
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-3">
               <div className="space-y-2 rounded-xl border p-4">
-                <Label htmlFor="profile-schedule-time">Daily time</Label>
-                <Input
-                  id="profile-schedule-time"
-                  value={scheduleTime}
-                  onChange={(event) => updateProfileField("schedule.time_local", event.target.value)}
-                  placeholder="09:00"
-                />
+                <p className="text-sm font-semibold">Automation</p>
+                <p className="text-xs text-muted-foreground">{scheduleEnabled ? "Enabled" : "Paused"}</p>
               </div>
               <div className="space-y-2 rounded-xl border p-4">
-                <Label htmlFor="profile-schedule-timezone">Timezone</Label>
-                <Input
-                  id="profile-schedule-timezone"
-                  value={scheduleTimezone}
-                  onChange={(event) => updateProfileField("schedule.timezone", event.target.value)}
-                  placeholder="America/Sao_Paulo"
-                />
+                <p className="text-sm font-semibold">Daily time</p>
+                <p className="text-xs text-muted-foreground">{scheduleTime}</p>
               </div>
+              <div className="space-y-2 rounded-xl border p-4">
+                <p className="text-sm font-semibold">Timezone</p>
+                <p className="text-xs text-muted-foreground">{scheduleTimezone}</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="button" variant="outline" onClick={onOpenSchedule}>
+                Open schedule controls
+              </Button>
+              <p className="text-sm text-muted-foreground">Use the dedicated schedule page to save, pause, resume, or inspect automation.</p>
             </div>
             <InlineEffect
               title="Current effect"

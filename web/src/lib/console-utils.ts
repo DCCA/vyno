@@ -6,6 +6,7 @@ const CONSOLE_SURFACES: ConsoleSurface[] = [
   "onboarding",
   "sources",
   "profile",
+  "schedule",
   "timeline",
   "history",
 ]
