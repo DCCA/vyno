@@ -45,3 +45,4 @@ web/*.js
 .agents/
 .pi/
 skills-lock.json
+.dmux/
