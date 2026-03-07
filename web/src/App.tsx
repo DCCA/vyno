@@ -1126,8 +1126,8 @@ function App() {
   return (
     <main className="min-h-screen bg-console-canvas pb-10" aria-label="Digest Control Center">
       <div className="mx-auto grid w-full max-w-[1560px] gap-5 px-4 py-5 md:px-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-8 lg:py-7">
-        <aside className={`${mobileNavOpen ? "block" : "hidden"} lg:block`}>
-          <div className="bg-console-rail sticky top-6 space-y-5 rounded-[2rem] p-5 text-white shadow-[0_30px_70px_-40px_rgba(15,23,42,0.9)] animate-surface-enter">
+        <aside className={`${mobileNavOpen ? "block" : "hidden"} lg:sticky lg:top-6 lg:block lg:self-start`}>
+          <div className="bg-console-rail space-y-5 rounded-[2rem] p-5 text-white shadow-[0_30px_70px_-40px_rgba(15,23,42,0.9)] animate-surface-enter lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-3 [scrollbar-gutter:stable]">
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -1149,37 +1149,6 @@ function App() {
                   ? "Premium daily workspace for signals, automation, and intervention."
                   : "Guided setup canvas for turning a raw workspace into a recurring digest product."}
               </p>
-            </div>
-
-            <div className="rounded-[1.6rem] border border-white/10 bg-white/5 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55">Workspace mode</p>
-              <div className="mt-3 flex items-center justify-between">
-                <Badge variant={onboardingDone ? "success" : "warning"} className="text-[10px]">
-                  {onboardingDone ? "Recurring use" : "Guided setup"}
-                </Badge>
-                <span className="text-xs text-white/65">{currentSurface}</span>
-              </div>
-              <div className="mt-4 space-y-3">
-                {!onboardingDone ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs text-white/72">
-                      <span>Setup progress</span>
-                      <span>{onboarding?.progress.completed ?? 0}/{onboarding?.progress.total ?? 0}</span>
-                    </div>
-                    <Progress value={setupPercent} className="h-2 bg-white/10 [&>div]:bg-white" />
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/75">
-                    Setup is complete. The guide is hidden from primary navigation and remains available only from Profile.
-                  </div>
-                )}
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55">Automation</p>
-                  <p className="mt-2 text-sm text-white/80">
-                    {scheduleStatus?.enabled ? (scheduleStatus.next_run_at || "Scheduled daily") : "Not scheduled"}
-                  </p>
-                </div>
-              </div>
             </div>
 
             <div className="space-y-2">
@@ -1240,6 +1209,12 @@ function App() {
                   <Badge variant={runStatus?.active ? "warning" : "success"} className="text-[10px]">
                     {runStatus?.active ? "Running" : "Idle"}
                   </Badge>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Schedule</span>
+                  <span className="truncate text-right">
+                    {scheduleStatus?.enabled ? (scheduleStatus.next_run_at || "Scheduled") : "Not scheduled"}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Source health</span>

@@ -13,6 +13,10 @@ function expectSource(source, pattern, message) {
   assert.match(source, pattern, message)
 }
 
+function expectMissing(source, pattern, message) {
+  assert.doesNotMatch(source, pattern, message)
+}
+
 test("redesign exposes focused navigation surfaces", () => {
   expectSource(appSource, /Vyno/, "brand rail missing")
   expectSource(appSource, /Navigation/, "navigation section missing")
@@ -34,6 +38,9 @@ test("redesign exposes focused navigation surfaces", () => {
 test("redesign includes responsive nav shell and animation hooks", () => {
   expectSource(appSource, /setMobileNavOpen/, "mobile nav state missing")
   expectSource(appSource, /bg-console-rail/, "console rail styling missing")
+  expectSource(appSource, /lg:max-h-\[calc\(100vh-3rem\)\]/, "desktop rail max-height guard missing")
+  expectSource(appSource, /lg:overflow-y-auto/, "desktop rail internal scroll missing")
+  expectMissing(appSource, /Workspace mode/, "legacy workspace-mode card should not remain in rail")
   expectSource(appSource, /lg:hidden/, "mobile menu button style missing")
   expectSource(appSource, /animate-surface-enter/, "surface animation class missing")
   expectSource(appSource, /NavLink/, "route-aware navigation missing")

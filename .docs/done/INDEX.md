@@ -26,6 +26,7 @@ Core history index (summary-first). Full details remain in git history.
 - high-impact-github-issues: Added deterministic GitHub issue impact gate in `src/digest/pipeline/github_issue_impact.py`. ([summary](./high-impact-github-issues/completion-summary.md))
 - incremental-video-presence: Added targeted video supplement logic in `src/digest/runtime.py` for incremental runs: ([summary](./incremental-video-presence/completion-summary.md))
 - latest-run-source-health: Source health now reflects only the latest completed run, clearing stale alerts after a newer clean run. ([summary](./latest-run-source-health/completion-summary.md))
+- left-rail-scroll-fix: Added internal desktop scrolling to the sticky left rail so lower nav content remains reachable. ([summary](./left-rail-scroll-fix/completion-summary.md))
 - make-app-api-reachability: Hardened `make app` so local dev uses the Vite `/api` proxy by default and fails early on occupied API/UI ports. ([summary](./make-app-api-reachability/completion-summary.md))
 - must-read-source-diversity: Added configurable `must_read_max_per_source` to profile config. ([summary](./must-read-source-diversity/completion-summary.md))
 - mvp-digest-pipeline: Implemented a Python MVP digest application with modular connectors, pipeline, delivery, storage, and CLI runtime. ([summary](./mvp-digest-pipeline/completion-summary.md))
