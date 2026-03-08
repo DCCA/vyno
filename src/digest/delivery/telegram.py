@@ -9,6 +9,9 @@ import urllib.request
 
 from digest.models import DigestSections
 
+TELEGRAM_PRIMARY_MIN_ITEMS = 10
+TELEGRAM_PRIMARY_MIN_SOURCES = 5
+
 NOISE_PHRASE_RE = re.compile(
     r"\b(check out|patreon|sponsor|support us|sign up)\b", re.IGNORECASE
 )
@@ -166,11 +169,60 @@ def _build_sparse_note(context: dict[str, Any] | None) -> str:
 
 
 def _select_primary_items(sections: DigestSections):
-    if sections.must_read:
-        return list(sections.must_read)
-    if sections.skim:
-        return list(sections.skim)
-    return list(sections.videos)
+    pool = list(sections.must_read) + list(sections.skim) + list(sections.videos)
+    if not pool:
+        return []
+
+    target_items = min(len(pool), TELEGRAM_PRIMARY_MIN_ITEMS)
+    distinct_sources = {
+        _source_bucket(scored.item.source) for scored in pool
+    }
+    target_sources = min(
+        TELEGRAM_PRIMARY_MIN_SOURCES,
+        len(distinct_sources),
+        target_items,
+    )
+
+    selected = []
+    selected_ids: set[str] = set()
+    selected_sources: set[str] = set()
+
+    for scored in pool:
+        if len(selected_sources) >= target_sources or len(selected) >= target_items:
+            break
+        item_id = scored.item.id
+        source = _source_bucket(scored.item.source)
+        if item_id in selected_ids or source in selected_sources:
+            continue
+        selected.append(scored)
+        selected_ids.add(item_id)
+        selected_sources.add(source)
+
+    for scored in pool:
+        if len(selected) >= target_items:
+            break
+        item_id = scored.item.id
+        if item_id in selected_ids:
+            continue
+        selected.append(scored)
+        selected_ids.add(item_id)
+
+    return selected
+
+
+def _source_bucket(raw: str) -> str:
+    value = (raw or "").strip().lower()
+    if not value:
+        return "unknown"
+    if value.startswith("github:"):
+        return "github"
+    if value.startswith("http://") or value.startswith("https://"):
+        parsed = urllib.parse.urlparse(value)
+        host = (parsed.netloc or "").strip().lower()
+        if host.startswith("www."):
+            host = host[4:]
+        return host or value
+    return value
 
 
 def _render_item_block(idx: int, scored_item) -> str:

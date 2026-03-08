@@ -6,6 +6,7 @@ from urllib.parse import parse_qs
 
 from digest.delivery.obsidian import render_obsidian_note
 from digest.delivery.telegram import (
+    _select_primary_items,
     render_telegram_message,
     render_telegram_messages,
     send_telegram_message,
@@ -112,6 +113,63 @@ class TestRenderers(unittest.TestCase):
         msg = render_telegram_message("2026-02-21", sec)
         self.assertLess(len(msg), 1200)
         self.assertIn("<a href=", msg)
+
+    def test_telegram_backfills_to_ten_items_from_selected_pool(self):
+        must_read = [_scored(i) for i in range(1, 6)]
+        skim = [_scored(i) for i in range(6, 14)]
+        sec = DigestSections(must_read=must_read, skim=skim, videos=[])
+
+        selected = _select_primary_items(sec)
+        msg = render_telegram_message("2026-02-21", sec)
+
+        self.assertEqual(len(selected), 10)
+        self.assertEqual(msg.count('<a href="https://x/'), 10)
+        self.assertIn('10. <a href="https://x/10"><b>Title 10</b></a>', msg)
+
+    def test_telegram_promotes_diverse_sources_before_duplicates(self):
+        must_read = []
+        for i in range(1, 6):
+            row = _scored(i)
+            row.item.source = "https://alpha.example/feed.xml"
+            must_read.append(row)
+
+        skim = []
+        for idx, source in enumerate(
+            [
+                "https://beta.example/feed.xml",
+                "https://gamma.example/feed.xml",
+                "https://delta.example/feed.xml",
+                "https://epsilon.example/feed.xml",
+                "https://zeta.example/feed.xml",
+            ],
+            start=6,
+        ):
+            row = _scored(idx)
+            row.item.source = source
+            skim.append(row)
+
+        sec = DigestSections(must_read=must_read, skim=skim, videos=[])
+        selected = _select_primary_items(sec)
+        first_five_sources = [row.item.source for row in selected[:5]]
+
+        self.assertEqual(len(selected), 10)
+        self.assertEqual(len({source for source in first_five_sources}), 5)
+        self.assertIn("https://beta.example/feed.xml", first_five_sources)
+        self.assertIn("https://epsilon.example/feed.xml", first_five_sources)
+
+    def test_telegram_uses_all_available_items_when_pool_is_smaller_than_ten(self):
+        sec = DigestSections(
+            must_read=[_scored(1), _scored(2)],
+            skim=[_scored(3)],
+            videos=[_scored(4, "video")],
+        )
+
+        selected = _select_primary_items(sec)
+        msg = render_telegram_message("2026-02-21", sec)
+
+        self.assertEqual(len(selected), 4)
+        self.assertEqual(msg.count('<a href="https://x/'), 4)
+        self.assertIn('4. <a href="https://x/4"><b>Title 4</b></a>', msg)
 
     def test_obsidian_caps_overlong_fields(self):
         long_title = "A" * 400
