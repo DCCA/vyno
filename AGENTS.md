@@ -7,11 +7,11 @@
 - Docs refactors/cleanup MUST preserve Firehose structure (`.docs/todo`, `.docs/doing`, `.docs/done`) and required artifacts.
 
 ## Project Structure & Module Organization
-AI Daily Digest is a Python application with a web console.
+AI Daily Digest is a Python application with a local operator console.
 
 Key paths:
 - `src/digest/`: runtime, connectors, delivery, web API.
-- `web/`: Vite + React + Tailwind admin/config console.
+- `web/`: Vite + React + Tailwind operator console.
 - `tests/`: Python unit/integration tests.
 - `web/tests/`: frontend source-shape tests.
 - `config/`: tracked base config (`sources.yaml`, `profile.yaml`).
@@ -24,6 +24,8 @@ Keep each change scoped to one logical unit of work.
 Primary commands:
 - `make test`: run Python test suite.
 - `make app`: start API + UI together (`scripts/start-app.sh`).
+- `make schedule`: run the CLI scheduler loop.
+- `make bot`: run the Telegram admin bot.
 - `make web-api`: run config API only.
 - `make web-ui`: run UI dev server only.
 - `make web-ui-build`: build UI.
@@ -62,11 +64,13 @@ Verification is mandatory:
   - Overlay: `data/sources.local.yaml`, `data/profile.local.yaml`
 - Local DB default: `digest-live.db`
 - Logs default: `logs/digest.log`
+- Web scheduler state defaults to `.runtime/schedule-state.json`
 - Web API auth defaults to required mode; when running API/UI separately, keep matching token/header env vars.
+- The current console is route-based and includes `Dashboard`, `Schedule`, `Run Center`, `Sources`, `Profile`, `Timeline`, `History`, and `Onboarding`.
 
 High-signal source types in current system include:
 - `rss`, `youtube_channel`, `youtube_query`
-- `x_author`, `x_theme` (X selectors; supports handle and profile URL canonicalization for `x_author`)
+- `x_author`, `x_theme` (optional X selectors; supports handle and profile URL canonicalization for `x_author`)
 - `github_repo`, `github_topic`, `github_query`, `github_org`
 
 ## Docs Hygiene

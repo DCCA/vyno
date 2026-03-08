@@ -2,7 +2,7 @@
 
 ## Document Status
 - Status: Current shipped-product PRD baseline
-- Updated: 2026-03-01
+- Updated: 2026-03-08
 - Source of truth alignment: `README.md`, `src/digest/*`, `web/src/*`
 
 ## Product Intent
@@ -10,7 +10,7 @@ AI Daily Digest exists to reduce AI information overload by ingesting multi-sour
 
 ## Primary Users
 - Solo operator who wants a reliable daily AI brief with low noise.
-- Power user who tunes source/profile configuration and run policy from a web console.
+- Power user who tunes source/profile configuration, run policy, and scheduling from a web console.
 - Admin operator who controls runtime via Telegram bot commands.
 
 ## Product Goals
@@ -21,7 +21,7 @@ AI Daily Digest exists to reduce AI information overload by ingesting multi-sour
 - The product SHALL produce outputs optimized for quick consumption (Telegram) and long-term retrieval (Obsidian Markdown).
 
 ## Non-Goals
-- Full direct X API automation is NOT required in current scope; X ingestion is manual inbox based.
+- Full direct X API automation is NOT required in current scope; inbox-only remains the default and selector ingestion is optional.
 - Multi-tenant SaaS hosting is NOT in scope.
 - Replacing Telegram and Obsidian with new delivery channels is NOT currently required.
 
@@ -30,32 +30,33 @@ AI Daily Digest exists to reduce AI information overload by ingesting multi-sour
   - RSS feeds
   - YouTube channels and query feeds
   - X links from inbox file
+  - optional X author/theme selectors through the recent-search API path
   - GitHub repos, topics, search queries, and organizations
 - Pipeline:
   - normalization, dedupe, scoring, selection, summarization
   - Must-read diversity constraints and guardrails
-  - quality repair and fallback strategies
+  - quality repair, quality learning, and fallback strategies
 - Delivery:
   - Telegram digest sections with chunking
   - Obsidian markdown notes (timestamped default, legacy daily optional)
 - Operations:
   - CLI run/schedule/doctor/bot/web modes
-  - web console with setup/manage surfaces
-  - onboarding preflight, source packs, preview, activate
-  - run policy controls and seen-reset controls
-  - timeline and history observability
+  - route-based web console with dashboard, schedule, run center, sources, profile, timeline, history, and onboarding surfaces
+  - onboarding preflight, source packs, preview, activate, and lifecycle-based navigation
+  - run policy controls, seen-reset controls, and dedicated schedule controls
+  - timeline, config history, rollback, and source-health observability
 - Security and reliability:
   - API token auth modes (`required|optional|off`)
   - secret redaction in API payloads
-  - run lock, bot healthcheck, structured logs, Docker runtime option
+  - run lock, scheduler state tracking, bot healthcheck, structured logs, and Docker runtime option
 
 ## Product Requirements
 
 ### Requirement: Multi-Source Ingestion
-The system SHALL ingest candidate items from configured RSS, YouTube, X inbox, and GitHub source groups in a single run.
+The system SHALL ingest candidate items from configured RSS, YouTube, X inbox, optional X selectors, and GitHub source groups in a single run.
 
 #### Scenario: Mixed source run
-- GIVEN configured RSS, YouTube, and GitHub sources
+- GIVEN configured RSS, YouTube, X, and GitHub sources
 - WHEN a digest run starts
 - THEN the run includes candidates from each reachable source type
 - AND unreachable sources are recorded as source errors without fully aborting healthy source processing
@@ -79,13 +80,13 @@ The system SHALL deliver digest output to Telegram and Obsidian for each success
 - AND an Obsidian markdown note is written with stable frontmatter fields
 
 ### Requirement: Manual and Scheduled Execution
-The system SHALL support manual run execution and schedule-driven run execution.
+The system SHALL support manual run execution and schedule-driven run execution from both CLI and web-app workflows.
 
 #### Scenario: Scheduled execution
-- GIVEN scheduler is running with configured time and timezone
+- GIVEN the web app is running and `profile.schedule` is enabled with a configured time and timezone
 - WHEN the configured schedule boundary is reached
-- THEN the digest run executes with incremental defaults
-- AND run metadata is persisted for audit and observability
+- THEN the scheduler triggers a digest using web/schedule run defaults
+- AND run metadata and scheduler state are persisted for audit and observability
 
 ### Requirement: Operability via Web Console
 The system SHALL provide a web console for configuration, onboarding, and run observability without direct file editing.
@@ -94,16 +95,25 @@ The system SHALL provide a web console for configuration, onboarding, and run ob
 - GIVEN onboarding is incomplete
 - WHEN the operator runs preflight, applies sources, previews, and activates
 - THEN onboarding status reaches complete
-- AND manage surfaces become the primary operator path
+- AND the main operator navigation expands to the full route-based workspace set
 
 ### Requirement: Run Observability
-The system SHALL provide run status, live progress, source health, timeline events, and history records.
+The system SHALL provide run status, live progress, source health, timeline events, timeline notes, and config history records.
 
 #### Scenario: Active run monitoring
 - GIVEN a run is active
-- WHEN the operator opens the dashboard or timeline views
+- WHEN the operator opens the dashboard, schedule, or timeline views
 - THEN the UI shows current stage, elapsed progress details, and warning/error counters
 - AND the latest completed run remains available for post-run diagnostics
+
+### Requirement: Dedicated Schedule Controls
+The system SHALL provide a dedicated schedule workspace for daily automation controls and scheduler diagnostics.
+
+#### Scenario: Schedule workspace management
+- GIVEN the operator opens the schedule workspace
+- WHEN they save, pause, resume, or inspect automation
+- THEN they can manage `profile.schedule` without editing raw profile JSON
+- AND the page shows next run timing, scheduler state, and the latest scheduler issue near the controls
 
 ### Requirement: Configuration Safety
 The system SHALL apply configuration via tracked base files plus local overlays, with validation and diff visibility.
@@ -127,6 +137,7 @@ The system SHALL enforce configurable API auth behavior and redact secrets in co
 - External APIs and network quality directly affect run completeness.
 - `OPENAI_API_KEY` gates agent scoring/summarization capabilities.
 - `GITHUB_TOKEN` improves GitHub API reliability and rate limits.
+- X selector ingestion depends on `DIGEST_X_PROVIDER=x_api` plus valid X API access.
 - Telegram and Obsidian outputs depend on valid credentials and writable paths.
 
 ## Success Signals
@@ -136,6 +147,6 @@ The system SHALL enforce configurable API auth behavior and redact secrets in co
 - Timeline and source-health surfaces reduce mean time to diagnose failed sources.
 
 ## Known Gaps and Future Enhancements
-- Native X API ingestion remains future scope.
+- Richer native X workflows beyond inbox-only default plus current selector support remain future scope.
 - More advanced personalization and feedback loops can be expanded beyond current profile controls.
 - Additional delivery destinations may be considered after core reliability and signal quality targets are stable.

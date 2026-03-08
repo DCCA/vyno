@@ -2,15 +2,16 @@
 
 ## Current State Review
 - Core digest pipeline is working end-to-end: ingestion, normalization, scoring/tagging, selection, Telegram delivery, and Obsidian archive.
-- Source coverage includes RSS, YouTube, X inbox links, and GitHub API selectors.
+- Source coverage includes RSS, YouTube, X inbox links, optional X selectors, and GitHub API selectors.
 - Agent scoring/tagging via OpenAI Responses API is implemented with per-item rules fallback.
 - Structured JSON logs with `run_id` and stage events are in place (`logs/digest.log`).
 - Obsidian naming supports `timestamped` (default) and `daily` compatibility mode.
-- Test suite is healthy (`make test` passing, 94 tests).
+- Test suite is healthy (`make test` passing, 161 tests).
+- The operator console is route-based and includes dedicated `Schedule`, `Timeline`, and `History` workspaces.
 
 ## Key Risks / Gaps
 - Runtime can still be slow/costly on source-heavy runs despite score cache + cap guardrails.
-- X ingestion is manual-link based only (no native API metadata).
+- X selector ingestion depends on optional X API access; inbox-only remains the default path.
 - No SLO dashboard or alerting for delivery failures.
 - Docker runtime validation is not fully closed in docs (startup/restart/persistence checks pending on a Docker-enabled host).
 

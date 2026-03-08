@@ -1,242 +1,238 @@
 # AI Daily Digest
 
-AI Daily Digest ingests high-signal AI content, ranks and tags it, sends a Telegram digest, and archives Markdown notes to Obsidian.
+AI Daily Digest is a local-first Python application and web console for turning noisy AI-source inputs into a curated daily brief. It ingests configured sources, scores and selects the highest-signal items, delivers a digest to Telegram, and archives Markdown notes to Obsidian.
 
-## Features
-- Source ingestion:
-  - RSS feeds
-  - YouTube channels
-  - X links from a manual inbox file
-  - GitHub repos/topics/search queries/orgs
-- Deduplication, scoring, and selection (`Must-read`, `Skim`, `Videos`)
-- Agent-based scoring and tagging via OpenAI Responses API with rules fallback
-- Optional LLM summarization via OpenAI Responses API with extractive fallback
-- Delivery to Telegram and Obsidian
-- Structured JSON logs with run-level traceability
+## What The Project Does
+- Ingests content from RSS feeds, YouTube channels and queries, X inbox links, optional X selectors, and GitHub selectors.
+- Normalizes, deduplicates, scores, and selects items into `Must-read`, `Skim`, and `Videos`.
+- Uses OpenAI Responses API for agent scoring/tagging and optional summarization, with deterministic fallback behavior.
+- Writes run history, source health, seen-state, timeline events, and other observability data to SQLite.
+- Exposes a local FastAPI control plane consumed by a Vite/React operator console.
+
+## Current Operator Surfaces
+The web console is route-based and currently includes:
+- `Dashboard`: overall posture, active run state, alerts, and quick actions
+- `Schedule`: dedicated daily automation controls and scheduler status
+- `Run Center`: manual run actions and live progress
+- `Sources`: source inventory, local mutations, and source health
+- `Profile`: scoring, output, run-policy, and maintenance controls
+- `Timeline`: per-run event stream, summary, export, and notes
+- `History`: config snapshot ledger and rollback actions
+- `Onboarding`: first-run setup flow, preflight, source packs, preview, and activation
+
+When onboarding is incomplete, the primary nav stays focused on setup surfaces. After activation, the app switches to the broader operator workflow.
 
 ## Repository Structure
-- `src/digest/`: application code
-- `config/`: runtime configuration (`sources.yaml`, `profile.yaml`)
-- `data/`: local runtime data templates (for example `x_inbox.example.txt`)
-- `tests/`: unit and integration tests
-- `.docs/`: Firehose planning/spec history
+- `src/digest/`: backend runtime, connectors, delivery, scoring, summarization, storage, ops, and web API
+- `web/`: Vite + React + Tailwind operator console
+- `tests/`: backend unit and integration tests
+- `web/tests/`: frontend source-shape tests
+- `config/`: tracked base config (`sources.yaml`, `profile.yaml`)
+- `data/`: mutable local overlays and runtime templates
+- `.docs/`: Firehose product, architecture, backlog, and completion history
 
 ## Quick Start
-1. Copy env template and fill values:
+1. Create local env config:
+
 ```bash
 cp .env.example .env
 ```
 
 2. Install dependencies:
-- Preferred (`uv`):
+
+Preferred:
+
 ```bash
 uv sync
 ```
-- Fallback (`venv` + `pip`):
+
+Fallback:
+
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-3. Review/edit:
+3. Review the tracked base config and local overlays:
 - `config/sources.yaml`
 - `config/profile.yaml`
-- `data/x_inbox.txt` (copy from template if needed)
-- Optional local overlays:
+- `data/x_inbox.txt` if you want manual X inbox ingestion
+- optional overlays:
   - `data/sources.local.yaml`
-  - `data/profile.local.yaml` (copy from `data/profile.local.example.yaml`)
+  - `data/profile.local.yaml`
 
-4. Start the local app (API + UI):
+4. Start the local app:
+
 ```bash
 make app
 ```
 
-5. Run once:
+5. Run one digest manually:
+
 ```bash
 make live
 ```
 
-6. Run setup preflight (recommended before bot/schedule):
+6. Run preflight checks before activating delivery or schedule flows:
+
 ```bash
 make doctor
 ```
 
 ## Common Commands
-- Run tests: `make test`
-- Run security checks (baseline + high-severity scan): `make security-check`
-- Run extended security checks (includes Semgrep advisory): `make security-check-extended`
-- Run onboarding preflight checks: `make doctor`
-- Run once (live): `make live`
-- Run scheduler: `make schedule`
-- Scheduler with overrides: `make schedule TIME=08:30 TZ=America/New_York`
-- Tail logs: `make logs`
-- Run Telegram command bot:
-  - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --sources-overlay data/sources.local.yaml --profile config/profile.yaml --profile-overlay data/profile.local.yaml --db digest-live.db bot`
-- Run config API directly via CLI:
-  - `PYTHONPATH=src ./bin/digest --sources config/sources.yaml --sources-overlay data/sources.local.yaml --profile config/profile.yaml --profile-overlay data/profile.local.yaml --db digest-live.db web --host 127.0.0.1 --port 8787`
-- Start API + UI together (friendly default): `make app`
-- Run config web API (for Vite UI): `make web-api`
-- Run config web UI (Vite + shadcn + Tailwind): `make web-ui`
-  - when running separately, set the same API token in both shells:
-    - API shell: `DIGEST_WEB_API_TOKEN=dev-local-token make web-api`
-    - UI shell: `VITE_WEB_API_TOKEN=dev-local-token make web-ui`
-- Docker operations:
-  - Build image: `make docker-build`
-  - Start bot service: `make docker-up`
-  - View bot logs: `make docker-logs`
-  - Service status: `make docker-ps`
-  - Restart bot: `make docker-restart`
-  - Stop services: `make docker-down`
+- `make app`: start API and UI together using `scripts/start-app.sh`
+- `make web-api`: run the FastAPI control plane only
+- `make web-ui`: run the Vite UI only
+- `make web-ui-build`: build the UI bundle
+- `make live`: execute one live digest run
+- `make schedule`: run the CLI scheduler loop
+- `make bot`: run the Telegram admin bot loop
+- `make doctor`: run onboarding and environment preflight checks
+- `make test`: run backend tests
+- `npm --prefix web run test`: run frontend tests
+- `make security-check`: run baseline security checks
+- `make security-check-extended`: run extended security checks
 
-## Config Web Console (Vite + shadcn + Tailwind)
-- One-command startup: `make app`
-  - starts API on `http://127.0.0.1:8787`
-  - starts UI on `http://127.0.0.1:5173`
-  - generates a session API token automatically when required auth is enabled
-  - press `Ctrl+C` to stop both
-- API server: `make web-api` (serves at `http://127.0.0.1:8787` by default)
-- UI dev server: `make web-ui` (Vite at `http://127.0.0.1:5173`)
-- UI build: `make web-ui-build`
-- Onboarding tab includes:
-  - preflight checks (`pass/warn/fail` + hints)
-  - source pack bootstrap
-  - safe preview run (no Telegram send, no production DB mutation)
-  - activate action + health confirmation
-- Source health panel shows broken sources from recent runs with suggested fixes.
-- Optional API base override for UI:
-  - `VITE_API_BASE=http://127.0.0.1:8787 npm --prefix web run dev`
-- API auth controls:
-  - `DIGEST_WEB_API_AUTH_MODE=required|optional|off` (default: `required`)
-  - `DIGEST_WEB_API_TOKEN=<token>`
-  - `DIGEST_WEB_API_TOKEN_HEADER=<header-name>` (default: `X-Digest-Api-Token`)
+## Local App Startup
+`make app` is the friendly default for local work.
 
-## Recommended Onboarding Flow
-1. Start API + UI (`make app`).
-2. Open the Onboarding tab and run preflight.
-3. Fix any failing checks and optional warnings you care about.
-4. Apply a source pack (or configure sources manually).
-5. Run preview and verify output quality.
-6. Activate live run and confirm run health.
+It currently:
+- starts the API on `http://127.0.0.1:8787`
+- starts the UI on `http://127.0.0.1:5173`
+- installs missing web dependencies automatically if needed
+- fails early when the chosen API or UI port is already in use
+- generates a session API token automatically when `DIGEST_WEB_API_AUTH_MODE=required` and no token is already set
+- writes startup logs to `.runtime/app-api.log` and `.runtime/app-ui.log`
 
-## Docker Bot Runbook
-Use Docker Compose when you want `digest bot` to stay up after shell exits and host restarts.
+Stop both processes with `Ctrl+C`.
 
-1. Prepare runtime files:
+When running API and UI separately, keep the token and token-header settings aligned in both shells:
+
 ```bash
-cp .env.example .env
-mkdir -p logs .runtime obsidian-vault
-touch digest-live.db
+DIGEST_WEB_API_TOKEN=dev-local-token make web-api
+VITE_WEB_API_TOKEN=dev-local-token make web-ui
 ```
 
-2. Set required bot env vars in `.env`:
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_ADMIN_CHAT_IDS`
-- `TELEGRAM_ADMIN_USER_IDS`
+## Configuration Model
+Tracked base config:
+- `config/sources.yaml`
+- `config/profile.yaml`
 
-3. If writing Obsidian notes in-container, set:
-- `OBSIDIAN_VAULT_PATH=/app/obsidian-vault`
-- `OBSIDIAN_FOLDER=AI Digest`
+Mutable local overlays:
+- `data/sources.local.yaml`
+- `data/profile.local.yaml`
 
-4. Build and start:
-```bash
-make docker-build
-make docker-up
-```
-
-5. Validate health and logs:
-```bash
-make docker-ps
-make docker-logs
-```
-
-Expected state:
-- `digest-bot` is `Up`.
-- Logs do not repeatedly show auth/env errors.
-- Telegram `/status` command responds from an authorized admin account.
-
-### Persistence Model
-Container runtime state is persisted on host mounts:
-- `config/` (read-only in container)
-- `data/` (includes `sources.local.yaml`, `profile.local.yaml`, and inbox file)
-- `logs/`
-- `.runtime/` (run lock, runtime artifacts)
+Runtime state and artifacts:
 - `digest-live.db`
+- `logs/digest.log`
+- `.runtime/`
 - `obsidian-vault/`
 
-### Healthcheck
-`compose.yaml` defines a heartbeat-based bot healthcheck using `digest bot-health-check`.
-Use `docker compose ps` to inspect health status.
-Manual check example:
-`PYTHONPATH=src ./bin/digest bot-health-check --health-path .runtime/bot-health.json`
+The application preserves tracked defaults and writes operator changes into the local overlay files.
 
-## Configuration
-### `config/sources.yaml`
-- `rss_feeds`, `youtube_channels`, `youtube_queries`
+## Source Configuration
+`config/sources.yaml` supports these source groups:
+- `rss_feeds`
+- `youtube_channels`
+- `youtube_queries`
 - `x_inbox_path`
-- `x_authors`, `x_themes`
-  - `x_authors` accepts X handles (`openai`, `@openai`) and profile URLs (`https://x.com/openai`)
-  - `x_authors` are fetched through X recent search using `from:<handle>` semantics
-  - `x_themes` accepts free-text recent-search queries
-  - X selector search is recent-search only (last 7 days), not full account history
-- `github_repos`, `github_topics`, `github_search_queries`, `github_orgs`
-  - `github_orgs` accepts either owner login or URL (`org-login`, `user-login`, or `https://github.com/<owner>`)
-  - Owner ingestion includes repo updates + releases (not issues/PRs)
+- `x_authors`
+- `x_themes`
+- `github_repos`
+- `github_topics`
+- `github_search_queries`
+- `github_orgs`
 
-### `config/profile.yaml`
-- Scoring:
-  - `agent_scoring_enabled: true`
-  - `max_agent_items_per_run` (default `40`)
-  - `must_read_max_per_source` (default `2`, source diversity cap in Must-read)
-  - `min_llm_coverage` (default `0.9`)
-  - `max_fallback_share` (default `0.1`)
-  - `agent_scoring_retry_attempts` (default `1`)
-  - `agent_scoring_text_max_chars` (default `8000`)
-  - `openai_model: gpt-5.1-codex-mini`
-- Must-read online quality repair:
-  - `quality_repair_enabled` (default `false`)
-  - `quality_repair_model` (defaults to `openai_model` when empty)
-  - `quality_repair_threshold` (0-100, default `80`)
-  - `quality_repair_candidate_pool_size` (default `40`)
-  - `quality_repair_fail_open` (default `true`)
-- Quality learning (cross-run):
-  - `quality_learning_enabled` (default `true`)
-  - `quality_learning_max_offset` (default `8.0`)
-  - `quality_learning_half_life_days` (default `14`)
-- GitHub quality guardrails:
-  - `github_min_stars`
-  - `github_include_forks`
-  - `github_include_archived`
-  - `github_max_repos_per_org`
-  - `github_max_items_per_org`
-  - `github_repo_max_age_days`
-  - `github_activity_max_age_days`
-- Summarization:
-  - `llm_enabled: false|true`
-- Output:
-  - Telegram token/chat id
-  - Obsidian vault/folder
-  - `obsidian_naming: timestamped|daily`
-  - `render_mode: sectioned|source_segmented`
+Notes:
+- `x_authors` accepts handles such as `openai` or `@openai`, plus profile URLs such as `https://x.com/openai`.
+- `x_themes` accepts free-text recent-search queries.
+- X selector ingestion is optional and controlled by `DIGEST_X_PROVIDER`. The default `inbox_only` mode uses only the manual inbox file. `x_api` enables author/theme selector fetching through the X recent-search API.
+- `github_orgs` accepts either an owner login or a GitHub owner URL. Owner ingestion includes repo updates and releases.
 
-### Environment Variables
-See `.env.example` for full list.
-Most used:
-- `OPENAI_API_KEY`
-- `GITHUB_TOKEN` (recommended for GitHub API rate limits)
-- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
-- X selector ingestion:
-  - `DIGEST_X_PROVIDER=inbox_only|x_api` (default: `inbox_only`)
-  - `X_BEARER_TOKEN` (required when `DIGEST_X_PROVIDER=x_api`)
-  - `DIGEST_X_MAX_ITEMS_PER_SELECTOR` (optional cap, default `25`, max `100`)
-  - `x_api` selector mode requires X Search Posts / recent-search access for both `x_author` and `x_theme`
-- `DIGEST_WEB_API_AUTH_MODE`, `DIGEST_WEB_API_TOKEN` (web config API auth)
-- Bot admin controls:
-  - `TELEGRAM_ADMIN_CHAT_IDS` (comma-separated)
-  - `TELEGRAM_ADMIN_USER_IDS` (comma-separated)
+## Profile Configuration
+`config/profile.yaml` currently includes:
+- topical preferences and blocklists
+- GitHub quality guardrails
+- LLM scoring and summarization controls
+- Must-read diversity controls
+- online Must-read quality repair controls
+- cross-run quality learning controls
+- `run_policy`
+- `schedule`
+- Telegram and Obsidian output settings
 
-## Telegram Ops Commands
-When bot mode is running, authorized admins can use:
+Notable fields:
+- `run_policy.default_mode`: `fresh_only`, `balanced`, `replay_recent`, or `backfill`
+- `run_policy.allow_run_override`
+- `run_policy.seen_reset_guard`: `confirm` or `disabled`
+- `schedule.enabled`
+- `schedule.time_local`
+- `schedule.timezone`
+- `output.obsidian_naming`: `timestamped` or `daily`
+- `output.render_mode`: `sectioned` or `source_segmented`
+
+## Web API And Security
+The FastAPI control plane lives under `/api/*`.
+
+Current security behavior:
+- auth modes: `required`, `optional`, `off`
+- token env var: `DIGEST_WEB_API_TOKEN`
+- token header env var: `DIGEST_WEB_API_TOKEN_HEADER`
+- `/api/health` stays reachable for local diagnostics
+- config responses redact secret-like fields and preserve unchanged redacted values on save
+- default CORS allows localhost and private-network development origins
+
+## Onboarding Flow
+The current setup path is:
+1. Start `make app`.
+2. Open the onboarding workspace.
+3. Run preflight and fix any failing checks.
+4. Apply a source pack or configure sources manually.
+5. Run a preview digest.
+6. Activate the product and confirm status.
+7. Manage recurring automation from the dedicated `Schedule` workspace.
+
+Preview runs are safe by design: they skip Telegram delivery and production artifact writes.
+
+## Scheduling And Run Control
+There are two scheduling paths:
+- CLI scheduler: `make schedule`
+- Web-app scheduler: save `profile.schedule` through the dedicated `Schedule` workspace
+
+The web scheduler:
+- runs inside the web API process
+- stores its scheduler state in `.runtime/schedule-state.json`
+- reports scheduler status, next run, last trigger, and latest error in the `Schedule` workspace
+- uses incremental defaults for web-triggered scheduled runs
+- respects the run lock when another run is already active
+
+Manual runs from the UI live in `Run Center`, where operators can run immediately and follow live progress.
+
+## Timeline, History, And Source Health
+Observability currently includes:
+- latest run status and live progress
+- source health based on the latest completed run
+- timeline runs, events, notes, and JSON export
+- config snapshot history and rollback
+- structured JSON logs in `logs/digest.log`
+
+This data is stored in SQLite and local history files so operators can inspect failures without rerunning the workload.
+
+## Telegram And Obsidian Output
+Telegram:
+- chunked digest messages
+- sections for `Must-read`, `Skim`, and `Videos`
+- admin command bot for status and source operations
+
+Obsidian:
+- default naming: `AI Digest/YYYY-MM-DD/HHmmss-<run_id>.md`
+- legacy naming: `AI Digest/YYYY-MM-DD.md`
+- stable frontmatter fields for downstream retrieval
+- `sectioned` or `source_segmented` rendering
+
+## Telegram Admin Commands
+When `make bot` is running, authorized admins can use:
 - `/status`
 - `/digest run`
 - `/source wizard`
@@ -244,7 +240,7 @@ When bot mode is running, authorized admins can use:
 - `/source add <type> <value>`
 - `/source remove <type> <value>`
 
-Supported source types:
+Supported runtime source types:
 - `rss`
 - `youtube_channel`
 - `youtube_query`
@@ -253,43 +249,67 @@ Supported source types:
 - `github_query`
 - `github_org`
 
-Runtime-added sources are persisted in `data/sources.local.yaml` (overlay), merged with tracked `config/sources.yaml`.
-Runtime profile edits from the web console are persisted in `data/profile.local.yaml` (overlay), merged with tracked `config/profile.yaml`.
+Runtime-added sources persist into `data/sources.local.yaml`.
 
-## Output Format
-- Telegram: compact digest sections (`Must-read`, `Skim`, `Videos`) with automatic chunking for long digests
-- Obsidian:
-  - Default: `AI Digest/YYYY-MM-DD/HHmmss-<run_id>.md`
-  - Legacy mode: `AI Digest/YYYY-MM-DD.md`
-  - Stable frontmatter keys (`date`, `generated_at_utc`, `run_id`, `source_count`, `tags`)
-  - Must-read rendered as summary callouts for better scanability
-- YouTube noise guardrails:
-  - promotional/source-link dump cleanup before summarization
-  - summary quality fallback on low-signal outputs
+## Docker Bot Runtime
+Use Docker Compose when you want bot mode to stay up across shell exits or restarts.
 
-## Logging and Debugging
-- Default log path: `logs/digest.log`
-- Log format: JSON lines with `run_id`, `stage`, `level`, and context fields
-- Includes LLM scoring coverage telemetry (`llm_coverage`, `fallback_share`, `fallback_reasons`)
-- Useful overrides:
-  - `DIGEST_LOG_PATH`
-  - `DIGEST_LOG_LEVEL`
-  - `DIGEST_LOG_MAX_BYTES`
-  - `DIGEST_LOG_BACKUP_COUNT`
+Prepare runtime files:
 
-## Security Notes
-- Never commit real secrets to git.
-- Use `.env` locally (ignored by `.gitignore`).
-- Keep inbox/runtime files private; use tracked templates (`.env.example`, `data/x_inbox.example.txt`) for sharing.
-- Run `make security-check` before opening PRs.
-- `make security-check` policy:
-  - blocks new potential secrets using `.secrets.baseline`
-  - fails on Bandit high-severity findings (`-lll`)
-  - enforces Ruff syntax/runtime safety rules (`E9,F63,F7,F82`)
-- Use `make security-check-extended` for advisory Semgrep sweeps (`p/secrets`, `p/python`).
-- Update baseline intentionally when expected fixtures trigger secret detectors:
-  - `uvx --from detect-secrets detect-secrets scan $(git ls-files --cached --others --exclude-standard) > .secrets.baseline`
+```bash
+cp .env.example .env
+mkdir -p logs .runtime obsidian-vault
+touch digest-live.db
+```
+
+Required bot env vars:
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_ADMIN_CHAT_IDS`
+- `TELEGRAM_ADMIN_USER_IDS`
+
+Start the container:
+
+```bash
+make docker-build
+make docker-up
+```
+
+Inspect runtime state:
+
+```bash
+make docker-ps
+make docker-logs
+```
+
+The Compose service mounts `config/`, `data/`, `logs/`, `.runtime/`, `obsidian-vault/`, and `digest-live.db`, and uses `digest bot-health-check` for container health.
+
+## Environment Variables
+See `.env.example` for the full list.
+
+Most commonly used:
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `GITHUB_TOKEN`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- `TELEGRAM_ADMIN_CHAT_IDS`
+- `TELEGRAM_ADMIN_USER_IDS`
+- `DIGEST_X_PROVIDER`
+- `X_BEARER_TOKEN`
+- `DIGEST_X_MAX_ITEMS_PER_SELECTOR`
+- `DIGEST_WEB_API_AUTH_MODE`
+- `DIGEST_WEB_API_TOKEN`
+- `DIGEST_WEB_API_TOKEN_HEADER`
+- `DIGEST_LOG_PATH`
+- `DIGEST_LOG_LEVEL`
+
+## Verification Status
+Verified against the current working tree on 2026-03-08:
+- `make test` passed (`161` backend tests)
+- `npm --prefix web run test` passed (`7` frontend tests)
+- `npm --prefix web run build` passed
 
 ## Known Limitations
-- In restricted network environments, source fetches may fail and runs can be `partial` or `failed`.
-- X ingestion is manual-link based in MVP (no direct X API automation yet).
+- External API/network conditions can still produce `partial` or `failed` runs.
+- X selector ingestion requires `DIGEST_X_PROVIDER=x_api` plus valid X API access; inbox-only remains the default.
+- Delivery still targets Telegram and Obsidian only.

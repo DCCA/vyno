@@ -18,6 +18,7 @@ Core history index (summary-first). Full details remain in git history.
 - customer-facing-setup-and-scheduling: Reworked onboarding into a customer setup flow and added daily schedule support to the web product. ([summary](./customer-facing-setup-and-scheduling/completion-summary.md))
 - digest-config-accessibility: Added user-facing run policy controls with four digest modes (`fresh_only`, `balanced`, `replay_recent`, `backfill`) and persisted defaults under `run_policy`. ([summary](./digest-config-accessibility/completion-summary.md))
 - digest-context-feedback: Added contextual run feedback payload to `RunReport` in `src/digest/models.py`. ([summary](./digest-context-feedback/completion-summary.md))
+- docs-current-state-alignment: Refreshed maintained docs to match the current working tree, verified commands, and route-based operator console. ([summary](./docs-current-state-alignment/completion-summary.md))
 - dockerize-bot-runtime: Added and documented Docker runtime assets for bot-first operations: ([summary](./dockerize-bot-runtime/completion-summary.md))
 - github-org-releases-repo-updates: Completed Firehose artifacts for ".docs/done/github-org-releases-repo-updates/" (proposal, spec, design, tasks). ([summary](./github-org-releases-repo-updates/completion-summary.md))
 - github-owner-fallback: Added `/users/{login}/repos` fallback so `github_org` selectors work for GitHub user owners as well as organizations. ([summary](./github-owner-fallback/completion-summary.md))

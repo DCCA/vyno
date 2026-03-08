@@ -2,11 +2,11 @@
 
 ## Document Status
 - Status: Current architecture baseline
-- Updated: 2026-03-01
+- Updated: 2026-03-08
 - Source of truth alignment: `README.md`, `src/digest/*`, `web/src/*`, `compose.yaml`
 
 ## System Overview
-AI Daily Digest is a Python runtime with a local web API and React web console. It ingests configured AI content sources, executes a scoring/summarization pipeline, delivers outputs to Telegram and Obsidian, and persists run data in SQLite for observability and control-plane features.
+AI Daily Digest is a Python runtime with a local web API and React operator console. It ingests configured AI content sources, executes a scoring/summarization pipeline, delivers outputs to Telegram and Obsidian, and persists run data in SQLite for observability and control-plane features.
 
 ```text
                                +--------------------------------+
@@ -21,8 +21,8 @@ AI Daily Digest is a Python runtime with a local web API and React web console. 
 +---------------------+             +----------+-----------+              +----------------------+
 | React Web Console   | <---------> | FastAPI Web API      | <----------> | SQLite Store         |
 | web/src/App.tsx     |  HTTP JSON  | src/digest/web/app.py|   read/write | runs, items, scores, |
-| setup/manage/timeline            | run status/progress   |              | seen, timeline,      |
-| profile/sources/review/history   | onboarding/config ops |              | health/history data  |
+| dashboard/schedule/run           | run status/progress   |              | seen, timeline,      |
+| sources/profile/history          | onboarding/config ops |              | health/history data  |
 +---------------------+             +----------+-----------+              +----------+-----------+
                                                |                                     ^
                                                | invokes                              |
@@ -78,9 +78,9 @@ AI Daily Digest is a Python runtime with a local web API and React web console. 
 - `src/digest/storage/sqlite_store.py`
   - Persistence for runs, scoring artifacts, diagnostics, and observability feeds.
 - `src/digest/web/app.py`
-  - API routes for run state, onboarding, config edits, timeline/history, source health.
+  - API routes for run state, onboarding, config edits, schedule state, timeline/history, source health, and seen reset.
 - `web/src/App.tsx`
-  - Single-page operator console with setup and management surfaces.
+  - Route-based operator console that coordinates onboarding and post-activation workspaces.
 
 ## Primary Data Flows
 
@@ -100,6 +100,12 @@ AI Daily Digest is a Python runtime with a local web API and React web console. 
 3. API returns redacted config state where secret-like keys are masked.
 4. Mutations persist overlays (`data/sources.local.yaml`, `data/profile.local.yaml`) and append history/timeline records.
 
+### Flow: Web Scheduling
+1. The operator saves `profile.schedule` through the dedicated `Schedule` workspace.
+2. The web API scheduler loop reads that schedule plus current run-lock state.
+3. Due runs start through the same live-run machinery used by the UI.
+4. Scheduler status is persisted to `.runtime/schedule-state.json` and exposed through `/api/schedule/status`.
+
 ### Flow: Onboarding
 1. Preflight checks validate env, config, and runtime prerequisites.
 2. Source packs bootstrap starter source sets.
@@ -116,6 +122,8 @@ AI Daily Digest is a Python runtime with a local web API and React web console. 
 - Runtime and output artifacts:
   - `digest-live.db`
   - `logs/digest.log`
+  - `.runtime/config-history/*`
+  - `.runtime/schedule-state.json`
   - `.runtime/*` (locks, bot heartbeat)
   - `obsidian-vault/` notes
 
@@ -129,8 +137,10 @@ AI Daily Digest is a Python runtime with a local web API and React web console. 
 ## Reliability and Observability
 - Run lock prevents overlapping conflicting runs.
 - Structured JSON logging includes run/stage metadata.
-- Source health aggregation highlights repeated failing sources and suggested fixes.
+- Source health aggregation highlights failing sources from the latest completed run and suggested fixes.
 - Timeline stores per-run event stream, severity, summary, and operator notes.
+- Config history snapshots support rollback from the web console.
+- Scheduler state tracks next run, last result, active run, and scheduler errors.
 - Bot runtime heartbeat supports Docker healthcheck validation.
 
 ## Deployment Topologies
@@ -138,6 +148,8 @@ AI Daily Digest is a Python runtime with a local web API and React web console. 
   - `make app` starts API (`127.0.0.1:8787`) + UI (`127.0.0.1:5173`).
 - Service split mode:
   - `make web-api` and `make web-ui` in separate shells.
+- CLI automation mode:
+  - `make schedule` runs the standalone CLI scheduler loop.
 - Bot runtime mode:
   - `digest bot` directly or Docker Compose managed service.
 
@@ -157,9 +169,18 @@ The architecture SHALL persist enough event/run data to diagnose failures withou
 
 #### Scenario: Source failure diagnosis
 - GIVEN a run completes with source errors
-- WHEN the operator opens source health and timeline views
+- WHEN the operator opens source health, timeline, schedule, or history views
 - THEN failing source, last error, and run linkage are available
 - AND corrective hints are displayed
+
+### Requirement: Dedicated Scheduler State
+The architecture SHALL persist scheduler state separately from ordinary run records so the operator can inspect automation posture without waiting for a new run.
+
+#### Scenario: Scheduler inspection
+- GIVEN the web scheduler is enabled
+- WHEN the operator opens the schedule workspace
+- THEN next run timing, current scheduler status, last trigger result, and latest scheduler error are available
+- AND those values remain available across page refreshes while the API process is running
 
 ### Requirement: Safe Control Plane Access
 The architecture SHALL support strict local API protection with explicit token-based authentication.
