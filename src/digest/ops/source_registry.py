@@ -64,6 +64,55 @@ def list_sources(base_path: str, overlay_path: str) -> dict[str, list[str]]:
     }
 
 
+def source_key_for(source_type: str, value: str) -> str:
+    st = (source_type or "").strip().lower()
+    raw = (value or "").strip()
+    if st == "x_inbox":
+        if not raw:
+            raise ValueError("x_inbox source value is required")
+        return f"{st}:{raw}"
+    try:
+        canon = canonicalize_source_value(st, raw)
+    except Exception:
+        canon = raw
+    return f"{st}:{canon}"
+
+
+def visible_source_entries(base_path: str, overlay_path: str) -> list[dict[str, object]]:
+    rows = list_sources(base_path, overlay_path)
+    entries: list[dict[str, object]] = []
+    for source_type, values in rows.items():
+        for value in values:
+            entries.append(
+                {
+                    "key": source_key_for(source_type, value),
+                    "type": source_type,
+                    "source": value,
+                    "can_edit": True,
+                    "can_delete": True,
+                }
+            )
+
+    effective = load_effective_sources(base_path, overlay_path)
+    if effective.x_inbox_path:
+        entries.append(
+            {
+                "key": source_key_for("x_inbox", effective.x_inbox_path),
+                "type": "x_inbox",
+                "source": effective.x_inbox_path,
+                "can_edit": False,
+                "can_delete": False,
+            }
+        )
+    return sorted(
+        entries,
+        key=lambda entry: (
+            str(entry.get("type") or ""),
+            str(entry.get("source") or ""),
+        ),
+    )
+
+
 def add_source(base_path: str, overlay_path: str, source_type: str, value: str) -> tuple[bool, str]:
     st = _norm_type(source_type)
     cv = canonicalize_source_value(st, value)

@@ -16,10 +16,10 @@ from digest.constants import (
     DIGEST_MUST_READ_LIMIT,
 )
 from digest.config import ProfileConfig, SourceConfig
-from digest.connectors.github import fetch_github_items, normalize_github_org
+from digest.connectors.github import fetch_github_items_linked, normalize_github_org
 from digest.connectors.rss import fetch_rss_items
 from digest.connectors.x_inbox import fetch_x_inbox_items
-from digest.connectors.x_selectors import fetch_x_selector_items
+from digest.connectors.x_selectors import fetch_x_selector_items_linked
 from digest.connectors.youtube import fetch_youtube_items
 from digest.delivery.obsidian import render_obsidian_note, write_obsidian_note
 from digest.delivery.telegram import render_telegram_messages, send_telegram_message
@@ -37,6 +37,7 @@ from digest.quality.online_repair import (
     item_features,
     rebuild_sections_with_repair,
 )
+from digest.ops.source_registry import source_key_for
 from digest.storage.sqlite_store import SQLiteStore
 from digest.logging_utils import get_run_logger, log_event
 from digest.summarizers.extractive import ExtractiveSummarizer
@@ -117,10 +118,27 @@ def run_digest(
     github_fetched_items = 0
 
     raw_items = []
+    source_links: list[dict[str, str]] = []
+
+    def record_source_links(source_type: str, source_value: str, items: list[Item]) -> None:
+        if not items:
+            return
+        source_key = source_key_for(source_type, source_value)
+        for item in items:
+            source_links.append(
+                {
+                    "source_key": source_key,
+                    "source_type": source_type,
+                    "source_value": source_value,
+                    "item_id": item.id,
+                }
+            )
+
     for feed_url in sources.rss_feeds:
         try:
             fetched = fetch_rss_items([feed_url])
             raw_items.extend(fetched)
+            record_source_links("rss", feed_url, fetched)
             rss_fetched_items += len(fetched)
             log_event(
                 run_logger,
@@ -157,6 +175,7 @@ def run_digest(
         try:
             fetched = fetch_youtube_items([channel_id], [])
             raw_items.extend(fetched)
+            record_source_links("youtube_channel", channel_id, fetched)
             youtube_fetched_items += len(fetched)
             log_event(
                 run_logger,
@@ -193,6 +212,7 @@ def run_digest(
         try:
             fetched = fetch_youtube_items([], [query])
             raw_items.extend(fetched)
+            record_source_links("youtube_query", query, fetched)
             youtube_fetched_items += len(fetched)
             log_event(
                 run_logger,
@@ -229,6 +249,7 @@ def run_digest(
         try:
             fetched = fetch_x_inbox_items(sources.x_inbox_path)
             raw_items.extend(fetched)
+            record_source_links("x_inbox", sources.x_inbox_path, fetched)
             x_fetched_items += len(fetched)
             log_event(
                 run_logger,
@@ -265,8 +286,20 @@ def run_digest(
         selector_fetched = 0
         selector_errors: list[str] = []
         try:
-            fetched, selector_errors = fetch_x_selector_items(sources, store)
+            linked_selector_items, selector_errors = fetch_x_selector_items_linked(
+                sources, store
+            )
+            fetched = [item for _selector_type, _selector_value, item in linked_selector_items]
             raw_items.extend(fetched)
+            for selector_type, selector_value, item in linked_selector_items:
+                source_links.append(
+                    {
+                        "source_key": source_key_for(selector_type, selector_value),
+                        "source_type": selector_type,
+                        "source_value": selector_value,
+                        "item_id": item.id,
+                    }
+                )
             selector_fetched = len(fetched)
             x_fetched_items += selector_fetched
         except Exception as exc:
@@ -301,7 +334,7 @@ def run_digest(
             gh_token = os.getenv("GITHUB_TOKEN", "").strip()
             github_orgs = [normalize_github_org(v) for v in sources.github_orgs]
             github_orgs = [v for v in github_orgs if v]
-            fetched = fetch_github_items(
+            linked_github_items = fetch_github_items_linked(
                 sources.github_repos,
                 sources.github_topics,
                 sources.github_search_queries,
@@ -317,7 +350,17 @@ def run_digest(
                     "activity_max_age_days": profile.github_activity_max_age_days,
                 },
             )
+            fetched = [item for _source_type, _source_value, item in linked_github_items]
             raw_items.extend(fetched)
+            for source_type, source_value, item in linked_github_items:
+                source_links.append(
+                    {
+                        "source_key": source_key_for(source_type, source_value),
+                        "source_type": source_type,
+                        "source_value": source_value,
+                        "item_id": item.id,
+                    }
+                )
             github_fetched_items += len(fetched)
             log_event(
                 run_logger,
@@ -1192,7 +1235,8 @@ def run_digest(
                 error=str(exc),
             )
 
-    store.upsert_items(candidate_items)
+    store.upsert_items(normalized)
+    store.link_source_items(run_id=run_id, links=source_links)
     store.insert_scores(run_id, scores)
     store.mark_seen([i.url or i.hash for i in candidate_items])
     store.finish_run(run_id, status, source_errors, summary_errors)

@@ -7,6 +7,7 @@ import sqlite3
 
 from digest.config import OutputSettings, ProfileConfig, SourceConfig
 from digest.models import Item, Score, Summary
+from digest.ops.source_registry import source_key_for
 from digest.runtime import run_digest
 from digest.storage.sqlite_store import SQLiteStore
 
@@ -111,6 +112,8 @@ class TestRuntimeIntegration(unittest.TestCase):
             conn.close()
             self.assertIsNotNone(row)
             self.assertEqual(row[0], "rules")
+            latest = store.latest_items_for_sources([source_key_for("rss", "fixture")])
+            self.assertEqual(latest[source_key_for("rss", "fixture")]["item_id"], "fixture1")
 
     def test_preview_mode_skips_delivery_and_artifact_writes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -339,11 +342,12 @@ class TestRuntimeIntegration(unittest.TestCase):
                 patch("digest.runtime.fetch_youtube_items", return_value=[]),
                 patch("digest.runtime.fetch_x_inbox_items", return_value=[x_item]),
                 patch(
-                    "digest.runtime.fetch_x_selector_items",
-                    return_value=([x_item], []),
+                    "digest.runtime.fetch_x_selector_items_linked",
+                    return_value=([("x_author", "alice", x_item)], []),
                 ) as selector_mock,
                 patch(
-                    "digest.runtime.fetch_github_items", return_value=[gh_item]
+                    "digest.runtime.fetch_github_items_linked",
+                    return_value=[("github_repo", "openai/openai-cookbook", gh_item)],
                 ) as gh_mock,
             ):
                 report = run_digest(
@@ -437,7 +441,7 @@ class TestRuntimeIntegration(unittest.TestCase):
                 github_repo_max_age_days=21,
                 github_activity_max_age_days=5,
             )
-            with patch("digest.runtime.fetch_github_items", return_value=[]) as gh_mock:
+            with patch("digest.runtime.fetch_github_items_linked", return_value=[]) as gh_mock:
                 run_digest(
                     sources,
                     profile,
@@ -778,8 +782,12 @@ class TestRuntimeIntegration(unittest.TestCase):
                 patch("digest.runtime.fetch_rss_items", return_value=[]),
                 patch("digest.runtime.fetch_youtube_items", return_value=[]),
                 patch(
-                    "digest.runtime.fetch_github_items",
-                    return_value=[kept_issue, dropped_no_keyword, dropped_untrusted],
+                    "digest.runtime.fetch_github_items_linked",
+                    return_value=[
+                        ("github_repo", "anthropics/claude-code", kept_issue),
+                        ("github_repo", "anthropics/claude-code", dropped_no_keyword),
+                        ("github_repo", "random/repo", dropped_untrusted),
+                    ],
                 ),
             ):
                 report = run_digest(

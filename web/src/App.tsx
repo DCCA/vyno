@@ -22,7 +22,6 @@ import {
   diffObjects,
   formatElapsed,
   parseProfilePayload,
-  sourceHealthMatches,
   surfaceFromLegacyQuery,
   toInt,
 } from "@/lib/console-utils"
@@ -72,6 +71,7 @@ function App() {
   const [sourceSearch, setSourceSearch] = useState("")
   const [showAllUnifiedSources, setShowAllUnifiedSources] = useState(false)
   const [sourceStatusFilter, setSourceStatusFilter] = useState<"all" | "healthy" | "failing">("all")
+  const [unifiedSourceRows, setUnifiedSourceRows] = useState<UnifiedSourceRow[]>([])
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [profileBaseline, setProfileBaseline] = useState<Record<string, unknown> | null>(null)
   const [profileJson, setProfileJson] = useState("")
@@ -144,28 +144,6 @@ function App() {
     () => sortedSourceRows.reduce((sum, [, values]) => sum + values.length, 0),
     [sortedSourceRows],
   )
-  const unifiedSourceRows = useMemo(() => {
-    const flattened: Array<{ type: string; source: string }> = []
-    for (const [type, values] of sortedSourceRows) {
-      for (const value of values) {
-        flattened.push({ type, source: String(value) })
-      }
-    }
-    return flattened.map((row) => {
-      const matches = sourceHealth.filter((item) => sourceHealthMatches(row.type, row.source, item))
-      const latest = matches[0]
-      return {
-        key: `${row.type}:${row.source}`,
-        type: row.type,
-        source: row.source,
-        count: matches.reduce((sum, match) => sum + Math.max(0, match.count || 0), 0),
-        health: matches.length > 0 ? "failing" : "healthy",
-        last_error: latest?.last_error || "-",
-        last_seen: latest?.last_seen || "-",
-        hint: latest?.hint || "-",
-      } satisfies UnifiedSourceRow
-    })
-  }, [sortedSourceRows, sourceHealth])
   const filteredUnifiedSourceRows = useMemo(() => {
     const query = sourceSearch.trim().toLowerCase()
     return unifiedSourceRows.filter((row) => {
@@ -173,7 +151,13 @@ function App() {
       if (!query) return true
       return (
         row.type.toLowerCase().includes(query) ||
+        row.type_label.toLowerCase().includes(query) ||
         row.source.toLowerCase().includes(query) ||
+        row.identity_title.toLowerCase().includes(query) ||
+        row.identity_subtitle.toLowerCase().includes(query) ||
+        row.preview_title.toLowerCase().includes(query) ||
+        row.preview_description.toLowerCase().includes(query) ||
+        row.preview_host.toLowerCase().includes(query) ||
         row.last_error.toLowerCase().includes(query) ||
         row.hint.toLowerCase().includes(query)
       )
@@ -374,8 +358,8 @@ function App() {
 
   useEffect(() => {
     void refreshAll()
-    const timer = setInterval(() => {
-      void Promise.all([
+      const timer = setInterval(() => {
+      const requests: Array<Promise<unknown>> = [
         api<RunStatus>("/api/run-status"),
         api<RunProgress>("/api/run-progress"),
         api<{ items: SourceHealthItem[] }>("/api/source-health"),
@@ -384,11 +368,31 @@ function App() {
         api<{ schedule_status: ScheduleStatus }>("/api/schedule/status"),
         api<{ runs: TimelineRun[] }>("/api/timeline/runs?limit=50"),
         api<{ run_policy: RunPolicy }>("/api/config/run-policy"),
-      ])
-        .then(([status, progress, health, onboardingStatus, scheduleConfigData, scheduleData, timelineData, policyData]) => {
+      ]
+      const shouldRefreshSourcePreviews = currentSurface === "sources"
+      if (shouldRefreshSourcePreviews) {
+        requests.push(api<{ items: UnifiedSourceRow[] }>("/api/source-previews"))
+      }
+      void Promise.all(requests)
+        .then((results) => {
+          const [status, progress, health, onboardingStatus, scheduleConfigData, scheduleData, timelineData, policyData, previewData] =
+            results as [
+              RunStatus,
+              RunProgress,
+              { items: SourceHealthItem[] },
+              OnboardingStatus,
+              { schedule: ScheduleConfig },
+              { schedule_status: ScheduleStatus },
+              { runs: TimelineRun[] },
+              { run_policy: RunPolicy },
+              { items: UnifiedSourceRow[] } | undefined,
+            ]
           setRunStatus(status)
           setRunProgress(progress.available ? progress : null)
           setSourceHealth(health.items)
+          if (previewData) {
+            setUnifiedSourceRows(previewData.items)
+          }
           setOnboarding(onboardingStatus)
           if (!scheduleDirty) {
             setScheduleDraft(scheduleConfigData.schedule)
@@ -407,7 +411,7 @@ function App() {
         .catch(() => undefined)
     }, 8000)
     return () => clearInterval(timer)
-  }, [runPolicyDirty, scheduleDirty, timelineRunId])
+  }, [currentSurface, runPolicyDirty, scheduleDirty, timelineRunId])
 
   useEffect(() => {
     const activeRunId = runStatus?.active?.run_id || runProgress?.run_id
@@ -550,6 +554,7 @@ function App() {
       const [
         typeData,
         sourceData,
+        sourcePreviewData,
         profileData,
         historyData,
         statusData,
@@ -564,6 +569,7 @@ function App() {
       ] = await Promise.all([
         api<{ types: string[] }>("/api/config/source-types"),
         api<{ sources: SourceMap }>("/api/config/sources"),
+        api<{ items: UnifiedSourceRow[] }>("/api/source-previews"),
         api<{ profile: Record<string, unknown> }>("/api/config/profile"),
         api<{ snapshots: HistoryItem[] }>("/api/config/history"),
         api<RunStatus>("/api/run-status"),
@@ -581,6 +587,7 @@ function App() {
       const preserveScheduleWorkspace = options?.preserveScheduleWorkspace ?? true
       setSourceTypes(typeData.types)
       setSources(sourceData.sources)
+      setUnifiedSourceRows(sourcePreviewData.items)
       if (!preserveProfileWorkspace || !profileWorkspaceDirty || !profile) {
         setProfile(profileData.profile)
         setProfileBaseline(profileData.profile)
@@ -689,12 +696,14 @@ function App() {
   }
 
   function editUnifiedSourceRow(row: UnifiedSourceRow) {
+    if (!row.can_edit) return
     setSourceType(row.type)
     setSourceValue(row.source)
     setScopedNotice("sources", "ok", `Loaded ${row.type} source for editing.`)
   }
 
   async function deleteUnifiedSourceRow(row: UnifiedSourceRow) {
+    if (!row.can_delete) return
     if (!window.confirm(`Delete ${row.type} source?\n${row.source}`)) return
     setSaveAction("source-remove")
     setSaving(true)

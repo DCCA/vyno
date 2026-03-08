@@ -48,6 +48,7 @@ class SQLiteStore:
                     published_at TEXT,
                     type TEXT,
                     raw_text TEXT,
+                    description TEXT,
                     hash TEXT
                 );
 
@@ -87,6 +88,28 @@ class SQLiteStore:
                     last_item_id TEXT,
                     updated_at TEXT NOT NULL,
                     PRIMARY KEY (selector_type, selector_value)
+                );
+
+                CREATE TABLE IF NOT EXISTS source_item_links (
+                    source_key TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    source_value TEXT NOT NULL,
+                    item_id TEXT NOT NULL,
+                    run_id TEXT,
+                    linked_at TEXT NOT NULL,
+                    PRIMARY KEY (source_key, item_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS link_previews (
+                    url TEXT PRIMARY KEY,
+                    resolved_url TEXT,
+                    host TEXT,
+                    title TEXT,
+                    description TEXT,
+                    image_url TEXT,
+                    status TEXT,
+                    error TEXT,
+                    fetched_at TEXT NOT NULL
                 );
 
                 CREATE TABLE IF NOT EXISTS feedback (
@@ -178,8 +201,13 @@ class SQLiteStore:
                     ON run_timeline_notes(run_id, created_at_utc DESC);
                 CREATE INDEX IF NOT EXISTS idx_x_selector_cursors_updated_at
                     ON x_selector_cursors(updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_source_item_links_source_key
+                    ON source_item_links(source_key, linked_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_source_item_links_item_id
+                    ON source_item_links(item_id);
                 """
             )
+            self._ensure_column(conn, "items", "description", "TEXT")
             self._ensure_column(conn, "scores", "tags_json", "TEXT")
             self._ensure_column(conn, "scores", "topic_tags_json", "TEXT")
             self._ensure_column(conn, "scores", "format_tags_json", "TEXT")
@@ -218,8 +246,8 @@ class SQLiteStore:
         with self._conn() as conn:
             conn.executemany(
                 """
-                INSERT OR REPLACE INTO items (id, url, title, source, author, published_at, type, raw_text, hash)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO items (id, url, title, source, author, published_at, type, raw_text, description, hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -231,10 +259,171 @@ class SQLiteStore:
                         i.published_at.isoformat() if i.published_at else None,
                         i.type,
                         i.raw_text,
+                        i.description,
                         i.hash,
                     )
                     for i in items
                 ],
+            )
+
+    def link_source_items(
+        self,
+        *,
+        run_id: str,
+        links: list[dict[str, str]],
+    ) -> None:
+        if not links:
+            return
+        now = datetime.now(tz=timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.executemany(
+                """
+                INSERT OR REPLACE INTO source_item_links (
+                    source_key, source_type, source_value, item_id, run_id, linked_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        str(link.get("source_key") or "").strip(),
+                        str(link.get("source_type") or "").strip(),
+                        str(link.get("source_value") or "").strip(),
+                        str(link.get("item_id") or "").strip(),
+                        run_id,
+                        now,
+                    )
+                    for link in links
+                    if str(link.get("source_key") or "").strip()
+                    and str(link.get("item_id") or "").strip()
+                ],
+            )
+
+    def latest_items_for_sources(self, source_keys: list[str]) -> dict[str, dict[str, str]]:
+        clean_keys = [str(key or "").strip() for key in source_keys if str(key or "").strip()]
+        if not clean_keys:
+            return {}
+        placeholders = ",".join(["?"] * len(clean_keys))
+        query = f"""
+            SELECT
+                l.source_key,
+                l.source_type,
+                l.source_value,
+                l.item_id,
+                l.linked_at,
+                i.url,
+                i.title,
+                i.source,
+                i.author,
+                i.published_at,
+                i.type,
+                i.raw_text,
+                i.description
+            FROM source_item_links l
+            JOIN items i ON i.id = l.item_id
+            WHERE l.source_key IN ({placeholders})
+            ORDER BY
+                l.source_key ASC,
+                CASE WHEN i.published_at IS NULL OR i.published_at = '' THEN 1 ELSE 0 END ASC,
+                i.published_at DESC,
+                l.linked_at DESC,
+                l.item_id DESC
+        """
+        rows = []
+        with self._conn() as conn:
+            rows = conn.execute(query, clean_keys).fetchall()
+        latest: dict[str, dict[str, str]] = {}
+        for row in rows:
+            source_key = str(row[0] or "").strip()
+            if not source_key or source_key in latest:
+                continue
+            latest[source_key] = {
+                "source_key": source_key,
+                "source_type": str(row[1] or ""),
+                "source_value": str(row[2] or ""),
+                "item_id": str(row[3] or ""),
+                "linked_at": str(row[4] or ""),
+                "url": str(row[5] or ""),
+                "title": str(row[6] or ""),
+                "source": str(row[7] or ""),
+                "author": str(row[8] or ""),
+                "published_at": str(row[9] or ""),
+                "item_type": str(row[10] or ""),
+                "raw_text": str(row[11] or ""),
+                "description": str(row[12] or ""),
+            }
+        return latest
+
+    def get_cached_link_preview(
+        self,
+        url: str,
+        *,
+        max_age_hours: int = 24,
+    ) -> dict[str, str] | None:
+        key = str(url or "").strip()
+        if not key:
+            return None
+        with self._conn() as conn:
+            row = conn.execute(
+                """
+                SELECT url, resolved_url, host, title, description, image_url, status, error, fetched_at
+                FROM link_previews
+                WHERE url = ?
+                """,
+                (key,),
+            ).fetchone()
+        if not row:
+            return None
+        fetched_at = _parse_dt(str(row[8] or ""))
+        if fetched_at is None:
+            return None
+        age_seconds = (datetime.now(tz=timezone.utc) - fetched_at).total_seconds()
+        if age_seconds > max(1, max_age_hours) * 3600:
+            return None
+        return {
+            "url": str(row[0] or ""),
+            "resolved_url": str(row[1] or ""),
+            "host": str(row[2] or ""),
+            "title": str(row[3] or ""),
+            "description": str(row[4] or ""),
+            "image_url": str(row[5] or ""),
+            "status": str(row[6] or ""),
+            "error": str(row[7] or ""),
+            "fetched_at": str(row[8] or ""),
+        }
+
+    def upsert_link_preview(
+        self,
+        *,
+        url: str,
+        resolved_url: str,
+        host: str,
+        title: str,
+        description: str,
+        image_url: str,
+        status: str,
+        error: str = "",
+    ) -> None:
+        key = str(url or "").strip()
+        if not key:
+            return
+        now = datetime.now(tz=timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO link_previews (
+                    url, resolved_url, host, title, description, image_url, status, error, fetched_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    key,
+                    str(resolved_url or "").strip(),
+                    str(host or "").strip(),
+                    str(title or "").strip(),
+                    str(description or "").strip(),
+                    str(image_url or "").strip(),
+                    str(status or "").strip(),
+                    str(error or "").strip(),
+                    now,
+                ),
             )
 
     def insert_scores(self, run_id: str, scores: list[Score]) -> None:

@@ -22,12 +22,24 @@ export type SourceHealthStatus = "healthy" | "failing"
 export type UnifiedSourceRow = {
   key: string
   type: string
+  type_label: string
   source: string
   count: number
   health: SourceHealthStatus
   last_error: string
   last_seen: string
   hint: string
+  identity_title: string
+  identity_subtitle: string
+  preview_status: "ready" | "no_items" | "preview_unavailable"
+  preview_url: string | null
+  preview_title: string
+  preview_description: string
+  preview_image_url: string | null
+  preview_host: string
+  preview_published_at: string
+  can_edit: boolean
+  can_delete: boolean
 }
 
 export type RunStatus = {

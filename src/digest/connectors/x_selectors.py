@@ -9,20 +9,22 @@ from digest.connectors.x_provider import XPostPayload, get_x_provider
 from digest.models import Item
 from digest.storage.sqlite_store import SQLiteStore
 
+SelectorItemLink = tuple[str, str, Item]
 
-def fetch_x_selector_items(
+
+def fetch_x_selector_items_linked(
     sources: SourceConfig,
     store: SQLiteStore,
     *,
     provider_mode: str = "",
     default_limit: int = 25,
-) -> tuple[list[Item], list[str]]:
-    items: list[Item] = []
+) -> tuple[list[SelectorItemLink], list[str]]:
+    linked_items: list[SelectorItemLink] = []
     errors: list[str] = []
     limit = _resolve_limit(default_limit)
 
     if not sources.x_authors and not sources.x_themes:
-        return items, errors
+        return linked_items, errors
 
     provider = get_x_provider(provider_mode)
 
@@ -34,8 +36,12 @@ def fetch_x_selector_items(
                 cursor=cursor,
                 limit=limit,
             )
-            mapped = [_to_item(post, selector_type="x_author", selector_value=author) for post in posts]
-            items.extend(mapped)
+            linked_items.extend(
+                [
+                    ("x_author", author, _to_item(post, selector_type="x_author", selector_value=author))
+                    for post in posts
+                ]
+            )
             last_item_id = posts[-1].id if posts else None
             if next_cursor or last_item_id:
                 store.set_x_cursor(
@@ -55,8 +61,12 @@ def fetch_x_selector_items(
                 cursor=cursor,
                 limit=limit,
             )
-            mapped = [_to_item(post, selector_type="x_theme", selector_value=theme) for post in posts]
-            items.extend(mapped)
+            linked_items.extend(
+                [
+                    ("x_theme", theme, _to_item(post, selector_type="x_theme", selector_value=theme))
+                    for post in posts
+                ]
+            )
             last_item_id = posts[-1].id if posts else None
             if next_cursor or last_item_id:
                 store.set_x_cursor(
@@ -68,7 +78,23 @@ def fetch_x_selector_items(
         except Exception as exc:
             errors.append(f"x_theme:{theme}: {exc}")
 
-    return items, errors
+    return linked_items, errors
+
+
+def fetch_x_selector_items(
+    sources: SourceConfig,
+    store: SQLiteStore,
+    *,
+    provider_mode: str = "",
+    default_limit: int = 25,
+) -> tuple[list[Item], list[str]]:
+    linked_items, errors = fetch_x_selector_items_linked(
+        sources,
+        store,
+        provider_mode=provider_mode,
+        default_limit=default_limit,
+    )
+    return [item for _selector_type, _selector_value, item in linked_items], errors
 
 
 def _resolve_limit(default_value: int) -> int:

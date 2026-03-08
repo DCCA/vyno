@@ -11,6 +11,7 @@ from digest.constants import GITHUB_DEFAULT_PER_PAGE
 from digest.models import Item, ItemType
 
 API_BASE = "https://api.github.com"
+GitHubItemLink = tuple[str, str, Item]
 
 
 def fetch_github_items(
@@ -22,7 +23,28 @@ def fetch_github_items(
     timeout: int = 20,
     org_options: dict | None = None,
 ) -> list[Item]:
-    items: list[Item] = []
+    linked_items = fetch_github_items_linked(
+        repos,
+        topics,
+        queries,
+        orgs=orgs,
+        token=token,
+        timeout=timeout,
+        org_options=org_options,
+    )
+    return [item for _source_type, _source_value, item in linked_items]
+
+
+def fetch_github_items_linked(
+    repos: list[str],
+    topics: list[str],
+    queries: list[str],
+    orgs: list[str] | None = None,
+    token: str = "",
+    timeout: int = 20,
+    org_options: dict | None = None,
+) -> list[GitHubItemLink]:
+    linked_items: list[GitHubItemLink] = []
     org_opts = org_options or {}
     min_stars = max(0, int(org_opts.get("min_stars", 0) or 0))
     include_forks = bool(org_opts.get("include_forks", False))
@@ -31,66 +53,81 @@ def fetch_github_items(
     activity_max_age_days = max(1, int(org_opts.get("activity_max_age_days", 14) or 14))
 
     for repo in repos:
-        items.extend(
-            _fetch_repo_releases(
-                repo,
-                token,
-                timeout,
-                max_age_days=activity_max_age_days,
-            )
+        linked_items.extend(
+            [
+                ("github_repo", repo, item)
+                for item in _fetch_repo_releases(
+                    repo,
+                    token,
+                    timeout,
+                    max_age_days=activity_max_age_days,
+                )
+            ]
         )
-        items.extend(
-            _fetch_repo_issues_and_prs(
-                repo,
-                token,
-                timeout,
-                max_age_days=activity_max_age_days,
-            )
+        linked_items.extend(
+            [
+                ("github_repo", repo, item)
+                for item in _fetch_repo_issues_and_prs(
+                    repo,
+                    token,
+                    timeout,
+                    max_age_days=activity_max_age_days,
+                )
+            ]
         )
 
     for topic in topics:
-        items.extend(
-            _search_repos_by_topic(
-                topic,
-                token,
-                timeout,
-                min_stars=min_stars,
-                include_forks=include_forks,
-                include_archived=include_archived,
-                max_age_days=repo_max_age_days,
-            )
+        linked_items.extend(
+            [
+                ("github_topic", topic, item)
+                for item in _search_repos_by_topic(
+                    topic,
+                    token,
+                    timeout,
+                    min_stars=min_stars,
+                    include_forks=include_forks,
+                    include_archived=include_archived,
+                    max_age_days=repo_max_age_days,
+                )
+            ]
         )
 
     for query in queries:
-        items.extend(
-            _search_issues_and_prs(
-                query,
-                token,
-                timeout,
-                max_age_days=activity_max_age_days,
-            )
+        linked_items.extend(
+            [
+                ("github_query", query, item)
+                for item in _search_issues_and_prs(
+                    query,
+                    token,
+                    timeout,
+                    max_age_days=activity_max_age_days,
+                )
+            ]
         )
 
     for org_raw in orgs or []:
         org = normalize_github_org(org_raw)
         if not org:
             continue
-        items.extend(
-            _fetch_org_repo_updates_and_releases(
-                org=org,
-                token=token,
-                timeout=timeout,
-                min_stars=min_stars,
-                include_forks=include_forks,
-                include_archived=include_archived,
-                max_repos=int(org_opts.get("max_repos_per_org", 20) or 20),
-                max_items=int(org_opts.get("max_items_per_org", 40) or 40),
-                repo_max_age_days=repo_max_age_days,
-                activity_max_age_days=activity_max_age_days,
-            )
+        linked_items.extend(
+            [
+                ("github_org", org, item)
+                for item in _fetch_org_repo_updates_and_releases(
+                    org=org,
+                    token=token,
+                    timeout=timeout,
+                    min_stars=min_stars,
+                    include_forks=include_forks,
+                    include_archived=include_archived,
+                    max_repos=int(org_opts.get("max_repos_per_org", 20) or 20),
+                    max_items=int(org_opts.get("max_items_per_org", 40) or 40),
+                    repo_max_age_days=repo_max_age_days,
+                    activity_max_age_days=activity_max_age_days,
+                )
+            ]
         )
 
-    return items
+    return linked_items
 
 
 def normalize_github_org(value: str) -> str:
