@@ -303,12 +303,14 @@ Background scheduler service:
 ```bash
 make docker-scheduler-build
 make docker-scheduler-up
+make docker-scheduler-deploy
 ```
 
 Useful scheduler commands:
 - `make docker-scheduler-logs`
 - `make docker-scheduler-ps`
 - `make docker-scheduler-restart`
+- `make docker-scheduler-deploy` rebuilds and redeploys the scheduler in one command
 - `make docker-scheduler-down`
 
 ## Environment Variables

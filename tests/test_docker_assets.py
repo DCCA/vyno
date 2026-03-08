@@ -50,6 +50,10 @@ class TestDockerAssets(unittest.TestCase):
             data,
             r"(?m)^docker-scheduler-up:\n(?:\t.*\n){2}\tdocker compose up -d digest-scheduler$",
         )
+        self.assertRegex(
+            data,
+            r"(?m)^docker-scheduler-deploy:\n(?:\t.*\n){2}\tdocker compose up -d --build digest-scheduler$",
+        )
 
     def test_dockerfile_default_cmd_includes_profile_overlay(self) -> None:
         data = Path("Dockerfile").read_text(encoding="utf-8")

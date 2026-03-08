@@ -153,6 +153,7 @@ AI Daily Digest is a Python runtime with a local web API and React operator cons
   - `make schedule` runs the standalone CLI scheduler loop.
 - Background scheduler service mode:
   - `make docker-scheduler-up` runs a detached Docker service that hosts `digest web` for always-on scheduling.
+  - `make docker-scheduler-deploy` rebuilds and recreates that service after local code changes.
 - Bot runtime mode:
   - `digest bot` directly or Docker Compose managed service.
 

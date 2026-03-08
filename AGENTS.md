@@ -30,6 +30,7 @@ Primary commands:
 - `make web-ui`: run UI dev server only.
 - `make web-ui-build`: build UI.
 - `make docker-scheduler-up`: run the background Docker scheduler service.
+- `make docker-scheduler-deploy`: rebuild and redeploy the background Docker scheduler service in one command.
 - `npm --prefix web run test`: run frontend tests.
 - `make live`: execute one digest run.
 - `make doctor`: run onboarding/preflight checks.
