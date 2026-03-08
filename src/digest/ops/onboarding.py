@@ -32,7 +32,7 @@ ONBOARDING_STEPS: list[tuple[str, str]] = [
     ("outputs", "Connect outputs (Telegram or Obsidian)"),
     ("sources", "Choose starter sources"),
     ("profile", "Tune profile basics"),
-    ("schedule", "Enable daily automation"),
+    ("schedule", "Enable scheduled automation"),
     ("preview", "Run preview digest"),
     ("activate", "Activate live run"),
     ("health", "Confirm run health"),
@@ -540,9 +540,21 @@ def build_onboarding_status(settings: OnboardingSettings) -> dict[str, Any]:
     profile_overlay = _read_yaml_dict(settings.profile_overlay_path)
     sources_total = int(preflight.get("derived", {}).get("source_count", 0) or 0)
     outputs_ready = bool(preflight.get("derived", {}).get("outputs_ready", False))
-    schedule_enabled = bool(getattr(getattr(effective_profile, "schedule", None), "enabled", False))
-    schedule_time = str(getattr(getattr(effective_profile, "schedule", None), "time_local", "09:00") or "09:00")
-    schedule_timezone = str(getattr(getattr(effective_profile, "schedule", None), "timezone", "UTC") or "UTC")
+    schedule_cfg = getattr(effective_profile, "schedule", None)
+    schedule_enabled = bool(getattr(schedule_cfg, "enabled", False))
+    schedule_cadence = str(getattr(schedule_cfg, "cadence", "daily") or "daily")
+    schedule_time = str(getattr(schedule_cfg, "time_local", "09:00") or "09:00")
+    schedule_hourly_minute = int(getattr(schedule_cfg, "hourly_minute", 0) or 0)
+    schedule_timezone = str(getattr(schedule_cfg, "timezone", "UTC") or "UTC")
+    schedule_quiet_enabled = bool(
+        getattr(schedule_cfg, "quiet_hours_enabled", False)
+    )
+    schedule_quiet_start = str(
+        getattr(schedule_cfg, "quiet_start_local", "22:00") or "22:00"
+    )
+    schedule_quiet_end = str(
+        getattr(schedule_cfg, "quiet_end_local", "07:00") or "07:00"
+    )
 
     def step_completed(step_id: str, derived: bool = False) -> tuple[bool, str]:
         entry = step_state.get(step_id)
@@ -612,13 +624,22 @@ def build_onboarding_status(settings: OnboardingSettings) -> dict[str, Any]:
     step_rows.append(
         {
             "id": "schedule",
-            "label": "Enable daily automation",
+            "label": "Enable scheduled automation",
             "status": "complete" if completed else "pending",
             "completed_at": completed_at,
             "detail": (
-                f"Daily schedule enabled at {schedule_time} ({schedule_timezone})."
+                _describe_schedule(
+                    enabled=schedule_enabled,
+                    cadence=schedule_cadence,
+                    time_local=schedule_time,
+                    hourly_minute=schedule_hourly_minute,
+                    timezone_name=schedule_timezone,
+                    quiet_hours_enabled=schedule_quiet_enabled,
+                    quiet_start_local=schedule_quiet_start,
+                    quiet_end_local=schedule_quiet_end,
+                )
                 if schedule_enabled
-                else "Daily schedule is not enabled yet."
+                else "Scheduled automation is not enabled yet."
             ),
         }
     )
@@ -781,3 +802,25 @@ def _write_json_atomic(path: str, payload: dict[str, Any]) -> None:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _describe_schedule(
+    *,
+    enabled: bool,
+    cadence: str,
+    time_local: str,
+    hourly_minute: int,
+    timezone_name: str,
+    quiet_hours_enabled: bool,
+    quiet_start_local: str,
+    quiet_end_local: str,
+) -> str:
+    if not enabled:
+        return "Scheduled automation is not enabled yet."
+    if cadence == "hourly":
+        base = f"Hourly at :{hourly_minute:02d} ({timezone_name})"
+    else:
+        base = f"Daily at {time_local} ({timezone_name})"
+    if quiet_hours_enabled:
+        return f"{base} with quiet hours {quiet_start_local}-{quiet_end_local}."
+    return f"{base}."

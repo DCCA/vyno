@@ -85,7 +85,12 @@ function App() {
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null)
   const [scheduleDraft, setScheduleDraft] = useState<ScheduleConfig>({
     enabled: false,
+    cadence: "daily",
     time_local: "09:00",
+    hourly_minute: 0,
+    quiet_hours_enabled: false,
+    quiet_start_local: "22:00",
+    quiet_end_local: "07:00",
     timezone: "UTC",
   })
   const [scheduleBaseline, setScheduleBaseline] = useState<ScheduleConfig | null>(null)
@@ -212,7 +217,12 @@ function App() {
     if (!scheduleBaseline) return false
     return (
       scheduleDraft.enabled !== scheduleBaseline.enabled ||
+      scheduleDraft.cadence !== scheduleBaseline.cadence ||
       scheduleDraft.time_local !== scheduleBaseline.time_local ||
+      scheduleDraft.hourly_minute !== scheduleBaseline.hourly_minute ||
+      scheduleDraft.quiet_hours_enabled !== scheduleBaseline.quiet_hours_enabled ||
+      scheduleDraft.quiet_start_local !== scheduleBaseline.quiet_start_local ||
+      scheduleDraft.quiet_end_local !== scheduleBaseline.quiet_end_local ||
       scheduleDraft.timezone !== scheduleBaseline.timezone
     )
   }, [scheduleBaseline, scheduleDraft])
@@ -631,7 +641,7 @@ function App() {
     })
   }
 
-  function updateScheduleField(field: keyof ScheduleConfig, value: string | boolean) {
+  function updateScheduleField(field: keyof ScheduleConfig, value: string | boolean | number) {
     setScheduleDraft((prev) => ({ ...prev, [field]: value }))
   }
 
@@ -893,7 +903,12 @@ function App() {
     try {
       const payload: ScheduleConfig = {
         enabled: Boolean(scheduleDraft.enabled),
+        cadence: scheduleDraft.cadence === "hourly" ? "hourly" : "daily",
         time_local: String(scheduleDraft.time_local || "").trim(),
+        hourly_minute: Math.max(0, Math.min(59, Number(scheduleDraft.hourly_minute ?? 0) || 0)),
+        quiet_hours_enabled: Boolean(scheduleDraft.quiet_hours_enabled),
+        quiet_start_local: String(scheduleDraft.quiet_start_local || "").trim(),
+        quiet_end_local: String(scheduleDraft.quiet_end_local || "").trim(),
         timezone: String(scheduleDraft.timezone || "").trim(),
       }
       const result = await api<{ schedule: ScheduleConfig }>("/api/config/schedule", {

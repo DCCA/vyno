@@ -92,12 +92,12 @@ export function OnboardingPage({
         description={
           revisitMode
             ? "Review or adjust your activation choices without resetting the workspace."
-            : "Move from zero setup to an automated daily digest without editing files or learning the whole console first."
+            : "Move from zero setup to an automated digest schedule without editing files or learning the whole console first."
         }
         badges={[
           { label: onboarding?.preflight.ok ? "preflight ready" : "preflight needs attention", variant: onboarding?.preflight.ok ? "success" : "warning" },
           { label: `${onboarding?.progress.completed ?? 0}/${onboarding?.progress.total ?? 0} steps` },
-          { label: scheduleStatus?.enabled ? "daily automation on" : "daily automation off", variant: scheduleStatus?.enabled ? "success" : "warning" },
+          { label: scheduleStatus?.enabled ? "automation on" : "automation off", variant: scheduleStatus?.enabled ? "success" : "warning" },
         ]}
         actions={
           <Button
@@ -304,8 +304,8 @@ export function OnboardingPage({
 
       <StepCard
         number={5}
-        title="Configure daily automation"
-        detail="This product is not considered fully set up until a daily run time is configured."
+        title="Configure scheduled automation"
+        detail="This product is not considered fully set up until an automation cadence is configured."
         status={stepStatus(onboarding, "schedule")}
       >
         <div className="grid gap-4 md:grid-cols-3">
@@ -316,8 +316,8 @@ export function OnboardingPage({
             </p>
           </div>
           <div className="space-y-2 rounded-xl border p-4">
-            <p className="text-sm font-semibold">Daily time</p>
-            <p className="text-xs text-muted-foreground">{asString(schedule.time_local, "09:00")}</p>
+            <p className="text-sm font-semibold">Cadence</p>
+            <p className="text-xs text-muted-foreground">{asString(schedule.cadence, "daily")}</p>
           </div>
           <div className="space-y-2 rounded-xl border p-4">
             <p className="text-sm font-semibold">Timezone</p>
@@ -331,7 +331,7 @@ export function OnboardingPage({
           <div className="text-sm text-muted-foreground">
             {scheduleStatus?.enabled && scheduleStatus.next_run_at
               ? `Next scheduled run: ${scheduleStatus.next_run_at}`
-              : "Open the schedule workspace to enable automation and set the daily run time."}
+              : "Open the schedule workspace to enable automation and set the cadence, quiet hours, and timezone."}
           </div>
         </div>
       </StepCard>
@@ -372,7 +372,7 @@ export function OnboardingPage({
       <StepCard
         number={7}
         title="Start the first live digest"
-        detail="Launch one real run now so you can confirm the product works before relying on the daily schedule."
+        detail="Launch one real run now so you can confirm the product works before relying on the saved schedule."
         status={stepStatus(onboarding, "activate")}
       >
         <div className="flex flex-wrap items-center gap-3">
@@ -387,7 +387,7 @@ export function OnboardingPage({
       <StepCard
         number={8}
         title="Confirm health"
-        detail="Make sure the first completed run is healthy enough to trust daily automation."
+        detail="Make sure the first completed run is healthy enough to trust scheduled automation."
         status={stepStatus(onboarding, "health")}
       >
         <div className="flex flex-wrap gap-2">
@@ -472,7 +472,7 @@ function milestoneSummaries(steps: OnboardingStatus["steps"]): Array<{
     {
       id: "preferences",
       label: "Set preferences and schedule",
-      detail: "Save digest preferences and choose the daily automation time.",
+      detail: "Save digest preferences and choose the cadence, quiet hours, and timezone.",
       stepIds: ["profile", "schedule"],
     },
     {

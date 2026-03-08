@@ -23,6 +23,15 @@ class TestDockerAssets(unittest.TestCase):
         self.assertEqual(health_test[0], "CMD")
         self.assertIn("bot-health-check", health_test)
 
+    def test_compose_scheduler_service_uses_web_with_profile_overlay(self) -> None:
+        compose = yaml.safe_load(Path("compose.yaml").read_text(encoding="utf-8"))
+        command = compose["services"]["digest-scheduler"]["command"]
+        self.assertIn("--sources-overlay", command)
+        self.assertIn("data/sources.local.yaml", command)
+        self.assertIn("--profile-overlay", command)
+        self.assertIn("data/profile.local.yaml", command)
+        self.assertIn("web", command)
+
     def test_makefile_runtime_targets_include_overlays(self) -> None:
         data = Path("Makefile").read_text(encoding="utf-8")
         self.assertRegex(
@@ -36,6 +45,10 @@ class TestDockerAssets(unittest.TestCase):
         self.assertRegex(
             data,
             r"(?m)^bot:\n\t.*--sources-overlay data/sources\.local\.yaml .*--profile-overlay data/profile\.local\.yaml .* bot$",
+        )
+        self.assertRegex(
+            data,
+            r"(?m)^docker-scheduler-up:\n(?:\t.*\n){2}\tdocker compose up -d digest-scheduler$",
         )
 
     def test_dockerfile_default_cmd_includes_profile_overlay(self) -> None:

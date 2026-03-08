@@ -45,3 +45,36 @@ services:
       timeout: 10s
       retries: 3
       start_period: 90s
+  digest-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: digest-scheduler
+    env_file:
+      - .env
+    command:
+      [
+        "--sources",
+        "config/sources.yaml",
+        "--sources-overlay",
+        "data/sources.local.yaml",
+        "--profile",
+        "config/profile.yaml",
+        "--profile-overlay",
+        "data/profile.local.yaml",
+        "--db",
+        "digest-live.db",
+        "web",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8787",
+      ]
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./.runtime:/app/.runtime
+      - ./obsidian-vault:/app/obsidian-vault
+      - ./digest-live.db:/app/digest-live.db
+    restart: unless-stopped

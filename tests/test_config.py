@@ -193,11 +193,46 @@ class TestConfig(unittest.TestCase):
             self.assertFalse(profile.run_policy.allow_run_override)
             self.assertEqual(profile.run_policy.seen_reset_guard, "disabled")
 
+    def test_profile_loads_hourly_schedule_and_quiet_hours(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                (
+                    "schedule:\n"
+                    "  enabled: true\n"
+                    "  cadence: hourly\n"
+                    "  hourly_minute: 0\n"
+                    "  quiet_hours_enabled: true\n"
+                    "  quiet_start_local: \"22:00\"\n"
+                    "  quiet_end_local: \"07:00\"\n"
+                    "  timezone: America/Sao_Paulo\n"
+                ),
+                encoding="utf-8",
+            )
+            profile = load_profile(path)
+            self.assertTrue(profile.schedule.enabled)
+            self.assertEqual(profile.schedule.cadence, "hourly")
+            self.assertEqual(profile.schedule.hourly_minute, 0)
+            self.assertTrue(profile.schedule.quiet_hours_enabled)
+            self.assertEqual(profile.schedule.quiet_start_local, "22:00")
+            self.assertEqual(profile.schedule.quiet_end_local, "07:00")
+            self.assertEqual(profile.schedule.timezone, "America/Sao_Paulo")
+
     def test_profile_rejects_invalid_run_policy_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "profile.yaml"
             path.write_text(
                 "run_policy:\n  default_mode: invalid\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError):
+                load_profile(path)
+
+    def test_profile_rejects_invalid_schedule_hourly_minute(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                "schedule:\n  cadence: hourly\n  hourly_minute: 61\n",
                 encoding="utf-8",
             )
             with self.assertRaises(ValueError):

@@ -29,6 +29,7 @@ Primary commands:
 - `make web-api`: run config API only.
 - `make web-ui`: run UI dev server only.
 - `make web-ui-build`: build UI.
+- `make docker-scheduler-up`: run the background Docker scheduler service.
 - `npm --prefix web run test`: run frontend tests.
 - `make live`: execute one digest run.
 - `make doctor`: run onboarding/preflight checks.
@@ -67,6 +68,7 @@ Verification is mandatory:
 - Web scheduler state defaults to `.runtime/schedule-state.json`
 - Web API auth defaults to required mode; when running API/UI separately, keep matching token/header env vars.
 - The current console is route-based and includes `Dashboard`, `Schedule`, `Run Center`, `Sources`, `Profile`, `Timeline`, `History`, and `Onboarding`.
+- The schedule model now supports hourly cadence and quiet hours in addition to the legacy daily mode.
 
 High-signal source types in current system include:
 - `rss`, `youtube_channel`, `youtube_query`

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import type { Notice, SaveAction, ScheduleConfig, ScheduleStatus } from "@/app/types"
 
@@ -35,7 +36,7 @@ export function SchedulePage({
   scheduleStatus: ScheduleStatus | null
   saveAction: SaveAction
   saving: boolean
-  onChangeScheduleField: (field: keyof ScheduleConfig, value: string | boolean) => void
+  onChangeScheduleField: (field: keyof ScheduleConfig, value: string | boolean | number) => void
   onSaveSchedule: () => void
   onRunNow: () => void
   onOpenTimeline: () => void
@@ -44,6 +45,7 @@ export function SchedulePage({
 }) {
   const enabled = scheduleDraft.enabled
   const schedulerState = schedulerStateMeta(scheduleStatus)
+  const cadenceSummary = describeSchedule(scheduleDraft)
   const timezoneOptions = useMemo(() => {
     const intlWithSupportedValues = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] }
     if (typeof Intl === "undefined" || typeof intlWithSupportedValues.supportedValuesOf !== "function") return []
@@ -60,11 +62,12 @@ export function SchedulePage({
         title="Schedule"
         description={
           lifecycle === "ready"
-            ? "Manage daily automation directly from the product without editing profile fields."
-            : "Finish setup by configuring when the web app should run the digest automatically every day."
+            ? "Manage background automation directly from the product, including hourly cadence and quiet hours."
+            : "Finish setup by configuring when the web app should run the digest automatically without relying on an open terminal."
         }
         badges={[
           { label: enabled ? "automation enabled" : "automation paused", variant: enabled ? "success" : "warning" },
+          { label: `cadence: ${scheduleDraft.cadence}`, variant: "secondary" },
           { label: `state: ${schedulerState.label}`, variant: schedulerState.variant },
           {
             label: scheduleStatus?.next_run_at ? `next: ${formatTimestampBadge(scheduleStatus.next_run_at)}` : "next run not scheduled",
@@ -107,13 +110,13 @@ export function SchedulePage({
         <Card>
           <CardHeader>
             <CardTitle className="font-display">Automation Status</CardTitle>
-            <CardDescription>High-signal readout for the current daily schedule before you change anything.</CardDescription>
+            <CardDescription>High-signal readout for the current automation posture before you change anything.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
             <StatusCard
               label="Next run"
               value={formatTimestamp(scheduleStatus?.next_run_at) || "Not scheduled"}
-              detail={enabled ? `Daily at ${scheduleDraft.time_local} (${scheduleDraft.timezone})` : "Automation is paused"}
+              detail={enabled ? cadenceSummary : "Automation is paused"}
             />
             <StatusCard
               label="Last result"
@@ -136,30 +139,36 @@ export function SchedulePage({
         <Card>
           <CardHeader>
             <CardTitle className="font-display">Schedule Controls</CardTitle>
-            <CardDescription>Save, pause, or resume the single daily schedule used by the web app scheduler.</CardDescription>
+            <CardDescription>Save, pause, or resume the cadence used by the background scheduler service.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between rounded-[1.25rem] border border-border/80 bg-secondary/25 p-4">
               <div className="space-y-1">
                 <p className="text-sm font-semibold">Automation enabled</p>
-                <p className="text-sm text-muted-foreground">Pause or resume the daily schedule without deleting its time or timezone.</p>
+                <p className="text-sm text-muted-foreground">Pause or resume the schedule without deleting its cadence, quiet hours, or timezone.</p>
               </div>
               <Switch
                 checked={enabled}
                 onCheckedChange={(checked) => onChangeScheduleField("enabled", checked)}
-                aria-label="Enable or pause the daily schedule"
+                aria-label="Enable or pause the schedule"
               />
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2 rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
-                <Label htmlFor="schedule-daily-time">Daily time</Label>
-                <Input
-                  id="schedule-daily-time"
-                  type="time"
-                  value={scheduleDraft.time_local}
-                  onChange={(event) => onChangeScheduleField("time_local", event.target.value)}
-                />
+                <Label htmlFor="schedule-cadence">Cadence</Label>
+                <Select
+                  value={scheduleDraft.cadence}
+                  onValueChange={(value) => onChangeScheduleField("cadence", value === "hourly" ? "hourly" : "daily")}
+                >
+                  <SelectTrigger id="schedule-cadence">
+                    <SelectValue placeholder="Choose cadence" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hourly">Hourly</SelectItem>
+                    <SelectItem value="daily">Daily</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2 rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
                 <Label htmlFor="schedule-timezone">Timezone</Label>
@@ -177,6 +186,74 @@ export function SchedulePage({
                     ))}
                   </datalist>
                 ) : null}
+              </div>
+            </div>
+
+            {scheduleDraft.cadence === "hourly" ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2 rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
+                  <Label htmlFor="schedule-hourly-minute">Minute past the hour</Label>
+                  <Input
+                    id="schedule-hourly-minute"
+                    type="number"
+                    min={0}
+                    max={59}
+                    value={String(scheduleDraft.hourly_minute)}
+                    onChange={(event) => onChangeScheduleField("hourly_minute", Number(event.target.value || 0))}
+                  />
+                </div>
+                <div className="space-y-2 rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
+                  <p className="text-sm font-semibold">Hourly preview</p>
+                  <p className="text-sm text-muted-foreground">
+                    Runs every hour at :{String(scheduleDraft.hourly_minute).padStart(2, "0")} in {scheduleDraft.timezone || "UTC"}.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2 rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
+                <Label htmlFor="schedule-daily-time">Daily time</Label>
+                <Input
+                  id="schedule-daily-time"
+                  type="time"
+                  value={scheduleDraft.time_local}
+                  onChange={(event) => onChangeScheduleField("time_local", event.target.value)}
+                />
+              </div>
+            )}
+
+            <div className="space-y-4 rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold">Quiet hours</p>
+                  <p className="text-sm text-muted-foreground">Skip runs during a local-time blackout window instead of disturbing the user late at night.</p>
+                </div>
+                <Switch
+                  checked={scheduleDraft.quiet_hours_enabled}
+                  onCheckedChange={(checked) => onChangeScheduleField("quiet_hours_enabled", checked)}
+                  aria-label="Enable quiet hours"
+                />
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="schedule-quiet-start">Quiet start</Label>
+                  <Input
+                    id="schedule-quiet-start"
+                    type="time"
+                    value={scheduleDraft.quiet_start_local}
+                    onChange={(event) => onChangeScheduleField("quiet_start_local", event.target.value)}
+                    disabled={!scheduleDraft.quiet_hours_enabled}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="schedule-quiet-end">Quiet end</Label>
+                  <Input
+                    id="schedule-quiet-end"
+                    type="time"
+                    value={scheduleDraft.quiet_end_local}
+                    onChange={(event) => onChangeScheduleField("quiet_end_local", event.target.value)}
+                    disabled={!scheduleDraft.quiet_hours_enabled}
+                  />
+                </div>
               </div>
             </div>
 
@@ -204,15 +281,15 @@ export function SchedulePage({
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
               {enabled
-                ? `The digest will run every day at ${scheduleDraft.time_local} in ${scheduleDraft.timezone} while the web app process is running.`
-                : "The digest is currently in manual mode because daily automation is paused."}
+                ? `${cadenceSummary} while the background scheduler service is running.`
+                : "The digest is currently in manual mode because scheduled automation is paused."}
             </p>
             <p>
               {scheduleStatus?.next_run_at
-                ? `Next scheduled run: ${scheduleStatus.next_run_at}`
+                ? `Next allowed run: ${scheduleStatus.next_run_at}`
                 : "No next run is currently scheduled."}
             </p>
-            <p>If the app is not running at the scheduled time, the scheduler will not trigger until the web app process is running again.</p>
+            <p>If the scheduler is stopped, no digest will run until the background service is started again.</p>
           </CardContent>
         </Card>
 
@@ -272,9 +349,18 @@ function schedulerStateMeta(status: ScheduleStatus | null): {
     return {
       label: "running",
       title: "Running",
-      detail: "Ready for the next daily execution window.",
+      detail: "Ready for the next allowed schedule window.",
       nextStep: "No action needed. You can leave the schedule as-is or run a digest immediately for testing.",
       variant: "success",
+    }
+  }
+  if (state === "quiet_hours") {
+    return {
+      label: "quiet hours",
+      title: "Quiet Hours",
+      detail: "The scheduler is intentionally holding runs until the quiet-hours window ends.",
+      nextStep: "No action is required unless you want to shorten or disable quiet hours.",
+      variant: "secondary",
     }
   }
   if (state === "run_active") {
@@ -311,6 +397,17 @@ function schedulerStateMeta(status: ScheduleStatus | null): {
     nextStep: "Enable the schedule and save it when you are ready to return to recurring automation.",
     variant: "secondary",
   }
+}
+
+function describeSchedule(schedule: ScheduleConfig): string {
+  if (schedule.cadence === "hourly") {
+    const base = `The digest will run every hour at :${String(schedule.hourly_minute).padStart(2, "0")} in ${schedule.timezone}.`
+    if (!schedule.quiet_hours_enabled) return base
+    return `${base} Quiet hours suppress runs from ${schedule.quiet_start_local} to ${schedule.quiet_end_local}.`
+  }
+  const base = `The digest will run every day at ${schedule.time_local} in ${schedule.timezone}.`
+  if (!schedule.quiet_hours_enabled) return base
+  return `${base} Quiet hours suppress runs from ${schedule.quiet_start_local} to ${schedule.quiet_end_local}.`
 }
 
 function formatTimestamp(value: string | undefined): string {

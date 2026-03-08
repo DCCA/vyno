@@ -43,12 +43,12 @@ AI Daily Digest exists to reduce AI information overload by ingesting multi-sour
   - CLI run/schedule/doctor/bot/web modes
   - route-based web console with dashboard, schedule, run center, sources, profile, timeline, history, and onboarding surfaces
   - onboarding preflight, source packs, preview, activate, and lifecycle-based navigation
-  - run policy controls, seen-reset controls, and dedicated schedule controls
+  - run policy controls, seen-reset controls, and dedicated schedule controls for daily or hourly automation
   - timeline, config history, rollback, and source-health observability
 - Security and reliability:
   - API token auth modes (`required|optional|off`)
   - secret redaction in API payloads
-  - run lock, scheduler state tracking, bot healthcheck, structured logs, and Docker runtime option
+  - run lock, scheduler state tracking, quiet-hours suppression, bot healthcheck, and Docker runtime options for bot and scheduler services
 
 ## Product Requirements
 
@@ -107,13 +107,19 @@ The system SHALL provide run status, live progress, source health, timeline even
 - AND the latest completed run remains available for post-run diagnostics
 
 ### Requirement: Dedicated Schedule Controls
-The system SHALL provide a dedicated schedule workspace for daily automation controls and scheduler diagnostics.
+The system SHALL provide a dedicated schedule workspace for recurring automation controls and scheduler diagnostics.
 
 #### Scenario: Schedule workspace management
 - GIVEN the operator opens the schedule workspace
 - WHEN they save, pause, resume, or inspect automation
 - THEN they can manage `profile.schedule` without editing raw profile JSON
 - AND the page shows next run timing, scheduler state, and the latest scheduler issue near the controls
+
+#### Scenario: Hourly quiet-hours automation
+- GIVEN the operator selects hourly cadence with quiet hours in `America/Sao_Paulo`
+- WHEN the local time falls between `22:00` and `07:00`
+- THEN no digest run starts during that window
+- AND the next scheduled run points to the next allowed morning hour
 
 ### Requirement: Configuration Safety
 The system SHALL apply configuration via tracked base files plus local overlays, with validation and diff visibility.

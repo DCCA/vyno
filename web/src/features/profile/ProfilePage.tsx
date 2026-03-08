@@ -102,7 +102,12 @@ export function ProfilePage({
   const obsidianFolder = asString(output.obsidian_folder, "AI Digest")
   const renderMode = asString(output.render_mode, "sectioned")
   const scheduleEnabled = asBoolean(schedule.enabled, false)
+  const scheduleCadence = asString(schedule.cadence, "daily")
   const scheduleTime = asString(schedule.time_local, "09:00")
+  const scheduleHourlyMinute = asNumber(schedule.hourly_minute, 0)
+  const scheduleQuietHoursEnabled = asBoolean(schedule.quiet_hours_enabled, false)
+  const scheduleQuietStart = asString(schedule.quiet_start_local, "22:00")
+  const scheduleQuietEnd = asString(schedule.quiet_end_local, "07:00")
   const scheduleTimezone = asString(schedule.timezone, "UTC")
   const selectionMode = asBoolean(profile.agent_scoring_enabled, true) ? "smart" : "basic"
   const summaryMode = asBoolean(profile.llm_enabled, false) ? "standard" : "lightweight"
@@ -115,7 +120,11 @@ export function ProfilePage({
   const focusSummary = `${topics.length} topics, ${trustedSources.length} trusted, ${exclusions.length} excluded`
   const qualitySummary = describeQuality(selectionMode, summaryMode, diversityMode, qualityRepairEnabled)
   const outputSummary = renderMode === "source_segmented" ? `Source-grouped notes in ${obsidianFolder}` : `Sectioned digest in ${obsidianFolder}`
-  const automationSummary = scheduleEnabled ? `Daily at ${scheduleTime} (${scheduleTimezone})` : "Daily automation is off"
+  const automationSummary = scheduleEnabled
+    ? scheduleCadence === "hourly"
+      ? `Hourly at :${String(scheduleHourlyMinute).padStart(2, "0")} (${scheduleTimezone})${scheduleQuietHoursEnabled ? `, quiet ${scheduleQuietStart}-${scheduleQuietEnd}` : ""}`
+      : `Daily at ${scheduleTime} (${scheduleTimezone})${scheduleQuietHoursEnabled ? `, quiet ${scheduleQuietStart}-${scheduleQuietEnd}` : ""}`
+    : "Scheduled automation is off"
   const setupFacts = [
     `Mode: ${titleForMode(runPolicy.default_mode)}`,
     `Focus: ${focusSummary}`,
@@ -348,7 +357,7 @@ export function ProfilePage({
           <SectionCard
             title="Automation"
             summary={automationSummary}
-            description="Manage daily automation from the dedicated schedule workspace."
+            description="Manage cadence, quiet hours, and timezone from the dedicated schedule workspace."
             open={openSection === "automation"}
             onToggle={() => setOpenSection("automation")}
             actionLabel="Edit"
@@ -359,12 +368,18 @@ export function ProfilePage({
                 <p className="text-xs text-muted-foreground">{scheduleEnabled ? "Enabled" : "Paused"}</p>
               </div>
               <div className="space-y-2 rounded-xl border p-4">
-                <p className="text-sm font-semibold">Daily time</p>
-                <p className="text-xs text-muted-foreground">{scheduleTime}</p>
+                <p className="text-sm font-semibold">Cadence</p>
+                <p className="text-xs text-muted-foreground">{scheduleCadence === "hourly" ? "Hourly" : "Daily"}</p>
               </div>
               <div className="space-y-2 rounded-xl border p-4">
                 <p className="text-sm font-semibold">Timezone</p>
                 <p className="text-xs text-muted-foreground">{scheduleTimezone}</p>
+              </div>
+              <div className="space-y-2 rounded-xl border p-4">
+                <p className="text-sm font-semibold">Quiet hours</p>
+                <p className="text-xs text-muted-foreground">
+                  {scheduleQuietHoursEnabled ? `${scheduleQuietStart}-${scheduleQuietEnd}` : "Disabled"}
+                </p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -378,7 +393,7 @@ export function ProfilePage({
               text={
                 scheduleStatus?.enabled && scheduleStatus.next_run_at
                   ? `The next scheduled run is ${scheduleStatus.next_run_at}.`
-                  : "No automated daily run is active yet."
+                  : "No scheduled run is active yet."
               }
             />
           </SectionCard>

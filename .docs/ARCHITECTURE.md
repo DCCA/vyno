@@ -103,8 +103,9 @@ AI Daily Digest is a Python runtime with a local web API and React operator cons
 ### Flow: Web Scheduling
 1. The operator saves `profile.schedule` through the dedicated `Schedule` workspace.
 2. The web API scheduler loop reads that schedule plus current run-lock state.
-3. Due runs start through the same live-run machinery used by the UI.
-4. Scheduler status is persisted to `.runtime/schedule-state.json` and exposed through `/api/schedule/status`.
+3. Quiet-hours rules are evaluated in the configured local timezone before any run is started.
+4. Due runs start through the same live-run machinery used by the UI.
+5. Scheduler status is persisted to `.runtime/schedule-state.json` and exposed through `/api/schedule/status`.
 
 ### Flow: Onboarding
 1. Preflight checks validate env, config, and runtime prerequisites.
@@ -150,6 +151,8 @@ AI Daily Digest is a Python runtime with a local web API and React operator cons
   - `make web-api` and `make web-ui` in separate shells.
 - CLI automation mode:
   - `make schedule` runs the standalone CLI scheduler loop.
+- Background scheduler service mode:
+  - `make docker-scheduler-up` runs a detached Docker service that hosts `digest web` for always-on scheduling.
 - Bot runtime mode:
   - `digest bot` directly or Docker Compose managed service.
 

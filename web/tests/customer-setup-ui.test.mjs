@@ -24,7 +24,7 @@ test("onboarding is a guided first-run setup flow", () => {
   expectSource(onboardingSource, /Connect at least one output/, "output step missing")
   expectSource(onboardingSource, /Choose starter sources/, "source pack step missing")
   expectSource(onboardingSource, /Set digest preferences/, "preferences step missing")
-  expectSource(onboardingSource, /Configure daily automation/, "schedule step missing")
+  expectSource(onboardingSource, /Configure scheduled automation/, "schedule step missing")
   expectSource(onboardingSource, /Preview the digest/, "preview step missing")
   expectSource(onboardingSource, /Start the first live digest/, "live run step missing")
   expectSource(onboardingSource, /Open schedule controls/, "schedule workspace entry action missing")

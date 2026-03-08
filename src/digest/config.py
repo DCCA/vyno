@@ -51,7 +51,12 @@ class RunPolicySettings:
 @dataclass(slots=True)
 class ScheduleSettings:
     enabled: bool = False
+    cadence: str = "daily"
     time_local: str = "09:00"
+    hourly_minute: int = 0
+    quiet_hours_enabled: bool = False
+    quiet_start_local: str = "22:00"
+    quiet_end_local: str = "07:00"
     timezone: str = "UTC"
 
 
@@ -235,9 +240,33 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         schedule_raw = {}
     if not isinstance(schedule_raw, dict):
         raise ValueError("schedule must be an object")
-    time_local = str(schedule_raw.get("time_local", "09:00")).strip()
-    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", time_local):
-        raise ValueError("schedule.time_local must be in HH:MM 24-hour format")
+    cadence = str(schedule_raw.get("cadence", "daily")).strip().lower() or "daily"
+    if cadence not in {"daily", "hourly"}:
+        raise ValueError("schedule.cadence must be 'daily' or 'hourly'")
+    time_local = _parse_schedule_hhmm(
+        schedule_raw.get("time_local", "09:00"),
+        field_name="schedule.time_local",
+        default="09:00",
+    )
+    try:
+        hourly_minute = int(schedule_raw.get("hourly_minute", 0) or 0)
+    except Exception as exc:
+        raise ValueError("schedule.hourly_minute must be an integer between 0 and 59") from exc
+    if hourly_minute < 0 or hourly_minute > 59:
+        raise ValueError("schedule.hourly_minute must be between 0 and 59")
+    quiet_hours_enabled = bool(schedule_raw.get("quiet_hours_enabled", False))
+    quiet_start_local = _parse_schedule_hhmm(
+        schedule_raw.get("quiet_start_local", "22:00"),
+        field_name="schedule.quiet_start_local",
+        default="22:00",
+    )
+    quiet_end_local = _parse_schedule_hhmm(
+        schedule_raw.get("quiet_end_local", "07:00"),
+        field_name="schedule.quiet_end_local",
+        default="07:00",
+    )
+    if quiet_hours_enabled and quiet_start_local == quiet_end_local:
+        raise ValueError("schedule quiet hours must not start and end at the same time")
     timezone_name = str(
         schedule_raw.get("timezone", _default_schedule_timezone())
     ).strip() or _default_schedule_timezone()
@@ -247,7 +276,12 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         raise ValueError("schedule.timezone must be a valid IANA timezone") from exc
     schedule = ScheduleSettings(
         enabled=bool(schedule_raw.get("enabled", False)),
+        cadence=cadence,
         time_local=time_local,
+        hourly_minute=hourly_minute,
+        quiet_hours_enabled=quiet_hours_enabled,
+        quiet_start_local=quiet_start_local,
+        quiet_end_local=quiet_end_local,
         timezone=timezone_name,
     )
     return ProfileConfig(
@@ -358,3 +392,10 @@ def _default_schedule_timezone() -> str:
     if isinstance(local, ZoneInfo):
         return local.key
     return "UTC"
+
+
+def _parse_schedule_hhmm(value: object, *, field_name: str, default: str) -> str:
+    parsed = str(value if value is not None else default).strip() or default
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", parsed):
+        raise ValueError(f"{field_name} must be in HH:MM 24-hour format")
+    return parsed

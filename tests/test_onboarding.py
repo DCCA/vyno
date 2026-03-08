@@ -143,7 +143,12 @@ class TestOnboarding(unittest.TestCase):
                     {
                         "schedule": {
                             "enabled": True,
+                            "cadence": "hourly",
                             "time_local": "08:30",
+                            "hourly_minute": 0,
+                            "quiet_hours_enabled": True,
+                            "quiet_start_local": "22:00",
+                            "quiet_end_local": "07:00",
                             "timezone": "UTC",
                         }
                     },
@@ -155,7 +160,7 @@ class TestOnboarding(unittest.TestCase):
             complete = build_onboarding_status(settings)
             complete_by_id = {row["id"]: row for row in complete["steps"]}
             self.assertEqual(complete_by_id["schedule"]["status"], "complete")
-            self.assertIn("08:30", complete_by_id["schedule"]["detail"])
+            self.assertIn("Hourly", complete_by_id["schedule"]["detail"])
 
     def test_onboarding_profile_step_still_completes_when_profile_overlay_exists(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -180,7 +185,12 @@ class TestOnboarding(unittest.TestCase):
                         "topics": ["agents"],
                         "schedule": {
                             "enabled": True,
+                            "cadence": "hourly",
                             "time_local": "09:00",
+                            "hourly_minute": 0,
+                            "quiet_hours_enabled": True,
+                            "quiet_start_local": "22:00",
+                            "quiet_end_local": "07:00",
                             "timezone": "UTC",
                         },
                         "output": {

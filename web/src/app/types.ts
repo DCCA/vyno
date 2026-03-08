@@ -123,15 +123,26 @@ export type OnboardingStatus = {
 
 export type ScheduleConfig = {
   enabled: boolean
+  cadence: "daily" | "hourly"
   time_local: string
+  hourly_minute: number
+  quiet_hours_enabled: boolean
+  quiet_start_local: string
+  quiet_end_local: string
   timezone: string
 }
 
 export type ScheduleStatus = {
   enabled: boolean
+  cadence: "daily" | "hourly"
   time_local: string
+  hourly_minute: number
+  quiet_hours_enabled: boolean
+  quiet_start_local: string
+  quiet_end_local: string
   timezone: string
   scheduler_status: string
+  quiet_hours_active: boolean
   next_run_at: string
   last_triggered_at: string
   last_attempted_run_id: string

@@ -12,7 +12,7 @@ AI Daily Digest is a local-first Python application and web console for turning 
 ## Current Operator Surfaces
 The web console is route-based and currently includes:
 - `Dashboard`: overall posture, active run state, alerts, and quick actions
-- `Schedule`: dedicated daily automation controls and scheduler status
+- `Schedule`: dedicated automation cadence, quiet-hours, and scheduler status
 - `Run Center`: manual run actions and live progress
 - `Sources`: source inventory, local mutations, and source health
 - `Profile`: scoring, output, run-policy, and maintenance controls
@@ -167,7 +167,12 @@ Notable fields:
 - `run_policy.allow_run_override`
 - `run_policy.seen_reset_guard`: `confirm` or `disabled`
 - `schedule.enabled`
+- `schedule.cadence`: `daily` or `hourly`
 - `schedule.time_local`
+- `schedule.hourly_minute`
+- `schedule.quiet_hours_enabled`
+- `schedule.quiet_start_local`
+- `schedule.quiet_end_local`
 - `schedule.timezone`
 - `output.obsidian_naming`: `timestamped` or `daily`
 - `output.render_mode`: `sectioned` or `source_segmented`
@@ -204,10 +209,20 @@ The web scheduler:
 - runs inside the web API process
 - stores its scheduler state in `.runtime/schedule-state.json`
 - reports scheduler status, next run, last trigger, and latest error in the `Schedule` workspace
+- supports both daily and hourly cadence
+- can suppress runs during quiet hours in local time
 - uses incremental defaults for web-triggered scheduled runs
 - respects the run lock when another run is already active
 
 Manual runs from the UI live in `Run Center`, where operators can run immediately and follow live progress.
+
+Current recommended hourly setup for Brazil:
+- `cadence: hourly`
+- `hourly_minute: 0`
+- `timezone: America/Sao_Paulo`
+- `quiet_hours_enabled: true`
+- `quiet_start_local: "22:00"`
+- `quiet_end_local: "07:00"`
 
 ## Timeline, History, And Source Health
 Observability currently includes:
@@ -282,6 +297,19 @@ make docker-logs
 ```
 
 The Compose service mounts `config/`, `data/`, `logs/`, `.runtime/`, `obsidian-vault/`, and `digest-live.db`, and uses `digest bot-health-check` for container health.
+
+Background scheduler service:
+
+```bash
+make docker-scheduler-build
+make docker-scheduler-up
+```
+
+Useful scheduler commands:
+- `make docker-scheduler-logs`
+- `make docker-scheduler-ps`
+- `make docker-scheduler-restart`
+- `make docker-scheduler-down`
 
 ## Environment Variables
 See `.env.example` for the full list.

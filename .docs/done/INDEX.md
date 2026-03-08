@@ -25,6 +25,7 @@ Core history index (summary-first). Full details remain in git history.
 - graphite-coral-theme-refresh: Replaced the web console's blue/amber skin with the approved graphite/coral theme and production typography. ([summary](./graphite-coral-theme-refresh/completion-summary.md))
 - hardcode-hygiene-guardrails: Centralized core constants in `src/digest/constants.py` and migrated dependent modules. ([summary](./hardcode-hygiene-guardrails/completion-summary.md))
 - high-impact-github-issues: Added deterministic GitHub issue impact gate in `src/digest/pipeline/github_issue_impact.py`. ([summary](./high-impact-github-issues/completion-summary.md))
+- hourly-brazil-background-scheduler: Added hourly Brazil-time scheduling with quiet hours and a detached Docker scheduler service. ([summary](./hourly-brazil-background-scheduler/completion-summary.md))
 - incremental-video-presence: Added targeted video supplement logic in `src/digest/runtime.py` for incremental runs: ([summary](./incremental-video-presence/completion-summary.md))
 - latest-run-source-health: Source health now reflects only the latest completed run, clearing stale alerts after a newer clean run. ([summary](./latest-run-source-health/completion-summary.md))
 - left-rail-scroll-fix: Added internal desktop scrolling to the sticky left rail so lower nav content remains reachable. ([summary](./left-rail-scroll-fix/completion-summary.md))

@@ -4,3 +4,11 @@
 # quality_repair_threshold: 82
 # output:
 #   render_mode: source_segmented
+# schedule:
+#   enabled: true
+#   cadence: hourly
+#   hourly_minute: 0
+#   quiet_hours_enabled: true
+#   quiet_start_local: "22:00"
+#   quiet_end_local: "07:00"
+#   timezone: America/Sao_Paulo

@@ -50,8 +50,13 @@ run_policy:
   seen_reset_guard: confirm
 schedule:
   enabled: false
+  cadence: hourly
   time_local: "09:00"
-  timezone: "UTC"
+  hourly_minute: 0
+  quiet_hours_enabled: true
+  quiet_start_local: "22:00"
+  quiet_end_local: "07:00"
+  timezone: "America/Sao_Paulo"
 output:
   telegram_chat_id: ""
   telegram_bot_token: ""

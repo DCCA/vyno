@@ -38,7 +38,7 @@ export function DashboardPage({
         description={
           onboardingDone
             ? "Automation-first home for the next scheduled digest, latest result, and follow-up actions."
-            : "Finish setup here, then let the digest run automatically every day."
+            : "Finish setup here, then let the digest run automatically on its saved schedule."
         }
         badges={[
           { label: `latest: ${runStatus?.latest?.status ?? "n/a"}` },
@@ -68,7 +68,7 @@ export function DashboardPage({
             <CardTitle className="font-display">{onboardingDone ? "Automation Control" : "Activation Focus"}</CardTitle>
             <CardDescription>
               {onboardingDone
-                ? "The daily digest is now a recurring product workflow. Use this module to jump into interventions."
+                ? "The digest is now a recurring product workflow. Use this module to jump into interventions."
                 : "Complete the setup path first, then the dashboard becomes your recurring product home."}
             </CardDescription>
           </CardHeader>
@@ -109,7 +109,7 @@ export function DashboardPage({
                 {scheduleStatus?.enabled
                   ? scheduleStatus.next_run_at
                     ? `Next scheduled digest: ${scheduleStatus.next_run_at}`
-                    : "A daily schedule is configured and waiting for its next window."
+                    : "A recurring schedule is configured and waiting for its next window."
                   : "Automation is currently off. The product will keep depending on manual runs until a schedule is enabled."}
               </p>
               {scheduleStatus?.last_error ? <p className="mt-3 text-sm text-amber-800">{scheduleStatus.last_error}</p> : null}
