@@ -49,6 +49,7 @@ Core history index (summary-first). Full details remain in git history.
 - source-health-visibility: Added structured source error visibility in API responses. ([summary](./source-health-visibility/completion-summary.md))
 - source-segmented-output: Completed Firehose artifacts for ".docs/done/source-segmented-output/" (proposal, spec, design, tasks). ([summary](./source-segmented-output/completion-summary.md))
 - telegram-ops-commands: Completed Firehose artifacts for ".docs/done/telegram-ops-commands/" (proposal, spec, design, tasks). ([summary](./telegram-ops-commands/completion-summary.md))
+- telegram-brief-delivery: Reworked Telegram digest output into a compact HTML brief with clickable titles and no metrics-heavy context block. ([summary](./telegram-brief-delivery/completion-summary.md))
 - telegram-source-wizard: Completed Firehose artifacts for ".docs/done/telegram-source-wizard/" (proposal, spec, design, tasks). ([summary](./telegram-source-wizard/completion-summary.md))
 - ui-feedback-locality-pattern: Replaced single action-wide feedback channel with scoped feedback channels. ([summary](./ui-feedback-locality-pattern/completion-summary.md))
 - ui-flow-e2e-hardening: Replaced model-bound request body parsing with explicit `dict[str, Any]` payload handling for web POST endpoints in `src/digest/web/app.py`. ([summary](./ui-flow-e2e-hardening/completion-summary.md))

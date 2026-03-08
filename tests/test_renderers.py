@@ -1,8 +1,15 @@
+import json
 import unittest
 from datetime import datetime
+from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qs
 
 from digest.delivery.obsidian import render_obsidian_note
-from digest.delivery.telegram import render_telegram_message, render_telegram_messages
+from digest.delivery.telegram import (
+    render_telegram_message,
+    render_telegram_messages,
+    send_telegram_message,
+)
 from digest.models import DigestSections, Item, ItemType, Score, ScoredItem, Summary
 
 
@@ -35,13 +42,16 @@ class TestRenderers(unittest.TestCase):
             run_id="abc123",
             generated_at_utc="2026-02-21T10:00:00+00:00",
         )
-        self.assertIn("Must-read", msg)
+        self.assertIn("AI Digest - 2026-02-21", msg)
         self.assertIn("## Must-read", note)
         self.assertIn("run_id: abc123", note)
         self.assertIn("generated_at_utc:", note)
         self.assertIn("source_count:", note)
         self.assertIn("[!summary]", note)
         self.assertIn("Tags: llm, benchmark", note)
+        self.assertIn("<a href=", msg)
+        self.assertNotIn("Context", msg)
+        self.assertNotIn("(https://x/1)", msg)
 
     def test_telegram_messages_chunk_under_limit(self):
         long_summary = "x" * 500
@@ -69,7 +79,15 @@ class TestRenderers(unittest.TestCase):
         self.assertGreater(len(chunks), 1)
         for chunk in chunks:
             self.assertLessEqual(len(chunk), 800)
-        self.assertIn("Must-read", chunks[0])
+        self.assertIn("AI Digest - 2026-02-21", chunks[0])
+        for i in range(1, 10):
+            title = f"Title {i}"
+            summary = "x" * 159 + "…"
+            block = (
+                f'{i}. <a href="https://x/{i}"><b>{title}</b></a>\n{summary}'
+            )
+            joined = "\n\n".join(chunks)
+            self.assertIn(block, joined)
 
     def test_telegram_caps_overlong_fields(self):
         long_title = "T" * 400
@@ -93,6 +111,7 @@ class TestRenderers(unittest.TestCase):
         )
         msg = render_telegram_message("2026-02-21", sec)
         self.assertLess(len(msg), 1200)
+        self.assertIn("<a href=", msg)
 
     def test_obsidian_caps_overlong_fields(self):
         long_title = "A" * 400
@@ -170,7 +189,8 @@ class TestRenderers(unittest.TestCase):
         )
         msg = render_telegram_message("2026-02-21", sec)
         self.assertEqual(note.count("https://x/1"), 1)
-        self.assertEqual(msg.count("https://x/1"), 1)
+        self.assertIn('<a href="https://x/1">', msg)
+        self.assertNotIn("(https://x/1)", msg)
 
     def test_renderers_include_context_feedback(self):
         sec = DigestSections(must_read=[_scored(1)], skim=[], videos=[])
@@ -218,10 +238,106 @@ class TestRenderers(unittest.TestCase):
 
         self.assertIn("## Context", note)
         self.assertIn("Sparse digest:", note)
-        self.assertIn("Context", msg)
-        self.assertIn("low-impact-issues=2", msg)
+        self.assertNotIn("Context", msg)
+        self.assertNotIn("low-impact-issues=2", msg)
+        self.assertIn("<i>Sparse digest:", msg)
         self.assertIn("Dropped: dedupe=5, window=3, seen=2, blocked=1, ranked-out=4", note)
-        self.assertIn("videos fetched=8 post-window=3 post-seen=1 post-block=1 selected=0", msg)
+        self.assertNotIn("videos fetched=8 post-window=3 post-seen=1 post-block=1 selected=0", msg)
+
+    def test_telegram_ignores_source_segmented_layout(self):
+        sec = DigestSections(
+            must_read=[_scored(1)],
+            skim=[_scored(2)],
+            videos=[_scored(3, "video")],
+            themes=["agents"],
+        )
+        msg = render_telegram_message("2026-02-21", sec)
+        segmented = "\n".join(
+            render_telegram_messages(
+                "2026-02-21",
+                sec,
+                render_mode="source_segmented",
+            )
+        )
+        self.assertEqual(segmented, msg)
+        self.assertNotIn("Top Highlights", msg)
+        self.assertNotIn("Themes", msg)
+        self.assertNotIn("GitHub", msg)
+        self.assertNotIn("Skim", msg)
+        self.assertNotIn("Videos", msg)
+
+    def test_telegram_escapes_html_in_titles_and_note(self):
+        item = Item(
+            "1",
+            "https://x/1?a=1&b=2",
+            'Title <test> & "quote"',
+            "src",
+            None,
+            datetime.now(),
+            "article",
+            "body",
+        )
+        score = Score("1", 1, 1, 1, 3, tags=["llm"])
+        summary = Summary(
+            tldr='Summary <b>boom</b> & "quoted"',
+            key_points=[],
+            why_it_matters="why",
+        )
+        sec = DigestSections(
+            must_read=[ScoredItem(item=item, score=score, summary=summary)],
+            skim=[],
+            videos=[],
+        )
+        msg = render_telegram_message(
+            "2026-02-21",
+            sec,
+            context={"sparse_note": 'Sparse <note> & "quote"'},
+        )
+        self.assertIn("&lt;test&gt;", msg)
+        self.assertIn("&amp; &quot;quote&quot;", msg)
+        self.assertIn("&lt;b&gt;boom&lt;/b&gt;", msg)
+        self.assertIn("&lt;note&gt;", msg)
+        self.assertIn("https://x/1?a=1&amp;b=2", msg)
+
+    def test_telegram_prefers_key_point_when_tldr_matches_title(self):
+        item = Item(
+            "1",
+            "https://x/1",
+            "Same headline",
+            "src",
+            None,
+            datetime.now(),
+            "article",
+            "body",
+        )
+        score = Score("1", 1, 1, 1, 3, tags=["llm"])
+        summary = Summary(
+            tldr="Same headline",
+            key_points=["Useful distinct takeaway"],
+            why_it_matters="why",
+        )
+        sec = DigestSections(
+            must_read=[ScoredItem(item=item, score=score, summary=summary)],
+            skim=[],
+            videos=[],
+        )
+        msg = render_telegram_message("2026-02-21", sec)
+        self.assertIn("Useful distinct takeaway", msg)
+        self.assertEqual(msg.count("Same headline"), 1)
+
+    def test_send_telegram_message_uses_html_parse_mode(self):
+        response = MagicMock()
+        response.read.return_value = json.dumps({"ok": True}).encode("utf-8")
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+        with patch("digest.delivery.telegram.urllib.request.urlopen", return_value=response) as urlopen:
+            send_telegram_message("token", "chat", "<b>hello</b>")
+
+        request = urlopen.call_args.args[0]
+        body = parse_qs(request.data.decode("utf-8"))
+        self.assertEqual(body["parse_mode"], ["HTML"])
+        self.assertEqual(body["disable_web_page_preview"], ["true"])
+        self.assertEqual(body["text"], ["<b>hello</b>"])
 
 
 if __name__ == "__main__":

@@ -49,10 +49,11 @@ class TestSourceSegmentedRendering(unittest.TestCase):
         chunks = render_telegram_messages("2026-02-21", sec, render_mode="source_segmented", max_len=2000)
         self.assertTrue(chunks)
         text = "\n".join(chunks)
-        self.assertIn("Top Highlights", text)
-        self.assertIn("GitHub", text)
-        self.assertIn("Research & Articles", text)
-        self.assertIn("Video", text)
+        self.assertIn('1. <a href="https://e/1"><b>Title 1</b></a>', text)
+        self.assertNotIn("Top Highlights", text)
+        self.assertNotIn("GitHub", text)
+        self.assertNotIn("Research & Articles", text)
+        self.assertNotIn("Video", text)
 
     def test_obsidian_source_segmented_mode(self):
         sec = DigestSections(

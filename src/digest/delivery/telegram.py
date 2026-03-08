@@ -1,23 +1,26 @@
 from __future__ import annotations
 
+import html
 import json
 import re
 from typing import Any
 import urllib.parse
 import urllib.request
 
-from digest.delivery.source_buckets import build_source_buckets, top_highlights
 from digest.models import DigestSections
 
 NOISE_PHRASE_RE = re.compile(
     r"\b(check out|patreon|sponsor|support us|sign up)\b", re.IGNORECASE
 )
+URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
+SPACE_RE = re.compile(r"\s+")
 
 
 def _clean_text(value: str, *, max_len: int) -> str:
     text = (value or "").strip()
     text = NOISE_PHRASE_RE.sub("", text)
-    text = re.sub(r"\s{2,}", " ", text).strip(" -")
+    text = URL_RE.sub("", text)
+    text = SPACE_RE.sub(" ", text).strip(" -")
     if len(text) > max_len:
         return text[: max_len - 1].rstrip() + "…"
     return text
@@ -33,11 +36,8 @@ def render_telegram_messages(
 ) -> list[str]:
     if max_len < 256:
         raise ValueError("max_len must be >= 256")
-    if render_mode == "source_segmented":
-        lines = _build_source_segmented_lines(date_str, sections, context=context)
-    else:
-        lines = _build_digest_lines(date_str, sections, context=context)
-    return _chunk_lines(lines, max_len=max_len)
+    blocks = _build_digest_blocks(date_str, sections, context=context)
+    return _chunk_blocks(blocks, max_len=max_len)
 
 
 def render_telegram_message(
@@ -62,66 +62,28 @@ def _build_digest_lines(
     *,
     context: dict[str, Any] | None,
 ) -> list[str]:
-    lines = [f"AI Digest - {date_str}"]
-    context_lines = _build_context_lines(context)
-    if context_lines:
-        lines.extend(["", "Context", *context_lines])
-    lines.extend(["", "Must-read"])
-    for idx, item in enumerate(sections.must_read, start=1):
-        safe_title = _clean_text(item.item.title, max_len=120)
-        summary = _clean_text(
-            item.summary.tldr if item.summary else item.item.title, max_len=220
-        )
-        lines.append(f"{idx}. {safe_title} - {summary} ({item.item.url})")
-
-    lines.extend(["", "Skim"])
-    for item in sections.skim:
-        safe_title = _clean_text(item.item.title, max_len=120)
-        lines.append(f"- {safe_title} ({item.item.url})")
-
-    lines.extend(["", "Videos"])
-    for item in sections.videos:
-        safe_title = _clean_text(item.item.title, max_len=120)
-        takeaway = (
-            item.summary.key_points[0]
-            if item.summary and item.summary.key_points
-            else item.item.title
-        )
-        safe_takeaway = _clean_text(takeaway, max_len=180)
-        lines.append(f"- {safe_title} - {safe_takeaway} ({item.item.url})")
-
-    if sections.themes:
-        lines.extend(["", "Themes"])
-        for theme in sections.themes:
-            lines.append(f"- {theme}")
-    return lines
+    return [
+        line
+        for block in _build_digest_blocks(date_str, sections, context=context)
+        for line in block.splitlines()
+    ]
 
 
-def _build_source_segmented_lines(
+def _build_digest_blocks(
     date_str: str,
     sections: DigestSections,
     *,
     context: dict[str, Any] | None,
 ) -> list[str]:
-    lines = [f"AI Digest - {date_str}"]
-    context_lines = _build_context_lines(context)
-    if context_lines:
-        lines.extend(["", "Context", *context_lines])
-    lines.extend(["", "Top Highlights"])
-    for idx, item in enumerate(top_highlights(sections, limit=3), start=1):
-        safe_title = _clean_text(item.item.title, max_len=120)
-        summary = _clean_text(
-            item.summary.tldr if item.summary else item.item.title, max_len=220
-        )
-        lines.append(f"{idx}. {safe_title} - {summary} ({item.item.url})")
+    blocks = [f"AI Digest - {date_str}"]
+    sparse_note = _build_sparse_note(context)
+    if sparse_note:
+        blocks.append(sparse_note)
 
-    buckets = build_source_buckets(sections, per_bucket_limit=8)
-    for bucket, rows in buckets.items():
-        lines.extend(["", bucket])
-        for item in rows:
-            safe_title = _clean_text(item.item.title, max_len=120)
-            lines.append(f"- {safe_title} ({item.item.url})")
-    return lines
+    primary_items = _select_primary_items(sections)
+    for idx, item in enumerate(primary_items, start=1):
+        blocks.append(_render_item_block(idx, item))
+    return blocks
 
 
 def _build_context_lines(context: dict[str, Any] | None) -> list[str]:
@@ -194,6 +156,63 @@ def _build_context_lines(context: dict[str, Any] | None) -> list[str]:
     return lines
 
 
+def _build_sparse_note(context: dict[str, Any] | None) -> str:
+    if not context:
+        return ""
+    sparse_note = _clean_text(str(context.get("sparse_note", "")).strip(), max_len=180)
+    if not sparse_note:
+        return ""
+    return f"<i>{html.escape(sparse_note, quote=True)}</i>"
+
+
+def _select_primary_items(sections: DigestSections):
+    if sections.must_read:
+        return list(sections.must_read)
+    if sections.skim:
+        return list(sections.skim)
+    return list(sections.videos)
+
+
+def _render_item_block(idx: int, scored_item) -> str:
+    title = _clean_text(scored_item.item.title, max_len=90) or "Untitled item"
+    summary = _best_summary_text(scored_item)
+    safe_url = html.escape(scored_item.item.url, quote=True)
+    safe_title = html.escape(title, quote=True)
+    safe_summary = html.escape(summary, quote=True)
+    return (
+        f"{idx}. <a href=\"{safe_url}\"><b>{safe_title}</b></a>\n"
+        f"{safe_summary}"
+    )
+
+
+def _best_summary_text(scored_item) -> str:
+    title = _clean_text(scored_item.item.title, max_len=90)
+    candidates: list[str] = []
+    summary = scored_item.summary
+    if summary:
+        candidates.append(summary.tldr or "")
+        candidates.extend(summary.key_points or [])
+    candidates.append(scored_item.item.description or "")
+    candidates.append(scored_item.item.raw_text or "")
+    candidates.append(title)
+
+    normalized_title = _normalize_compare_text(title)
+    for candidate in candidates:
+        cleaned = _clean_text(candidate, max_len=160)
+        if not cleaned:
+            continue
+        if _normalize_compare_text(cleaned) == normalized_title:
+            continue
+        return cleaned
+    return title or "Open item"
+
+
+def _normalize_compare_text(value: str) -> str:
+    lowered = (value or "").strip().lower()
+    lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
+    return SPACE_RE.sub(" ", lowered).strip()
+
+
 def _chunk_lines(lines: list[str], *, max_len: int) -> list[str]:
     chunks: list[str] = []
     current: list[str] = []
@@ -217,12 +236,45 @@ def _chunk_lines(lines: list[str], *, max_len: int) -> list[str]:
     return [c for c in chunks if c]
 
 
+def _chunk_blocks(blocks: list[str], *, max_len: int) -> list[str]:
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for block in blocks:
+        text = block.strip()
+        if not text:
+            continue
+        if len(text) > max_len:
+            lines = text.splitlines()
+            truncated = _chunk_lines(lines, max_len=max_len)
+            if truncated:
+                text = truncated[0]
+        separator = 2 if current else 0
+        if current and current_len + separator + len(text) > max_len:
+            chunks.append("\n\n".join(current).strip())
+            current = [text]
+            current_len = len(text)
+            continue
+        current.append(text)
+        current_len += separator + len(text)
+
+    if current:
+        chunks.append("\n\n".join(current).strip())
+    return [chunk for chunk in chunks if chunk]
+
+
 def send_telegram_message(
     bot_token: str, chat_id: str, message: str, reply_markup: dict | None = None
 ) -> None:
     if not bot_token or not chat_id:
         raise ValueError("Telegram bot token and chat id are required")
-    payload = {"chat_id": chat_id, "text": message, "disable_web_page_preview": "true"}
+    payload = {
+        "chat_id": chat_id,
+        "text": message,
+        "disable_web_page_preview": "true",
+        "parse_mode": "HTML",
+    }
     if reply_markup is not None:
         payload["reply_markup"] = json.dumps(reply_markup, separators=(",", ":"))
     body = urllib.parse.urlencode(payload).encode("utf-8")
