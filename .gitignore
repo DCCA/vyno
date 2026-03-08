@@ -47,3 +47,5 @@ web/*.js
 skills-lock.json
 .dmux/
 .dmux-hooks/
+.vscode
+

@@ -67,12 +67,12 @@ export function SchedulePage({
           { label: enabled ? "automation enabled" : "automation paused", variant: enabled ? "success" : "warning" },
           { label: `state: ${schedulerState.label}`, variant: schedulerState.variant },
           {
-            label: scheduleStatus?.next_run_at ? `next: ${scheduleStatus.next_run_at}` : "next run not scheduled",
+            label: scheduleStatus?.next_run_at ? `next: ${formatTimestampBadge(scheduleStatus.next_run_at)}` : "next run not scheduled",
             variant: scheduleStatus?.enabled ? "secondary" : "warning",
           },
         ]}
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 lg:justify-end">
             <Button variant="outline" onClick={onOpenTimeline}>
               <Clock3 className="h-4 w-4" />
               Open Timeline
@@ -318,4 +318,16 @@ function formatTimestamp(value: string | undefined): string {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
   return parsed.toLocaleString()
+}
+
+function formatTimestampBadge(value: string | undefined): string {
+  if (!value) return ""
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
