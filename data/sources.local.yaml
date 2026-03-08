@@ -1,0 +1,43 @@
+added:
+  rss:
+  - https://huggingface.co/blog/feed.xml
+  - https://blog.langchain.com/rss/
+  - https://simonwillison.net/atom/everything/
+  - https://www.latent.space/feed
+  - https://www.interconnects.ai/feed
+  - https://magazine.sebastianraschka.com/feed
+  - https://www.understandingai.org/feed
+  - https://lilianweng.github.io/index.xml
+  - https://replicate.com/blog/rss
+  github_org:
+  - google-gemini
+  - kepano
+  - karpathy
+  github_query:
+  - llm
+  github_repo:
+  - specui/specui
+  - fission-ai/openspec
+  - google-gemini/gemini-cli
+  github_topic:
+  - openclaw
+  - spec-driven-development
+  - codex
+  - ai-agents
+  - cli
+  youtube_channel:
+  - UCrXSVX9a1mj8l0CMLwKgMVw
+  - UCMwVTLZIRRUyyVrkjDpn4pA
+  - UC9x0AN7BWHpCDHSm9NiJFJQ
+  x_author:
+  - thdxr
+  x_theme:
+  - ai agent
+removed:
+  github_query:
+  - repo:openai/openai-cookbook is:issue llm
+  github_repo:
+  - openai/openai-cookbook
+  rss:
+  - https://github.com/mistralai
+  - https://example.com/feed.xml
