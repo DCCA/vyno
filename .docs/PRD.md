@@ -2,7 +2,7 @@
 
 ## Document Status
 - Status: Current shipped-product PRD baseline
-- Updated: 2026-03-08
+- Updated: 2026-03-14
 - Source of truth alignment: `README.md`, `src/digest/*`, `web/src/*`
 
 ## Product Intent
@@ -19,6 +19,7 @@ AI Daily Digest exists to reduce AI information overload by ingesting multi-sour
 - The product SHALL preserve operator trust via observable run status, progress, and source-health diagnostics.
 - The product SHALL preserve configuration safety with overlays, diff/review workflows, and explicit auth controls for web API access.
 - The product SHALL produce outputs optimized for quick consumption (Telegram) and long-term retrieval (Obsidian Markdown).
+- The product SHALL preserve exact delivered run artifacts and feedback signals so future ranking can learn from what was actually sent.
 
 ## Non-Goals
 - Full direct X API automation is NOT required in current scope; inbox-only remains the default and selector ingestion is optional.
@@ -34,21 +35,25 @@ AI Daily Digest exists to reduce AI information overload by ingesting multi-sour
   - GitHub repos, topics, search queries, and organizations
 - Pipeline:
   - normalization, dedupe, scoring, selection, summarization
-  - Must-read diversity constraints and guardrails
+  - Must-read diversity constraints, digest-wide source balancing, and research concentration guardrails
   - quality repair, quality learning, and fallback strategies
+  - adjusted scoring with soft source-preference priors, content-depth adjustments, and feedback bias
 - Delivery:
-  - Telegram digest sections with chunking
+  - Telegram digest cards with source, section, and adjusted-score metadata
   - Obsidian markdown notes (timestamped default, legacy daily optional)
+  - exact delivered Telegram and Obsidian artifact archiving for non-preview runs
 - Operations:
   - CLI run/schedule/doctor/bot/web modes
   - route-based web console with dashboard, schedule, run center, sources, profile, timeline, history, and onboarding surfaces
   - onboarding preflight, source packs, preview, activate, and lifecycle-based navigation
   - run policy controls, seen-reset controls, and dedicated schedule controls for daily or hourly automation
-  - timeline, config history, rollback, and source-health observability
+  - timeline digest review, item/source feedback, config history, rollback, and source-health observability
 - Security and reliability:
   - API token auth modes (`required|optional|off`)
   - secret redaction in API payloads
   - run lock, scheduler state tracking, quiet-hours suppression, bot healthcheck, and Docker runtime options for bot and scheduler services
+  - Docker-safe Obsidian vault override for mounted persistence
+  - X per-run spend cap for selector-based discovery
 
 ## Product Requirements
 
@@ -78,6 +83,48 @@ The system SHALL deliver digest output to Telegram and Obsidian for each success
 - WHEN a run completes with selected items
 - THEN Telegram messages are rendered and sent
 - AND an Obsidian markdown note is written with stable frontmatter fields
+
+### Requirement: Delivered Run Archive
+The system SHALL archive the exact delivered payloads and selected items for each non-preview run.
+
+#### Scenario: Timeline digest review
+- GIVEN a non-preview run completed successfully or partially
+- WHEN the operator opens Timeline review for that run
+- THEN the archived Telegram payload and archived Obsidian note are retrievable
+- AND the selected items for that run are available for review
+
+### Requirement: Feedback-Driven Personalization
+The system SHALL capture explicit item-level and source-level feedback that can influence future ranking.
+
+#### Scenario: Item review feedback
+- GIVEN a prior run is visible in Timeline
+- WHEN the operator marks an item as `too_technical` or `more_like_this`
+- THEN the feedback is persisted with derived ranking features
+- AND subsequent runs may apply that feedback through ranking bias
+
+#### Scenario: Source preference feedback
+- GIVEN a source is visible in the Sources surface
+- WHEN the operator marks it as preferred, less preferred, or muted
+- THEN the feedback is persisted
+- AND mute behavior can update blocked-source controls
+
+### Requirement: Cost-Bounded X Discovery
+The system SHALL enforce a per-run spend cap for X selector fetching.
+
+#### Scenario: X budget enforcement
+- GIVEN X selector discovery is enabled
+- WHEN the run computes per-selector fetch limits
+- THEN the total X post budget stays within the configured per-run spend cap
+- AND zero-budget selectors are skipped cleanly
+
+### Requirement: Final Score Transparency
+The system SHALL show the final adjusted ranking score in user-facing digest surfaces.
+
+#### Scenario: Telegram score display
+- GIVEN an item is selected into a delivered digest
+- WHEN Telegram is rendered
+- THEN the displayed score reflects the final adjusted score used for ranking
+- AND raw scoring remains available only for operator inspection surfaces
 
 ### Requirement: Manual and Scheduled Execution
 The system SHALL support manual run execution and schedule-driven run execution from both CLI and web-app workflows.
@@ -151,8 +198,10 @@ The system SHALL enforce configurable API auth behavior and redact secrets in co
 - Must-read section remains diverse and high quality over time.
 - Operators can complete onboarding and run management without shell-level config edits.
 - Timeline and source-health surfaces reduce mean time to diagnose failed sources.
+- Feedback and digest review improve personalization without making scores misleading or source-biased.
 
 ## Known Gaps and Future Enhancements
 - Richer native X workflows beyond inbox-only default plus current selector support remain future scope.
-- More advanced personalization and feedback loops can be expanded beyond current profile controls.
+- Feedback is currently local-first and operator-driven; richer automatic personalization remains future scope.
+- Historical runs from before artifact archiving do not have exact backfilled Telegram payloads.
 - Additional delivery destinations may be considered after core reliability and signal quality targets are stable.

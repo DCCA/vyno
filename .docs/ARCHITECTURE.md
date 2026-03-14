@@ -2,7 +2,7 @@
 
 ## Document Status
 - Status: Current architecture baseline
-- Updated: 2026-03-08
+- Updated: 2026-03-14
 - Source of truth alignment: `README.md`, `src/digest/*`, `web/src/*`, `compose.yaml`
 
 ## System Overview
@@ -21,8 +21,9 @@ AI Daily Digest is a Python runtime with a local web API and React operator cons
 +---------------------+             +----------+-----------+              +----------------------+
 | React Web Console   | <---------> | FastAPI Web API      | <----------> | SQLite Store         |
 | web/src/App.tsx     |  HTTP JSON  | src/digest/web/app.py|   read/write | runs, items, scores, |
-| dashboard/schedule/run           | run status/progress   |              | seen, timeline,      |
-| sources/profile/history          | onboarding/config ops |              | health/history data  |
+| dashboard/schedule/run           | run status/progress   |              | selected-items,      |
+| sources/profile/history          | onboarding/config ops |              | feedback, timeline,  |
+| timeline review                 | archive + feedback    |              | health/history data  |
 +---------------------+             +----------+-----------+              +----------+-----------+
                                                |                                     ^
                                                | invokes                              |
@@ -89,16 +90,23 @@ AI Daily Digest is a Python runtime with a local web API and React operator cons
 2. Connectors fetch candidates from all configured source groups.
 3. Pipeline normalizes and deduplicates items.
 4. Scoring combines profile heuristics and optional agent scoring.
-5. Selection computes `Must-read`, `Skim`, and `Videos`.
-6. Summarization executes LLM/extractive paths with guardrails.
-7. Delivery sends Telegram digest and writes Obsidian note.
-8. Store persists run metadata, errors, and observability events.
+5. Ranking applies quality-learning, feedback bias, content-depth, source-preference, and research-balance adjustments.
+6. Selection computes `Must-read`, `Skim`, and `Videos`.
+7. Summarization executes LLM/extractive paths with guardrails.
+8. Delivery sends Telegram digest and writes Obsidian note.
+9. Store persists run metadata, selected items, archived artifacts, errors, and observability events.
 
 ### Flow: Web Control Plane
 1. UI calls `/api/*` endpoints with token header when enabled.
 2. API authenticates request based on auth mode and token configuration.
 3. API returns redacted config state where secret-like keys are masked.
 4. Mutations persist overlays (`data/sources.local.yaml`, `data/profile.local.yaml`) and append history/timeline records.
+
+### Flow: Digest Review and Feedback
+1. Timeline reads archived run artifacts and selected items from SQLite and `.runtime/run-artifacts/`.
+2. The UI renders the delivered Telegram and Obsidian payloads exactly as archived.
+3. Item and source feedback is posted through the web API.
+4. Feedback is stored with derived feature rows and later reused as ranking bias in runtime.
 
 ### Flow: Web Scheduling
 1. The operator saves `profile.schedule` through the dedicated `Schedule` workspace.
@@ -124,6 +132,7 @@ AI Daily Digest is a Python runtime with a local web API and React operator cons
   - `digest-live.db`
   - `logs/digest.log`
   - `.runtime/config-history/*`
+  - `.runtime/run-artifacts/<run_id>/*`
   - `.runtime/schedule-state.json`
   - `.runtime/*` (locks, bot heartbeat)
   - `obsidian-vault/` notes
@@ -139,10 +148,11 @@ AI Daily Digest is a Python runtime with a local web API and React operator cons
 - Run lock prevents overlapping conflicting runs.
 - Structured JSON logging includes run/stage metadata.
 - Source health aggregation highlights failing sources from the latest completed run and suggested fixes.
-- Timeline stores per-run event stream, severity, summary, and operator notes.
+- Timeline stores per-run event stream, severity, summary, operator notes, selected items, and exact delivered artifacts for non-preview runs.
 - Config history snapshots support rollback from the web console.
 - Scheduler state tracks next run, last result, active run, and scheduler errors.
 - Bot runtime heartbeat supports Docker healthcheck validation.
+- Selected-item records preserve raw score, adjusted score, and adjustment breakdown for operator review.
 
 ## Deployment Topologies
 - Local developer mode:
@@ -156,6 +166,9 @@ AI Daily Digest is a Python runtime with a local web API and React operator cons
   - `make docker-scheduler-deploy` rebuilds and recreates that service after local code changes.
 - Bot runtime mode:
   - `digest bot` directly or Docker Compose managed service.
+- Default Docker operator stack mode:
+  - `make docker-up` starts both `digest-bot` and `digest-scheduler`.
+  - Docker exports `OBSIDIAN_VAULT_PATH=/app/obsidian-vault` so Obsidian delivery lands in the mounted host vault.
 
 ## Architectural Requirements
 
@@ -176,6 +189,24 @@ The architecture SHALL persist enough event/run data to diagnose failures withou
 - WHEN the operator opens source health, timeline, schedule, or history views
 - THEN failing source, last error, and run linkage are available
 - AND corrective hints are displayed
+
+### Requirement: Delivered Artifact Persistence
+The architecture SHALL preserve exact delivered artifacts for non-preview runs.
+
+#### Scenario: Archived digest retrieval
+- GIVEN a completed non-preview run
+- WHEN an operator requests archived run artifacts
+- THEN the system can return the exact Telegram payload and Obsidian note written for that run
+- AND the archive survives container restarts through mounted runtime storage
+
+### Requirement: Ranking Transparency
+The architecture SHALL separate raw scoring from post-score ranking adjustments.
+
+#### Scenario: Adjusted score review
+- GIVEN a selected run item
+- WHEN the operator inspects it in review surfaces
+- THEN raw score, adjusted score, and adjustment breakdown are available
+- AND the user-facing digest score reflects the adjusted score rather than raw score alone
 
 ### Requirement: Dedicated Scheduler State
 The architecture SHALL persist scheduler state separately from ordinary run records so the operator can inspect automation posture without waiting for a new run.

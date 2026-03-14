@@ -6,7 +6,9 @@ AI Daily Digest is a local-first Python application and web console for turning 
 - Ingests content from RSS feeds, YouTube channels and queries, X inbox links, optional X selectors, and GitHub selectors.
 - Normalizes, deduplicates, scores, and selects items into `Must-read`, `Skim`, and `Videos`.
 - Uses OpenAI Responses API for agent scoring/tagging and optional summarization, with deterministic fallback behavior.
+- Applies post-score ranking adjustments for diversity, content depth, feedback bias, and soft source preferences.
 - Writes run history, source health, seen-state, timeline events, and other observability data to SQLite.
+- Archives delivered Telegram payloads, Obsidian notes, and selected run items for later review and feedback.
 - Exposes a local FastAPI control plane consumed by a Vite/React operator console.
 
 ## Current Operator Surfaces
@@ -14,9 +16,9 @@ The web console is route-based and currently includes:
 - `Dashboard`: overall posture, active run state, alerts, and quick actions
 - `Schedule`: dedicated automation cadence, quiet-hours, and scheduler status
 - `Run Center`: manual run actions and live progress
-- `Sources`: source inventory, local mutations, and source health
-- `Profile`: scoring, output, run-policy, and maintenance controls
-- `Timeline`: per-run event stream, summary, export, and notes
+- `Sources`: source inventory, preview cards, local mutations, source health, and source feedback
+- `Profile`: scoring, output, run-policy, content-depth, X-budget, and maintenance controls
+- `Timeline`: per-run event stream, summary, delivered digest review, item feedback, export, and notes
 - `History`: config snapshot ledger and rollback actions
 - `Onboarding`: first-run setup flow, preflight, source packs, preview, and activation
 
@@ -148,6 +150,7 @@ Notes:
 - `x_authors` accepts handles such as `openai` or `@openai`, plus profile URLs such as `https://x.com/openai`.
 - `x_themes` accepts free-text recent-search queries.
 - X selector ingestion is optional and controlled by `DIGEST_X_PROVIDER`. The default `inbox_only` mode uses only the manual inbox file. `x_api` enables author/theme selector fetching through the X recent-search API.
+- `x_author` discovery can promote outbound non-X links into first-class digest candidates and preserve X endorsement context when duplicates merge.
 - `github_orgs` accepts either an owner login or a GitHub owner URL. Owner ingestion includes repo updates and releases.
 
 ## Profile Configuration
@@ -158,6 +161,8 @@ Notes:
 - Must-read diversity controls
 - online Must-read quality repair controls
 - cross-run quality learning controls
+- content-depth preference and soft source-preference controls
+- X per-run cost and spend controls
 - `run_policy`
 - `schedule`
 - Telegram and Obsidian output settings
@@ -166,6 +171,10 @@ Notable fields:
 - `run_policy.default_mode`: `fresh_only`, `balanced`, `replay_recent`, or `backfill`
 - `run_policy.allow_run_override`
 - `run_policy.seen_reset_guard`: `confirm` or `disabled`
+- `content_depth_preference`: `practical`, `balanced`, or `deep_technical`
+- `trusted_sources`: soft preferred-source prior, not a raw quality boost
+- `x_cost_per_post_usd`
+- `x_max_spend_per_run_usd`
 - `schedule.enabled`
 - `schedule.cadence`: `daily` or `hourly`
 - `schedule.time_local`
@@ -229,6 +238,9 @@ Observability currently includes:
 - latest run status and live progress
 - source health based on the latest completed run
 - timeline runs, events, notes, and JSON export
+- archived delivered Telegram and Obsidian artifacts for non-preview runs
+- archived selected items with final adjusted score and adjustment context
+- item-level and source-level feedback history
 - config snapshot history and rollback
 - structured JSON logs in `logs/digest.log`
 
@@ -237,7 +249,7 @@ This data is stored in SQLite and local history files so operators can inspect f
 ## Telegram And Obsidian Output
 Telegram:
 - chunked digest messages
-- sections for `Must-read`, `Skim`, and `Videos`
+- flat ranked item cards with source, section, and final adjusted score metadata
 - admin command bot for status and source operations
 
 Obsidian:
@@ -245,6 +257,13 @@ Obsidian:
 - legacy naming: `AI Digest/YYYY-MM-DD.md`
 - stable frontmatter fields for downstream retrieval
 - `sectioned` or `source_segmented` rendering
+
+Delivered archive and feedback:
+- non-preview runs archive Telegram chunks under `.runtime/run-artifacts/<run_id>/telegram.json`
+- non-preview runs archive the rendered Obsidian note under `.runtime/run-artifacts/<run_id>/obsidian.md`
+- Timeline exposes the archived digest plus selected items so operators can review and submit feedback
+- item feedback supports `more_like_this`, `not_relevant`, `too_technical`, and `repeat_source`
+- source feedback supports `prefer_source`, `less_source`, and `mute_source`
 
 ## Telegram Admin Commands
 When `make bot` is running, authorized admins can use:
@@ -259,6 +278,8 @@ Supported runtime source types:
 - `rss`
 - `youtube_channel`
 - `youtube_query`
+- `x_author`
+- `x_theme`
 - `github_repo`
 - `github_topic`
 - `github_query`
@@ -305,6 +326,7 @@ Helper command behavior:
 Persistence across restarts:
 - the Compose services mount `config/`, `data/`, `logs/`, `.runtime/`, `obsidian-vault/`, and `digest-live.db`
 - source additions, overlay config edits, scheduler state, and run history persist across container restarts because those paths live on the host
+- Docker exports `OBSIDIAN_VAULT_PATH=/app/obsidian-vault` so containerized runs write notes into the mounted host vault instead of an internal container path
 - code changes still require rebuild/restart because application code is baked into the image
 
 The bot service uses `digest bot-health-check` for container health.
@@ -346,11 +368,14 @@ Most commonly used:
 
 ## Verification Status
 Verified against the current working tree on 2026-03-08:
-- `make test` passed (`161` backend tests)
+Verified against the current working tree on 2026-03-14:
+- `make test` passed (`201` backend tests)
 - `npm --prefix web run test` passed (`7` frontend tests)
 - `npm --prefix web run build` passed
 
 ## Known Limitations
 - External API/network conditions can still produce `partial` or `failed` runs.
 - X selector ingestion requires `DIGEST_X_PROVIDER=x_api` plus valid X API access; inbox-only remains the default.
+- Preview runs intentionally skip production delivery and archive writes.
+- Archived exact Telegram payloads are available for runs created after the archive feature shipped; older historical runs are not backfilled automatically.
 - Delivery still targets Telegram and Obsidian only.
