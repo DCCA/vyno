@@ -86,6 +86,34 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(profile.output.telegram_bot_token, "token123")
             self.assertEqual(profile.output.telegram_chat_id, "chat123")
 
+    def test_profile_obsidian_vault_env_overrides_yaml(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                "output:\n  obsidian_vault_path: /host/path\n",
+                encoding="utf-8",
+            )
+            with patch.dict(
+                "os.environ",
+                {
+                    "OBSIDIAN_VAULT_PATH": "/app/obsidian-vault",
+                },
+                clear=False,
+            ):
+                profile = load_profile(path)
+            self.assertEqual(profile.output.obsidian_vault_path, "/app/obsidian-vault")
+
+    def test_profile_obsidian_vault_uses_yaml_when_env_absent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                "output:\n  obsidian_vault_path: /host/path\n",
+                encoding="utf-8",
+            )
+            with patch.dict("os.environ", {}, clear=True):
+                profile = load_profile(path)
+            self.assertEqual(profile.output.obsidian_vault_path, "/host/path")
+
     def test_profile_loads_github_guardrails(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "profile.yaml"

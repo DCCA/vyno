@@ -6,6 +6,8 @@ services:
     container_name: digest-bot
     env_file:
       - .env
+    environment:
+      OBSIDIAN_VAULT_PATH: /app/obsidian-vault
     command:
       [
         "--sources",
@@ -52,6 +54,8 @@ services:
     container_name: digest-scheduler
     env_file:
       - .env
+    environment:
+      OBSIDIAN_VAULT_PATH: /app/obsidian-vault
     command:
       [
         "--sources",

@@ -195,8 +195,8 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         or env_telegram_chat_id,
         telegram_bot_token=str(out.get("telegram_bot_token", "")).strip()
         or env_telegram_bot_token,
-        obsidian_vault_path=str(out.get("obsidian_vault_path", "")).strip()
-        or env_obsidian_vault,
+        obsidian_vault_path=env_obsidian_vault
+        or str(out.get("obsidian_vault_path", "")).strip(),
         obsidian_folder=str(out.get("obsidian_folder", "AI Digest")).strip()
         or env_obsidian_folder
         or "AI Digest",

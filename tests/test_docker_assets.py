@@ -32,6 +32,16 @@ class TestDockerAssets(unittest.TestCase):
         self.assertIn("data/profile.local.yaml", command)
         self.assertIn("web", command)
 
+    def test_compose_services_export_obsidian_vault_override(self) -> None:
+        compose = yaml.safe_load(Path("compose.yaml").read_text(encoding="utf-8"))
+        bot_env = compose["services"]["digest-bot"]["environment"]
+        scheduler_env = compose["services"]["digest-scheduler"]["environment"]
+        self.assertEqual(bot_env["OBSIDIAN_VAULT_PATH"], "/app/obsidian-vault")
+        self.assertEqual(
+            scheduler_env["OBSIDIAN_VAULT_PATH"],
+            "/app/obsidian-vault",
+        )
+
     def test_makefile_runtime_targets_include_overlays(self) -> None:
         data = Path("Makefile").read_text(encoding="utf-8")
         self.assertRegex(
