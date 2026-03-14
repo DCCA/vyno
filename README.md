@@ -267,7 +267,7 @@ Supported runtime source types:
 Runtime-added sources persist into `data/sources.local.yaml`.
 
 ## Docker Bot Runtime
-Use Docker Compose when you want bot mode to stay up across shell exits or restarts.
+Use Docker Compose when you want the local operator stack to stay up across shell exits or restarts.
 
 Prepare runtime files:
 
@@ -282,12 +282,14 @@ Required bot env vars:
 - `TELEGRAM_ADMIN_CHAT_IDS`
 - `TELEGRAM_ADMIN_USER_IDS`
 
-Start the container:
+Default full-stack startup:
 
 ```bash
 make docker-build
 make docker-up
 ```
+
+This now starts both `digest-bot` and `digest-scheduler` so Telegram admin commands and the scheduler/web service are available together for a new local setup.
 
 Inspect runtime state:
 
@@ -296,7 +298,16 @@ make docker-ps
 make docker-logs
 ```
 
-The Compose service mounts `config/`, `data/`, `logs/`, `.runtime/`, `obsidian-vault/`, and `digest-live.db`, and uses `digest bot-health-check` for container health.
+Helper command behavior:
+- `make docker-logs` and `make docker-restart` remain bot-focused helpers.
+- `make docker-scheduler-logs`, `make docker-scheduler-ps`, and `make docker-scheduler-restart` remain scheduler-focused helpers.
+
+Persistence across restarts:
+- the Compose services mount `config/`, `data/`, `logs/`, `.runtime/`, `obsidian-vault/`, and `digest-live.db`
+- source additions, overlay config edits, scheduler state, and run history persist across container restarts because those paths live on the host
+- code changes still require rebuild/restart because application code is baked into the image
+
+The bot service uses `digest bot-health-check` for container health.
 
 Background scheduler service:
 

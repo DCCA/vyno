@@ -47,12 +47,12 @@ security-check-extended:
 	./scripts/security-check.sh extended
 
 docker-build:
-	docker compose build digest-bot
+	docker compose build digest-bot digest-scheduler
 
 docker-up:
 	mkdir -p logs .runtime obsidian-vault
 	touch digest-live.db
-	docker compose up -d digest-bot
+	docker compose up -d digest-bot digest-scheduler
 
 docker-down:
 	docker compose down
