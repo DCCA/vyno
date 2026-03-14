@@ -35,6 +35,7 @@ export function SourcesPage({
   setShowAllUnifiedSources,
   onEditUnifiedSourceRow,
   onDeleteUnifiedSourceRow,
+  onSourceFeedback,
 }: {
   notice: Notice | null | undefined
   onDismissNotice: () => void
@@ -58,6 +59,7 @@ export function SourcesPage({
   setShowAllUnifiedSources: (value: boolean | ((prev: boolean) => boolean)) => void
   onEditUnifiedSourceRow: (row: UnifiedSourceRow) => void
   onDeleteUnifiedSourceRow: (row: UnifiedSourceRow) => void
+  onSourceFeedback: (row: UnifiedSourceRow, label: "prefer_source" | "less_source" | "mute_source") => void
 }) {
   const sortedSourceRows = Object.entries(sources).sort((a, b) => a[0].localeCompare(b[0]))
   const totalSourceCount = sortedSourceRows.reduce((sum, [, values]) => sum + values.length, 0)
@@ -167,6 +169,7 @@ export function SourcesPage({
                     saving={saving}
                     onEditUnifiedSourceRow={onEditUnifiedSourceRow}
                     onDeleteUnifiedSourceRow={onDeleteUnifiedSourceRow}
+                    onSourceFeedback={onSourceFeedback}
                   />
                 ))
               ) : (
@@ -207,11 +210,13 @@ function SourcePreviewCard({
   saving,
   onEditUnifiedSourceRow,
   onDeleteUnifiedSourceRow,
+  onSourceFeedback,
 }: {
   row: UnifiedSourceRow
   saving: boolean
   onEditUnifiedSourceRow: (row: UnifiedSourceRow) => void
   onDeleteUnifiedSourceRow: (row: UnifiedSourceRow) => void
+  onSourceFeedback: (row: UnifiedSourceRow, label: "prefer_source" | "less_source" | "mute_source") => void
 }) {
   const [imageFailed, setImageFailed] = useState(false)
   const isFailing = row.health === "failing"
@@ -349,6 +354,21 @@ function SourcePreviewCard({
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => onSourceFeedback(row, "prefer_source")} disabled={saving}>
+                Prefer
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => onSourceFeedback(row, "less_source")} disabled={saving}>
+                Less
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onSourceFeedback(row, "mute_source")}
+                disabled={saving}
+                className="border-destructive/40 text-destructive hover:bg-destructive/10"
+              >
+                Mute
+              </Button>
               {row.can_edit ? (
                 <Button variant="outline" size="sm" onClick={() => onEditUnifiedSourceRow(row)} disabled={saving}>
                   Edit

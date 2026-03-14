@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
 import { fromLines, toLines } from "@/lib/console-utils"
-import type { Notice, RunPolicy, SaveAction, ScheduleStatus } from "@/app/types"
+import type { FeedbackSummary, Notice, RunPolicy, SaveAction, ScheduleStatus } from "@/app/types"
 
 type ProfileRecord = Record<string, unknown>
 type ProfileSectionId = "goal" | "focus" | "quality" | "output" | "automation"
@@ -50,6 +50,7 @@ export function ProfilePage({
   onOpenSchedule,
   onPreviewSeenReset,
   onApplySeenReset,
+  feedbackSummary,
 }: {
   notice: Notice | null | undefined
   onDismissNotice: () => void
@@ -82,6 +83,7 @@ export function ProfilePage({
   onOpenSchedule: () => void
   onPreviewSeenReset: () => void
   onApplySeenReset: () => void
+  feedbackSummary: FeedbackSummary | null
 }) {
   const [openSection, setOpenSection] = useState<ProfileSectionId>("goal")
   const [showMaintenance, setShowMaintenance] = useState(false)
@@ -113,12 +115,13 @@ export function ProfilePage({
   const summaryMode = asBoolean(profile.llm_enabled, false) ? "standard" : "lightweight"
   const qualityRepairEnabled = asBoolean(profile.quality_repair_enabled, false)
   const diversityMode = diversityModeFromValue(asNumber(profile.must_read_max_per_source, 2))
+  const depthPreference = asString(profile.content_depth_preference, "balanced")
   const localDiffCount = Object.keys(localProfileDiff).length
   const serverDiffCount = Object.keys(profileDiff).length
 
   const goalSummary = describeGoal(runPolicy.default_mode)
   const focusSummary = `${topics.length} topics, ${trustedSources.length} trusted, ${exclusions.length} excluded`
-  const qualitySummary = describeQuality(selectionMode, summaryMode, diversityMode, qualityRepairEnabled)
+  const qualitySummary = describeQuality(selectionMode, summaryMode, diversityMode, qualityRepairEnabled, depthPreference)
   const outputSummary = renderMode === "source_segmented" ? `Source-grouped notes in ${obsidianFolder}` : `Sectioned digest in ${obsidianFolder}`
   const automationSummary = scheduleEnabled
     ? scheduleCadence === "hourly"
@@ -307,6 +310,31 @@ export function ProfilePage({
                 />
               </CompactChoiceGroup>
 
+              <CompactChoiceGroup label="Technical depth" columns="3">
+                <ChoiceCard
+                  active={depthPreference === "practical"}
+                  title="Practical"
+                  description="Prefer product, applied, and less research-heavy items."
+                  detail="Useful when papers and benchmarks feel too dense."
+                  onClick={() => updateProfileField("content_depth_preference", "practical")}
+                />
+                <ChoiceCard
+                  active={depthPreference === "balanced"}
+                  title="Balanced"
+                  description="Mix practical and technical items with moderation."
+                  detail="Recommended for everyday use."
+                  badge="Recommended"
+                  onClick={() => updateProfileField("content_depth_preference", "balanced")}
+                />
+                <ChoiceCard
+                  active={depthPreference === "deep_technical"}
+                  title="Deep technical"
+                  description="Allow more papers, infra, and benchmark-heavy items."
+                  detail="Best if you want research depth over accessibility."
+                  onClick={() => updateProfileField("content_depth_preference", "deep_technical")}
+                />
+              </CompactChoiceGroup>
+
               <ToggleRow
                 label="Auto-fix weak summaries"
                 description="Repairs low-quality summaries before delivery."
@@ -315,6 +343,14 @@ export function ProfilePage({
               />
             </div>
             <InlineEffect title="Current effect" text={qualitySummary} />
+            <InlineEffect
+              title="Personalization pulse"
+              text={
+                feedbackSummary && (feedbackSummary.top_positive.length > 0 || feedbackSummary.top_negative.length > 0)
+                  ? `Top boosts: ${feedbackSummary.top_positive.slice(0, 2).map((row) => row.feature_key).join(", ") || "none"}. Top suppressions: ${feedbackSummary.top_negative.slice(0, 2).map((row) => row.feature_key).join(", ") || "none"}.`
+                  : "No explicit feedback has been captured yet. Use Timeline and Sources to teach the digest what to prefer or suppress."
+              }
+            />
           </SectionCard>
 
           <SectionCard
@@ -1019,11 +1055,18 @@ function describeQuality(
   summaryMode: "lightweight" | "standard",
   diversityMode: "source_heavy" | "balanced" | "high",
   qualityRepairEnabled: boolean,
+  depthPreference: string,
 ): string {
   const ranking = selectionMode === "smart" ? "smart ranking" : "basic rules"
   const summaries = summaryMode === "standard" ? "AI summaries" : "lightweight summaries"
   const diversity =
     diversityMode === "high" ? "high variety" : diversityMode === "balanced" ? "balanced variety" : "source-heavy must-read"
   const repair = qualityRepairEnabled ? "with auto-fix enabled" : "with auto-fix off"
-  return `${ranking}, ${summaries}, ${diversity}, ${repair}.`
+  const depth =
+    depthPreference === "practical"
+      ? "practical depth"
+      : depthPreference === "deep_technical"
+        ? "deep technical depth"
+        : "balanced depth"
+  return `${ranking}, ${summaries}, ${diversity}, ${depth}, ${repair}.`
 }

@@ -98,6 +98,7 @@ class ProfileConfig:
     quality_learning_max_offset: float = 8.0
     quality_learning_half_life_days: int = 14
     must_read_max_per_source: int = 2
+    content_depth_preference: str = "balanced"
     run_policy: RunPolicySettings = field(default_factory=RunPolicySettings)
     schedule: ScheduleSettings = field(default_factory=ScheduleSettings)
 
@@ -215,6 +216,14 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
     )
     if quality_learning_max_offset < 0:
         raise ValueError("quality_learning_max_offset must be >= 0")
+    content_depth_preference = (
+        str(data.get("content_depth_preference", "balanced")).strip().lower()
+        or "balanced"
+    )
+    if content_depth_preference not in {"practical", "balanced", "deep_technical"}:
+        raise ValueError(
+            "content_depth_preference must be one of: practical, balanced, deep_technical"
+        )
     policy_raw = data.get("run_policy", {})
     if policy_raw is None:
         policy_raw = {}
@@ -345,6 +354,7 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         must_read_max_per_source=max(
             1, int(data.get("must_read_max_per_source", 2) or 2)
         ),
+        content_depth_preference=content_depth_preference,
         run_policy=run_policy,
         schedule=schedule,
     )

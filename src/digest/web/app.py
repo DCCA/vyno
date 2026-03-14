@@ -37,6 +37,7 @@ from digest.ops.profile_registry import (
 from digest.ops.run_lock import RunLock
 from digest.ops.source_registry import (
     add_source,
+    canonicalize_source_value,
     list_sources,
     load_effective_sources,
     remove_source,
@@ -1585,6 +1586,29 @@ def create_app(settings: WebSettings):
             raise HTTPException(status_code=404, detail="run timeline not found")
         return {"summary": summary}
 
+    @app.get("/api/run-items")
+    def get_run_items(run_id: str) -> dict[str, Any]:
+        return {"items": timeline_store.list_run_items(run_id=run_id)}
+
+    @app.get("/api/run-artifacts")
+    def get_run_artifacts(run_id: str) -> dict[str, Any]:
+        artifacts = timeline_store.list_run_artifacts(run_id=run_id)
+        rows: list[dict[str, Any]] = []
+        for row in artifacts:
+            path = Path(str(row.get("storage_path") or ""))
+            content = ""
+            if path.exists():
+                try:
+                    content = path.read_text(encoding="utf-8")
+                except Exception:
+                    content = ""
+            rows.append({**row, "content": content})
+        return {"artifacts": rows}
+
+    @app.get("/api/run-artifacts/list")
+    def get_run_artifacts_list(limit: int = 50) -> dict[str, Any]:
+        return {"runs": timeline_store.list_archived_runs(limit=limit)}
+
     @app.get("/api/timeline/notes")
     def get_timeline_notes(run_id: str, limit: int = 100) -> dict[str, Any]:
         return {"notes": timeline_store.list_timeline_notes(run_id=run_id, limit=limit)}
@@ -1608,6 +1632,138 @@ def create_app(settings: WebSettings):
             actions=[str(v) for v in actions],
         )
         return {"created": bool(note_id), "id": note_id}
+
+    @app.post("/api/feedback/item")
+    def post_item_feedback(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        run_id = str(payload.get("run_id", "") or "").strip()
+        item_id = str(payload.get("item_id", "") or "").strip()
+        label = str(payload.get("label", "") or "").strip().lower()
+        comment = str(payload.get("comment", "") or "").strip()
+        actor = str(payload.get("actor", "web-admin") or "").strip() or "web-admin"
+        if not run_id or not item_id or not label:
+            raise HTTPException(status_code=400, detail="run_id, item_id, and label are required")
+        item_rows = timeline_store.list_run_items(run_id=run_id)
+        item_row = next((row for row in item_rows if str(row.get("item_id") or "") == item_id), None)
+        if item_row is None:
+            raise HTTPException(status_code=404, detail="run item not found")
+        rating = _feedback_rating_for_label(label)
+        features = _feedback_features_for_item_feedback(item_row, label=label)
+        timeline_store.add_feedback(
+            run_id=run_id,
+            item_id=item_id,
+            rating=rating,
+            label=label,
+            comment=comment,
+            target_kind="item",
+            target_key=item_id,
+            features=features,
+            actor=actor,
+        )
+        timeline_store.log_admin_action(
+            actor=actor,
+            action="item_feedback",
+            target=item_id,
+            details=json.dumps({"run_id": run_id, "label": label}, ensure_ascii=True),
+        )
+        return {"saved": True, "rating": rating}
+
+    @app.post("/api/feedback/source")
+    def post_source_feedback(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        source_type = str(payload.get("source_type", "") or "").strip().lower()
+        source_value = str(payload.get("source_value", "") or "").strip()
+        label = str(payload.get("label", "") or "").strip().lower()
+        comment = str(payload.get("comment", "") or "").strip()
+        actor = str(payload.get("actor", "web-admin") or "").strip() or "web-admin"
+        if not source_type or not source_value or not label:
+            raise HTTPException(status_code=400, detail="source_type, source_value, and label are required")
+        rating = _feedback_rating_for_label(label)
+        canonical = canonicalize_source_value(source_type, source_value)
+        if label == "mute_source":
+            updated_profile = _apply_blocked_source_preference(
+                settings,
+                source_type=source_type,
+                source_value=canonical,
+            )
+            _save_snapshot(
+                settings,
+                action="source_feedback_mute",
+                details={"source_type": source_type, "source_value": canonical},
+            )
+        else:
+            updated_profile = load_effective_profile_dict(
+                settings.profile_path,
+                settings.profile_overlay_path,
+            )
+        timeline_store.add_feedback(
+            run_id="",
+            item_id="",
+            rating=rating,
+            label=label,
+            comment=comment,
+            target_kind="source",
+            target_key=f"{source_type}:{canonical}",
+            features=_feedback_features_for_source_feedback(
+                source_type=source_type,
+                source_value=canonical,
+                label=label,
+            ),
+            actor=actor,
+        )
+        timeline_store.log_admin_action(
+            actor=actor,
+            action="source_feedback",
+            target=f"{source_type}:{canonical}",
+            details=json.dumps({"label": label}, ensure_ascii=True),
+        )
+        return {"saved": True, "rating": rating, "profile": _redact_secrets(updated_profile)}
+
+    @app.get("/api/feedback/summary")
+    def get_feedback_summary(limit: int = 10) -> dict[str, Any]:
+        summary_rows = timeline_store.feedback_summary()
+        feedback_rows = timeline_store.list_feedback(limit=500)
+        totals: dict[tuple[str, str], float] = {}
+        for row in feedback_rows:
+            features = _feedback_feature_rows_from_feedback_tuple(row)
+            try:
+                centered = max(-2.0, min(2.0, float(int(row[3]) - 3))) / 2.0
+            except Exception:
+                centered = 0.0
+            for feature in features:
+                totals[feature] = float(totals.get(feature, 0.0)) + centered
+        positive = sorted(
+            (
+                {"feature_type": key[0], "feature_key": key[1], "weight": round(value, 3)}
+                for key, value in totals.items()
+                if value > 0
+            ),
+            key=lambda row: float(row["weight"]),
+            reverse=True,
+        )[: max(1, limit)]
+        negative = sorted(
+            (
+                {"feature_type": key[0], "feature_key": key[1], "weight": round(value, 3)}
+                for key, value in totals.items()
+                if value < 0
+            ),
+            key=lambda row: float(row["weight"]),
+        )[: max(1, limit)]
+        return {
+            "ratings": [{"rating": rating, "count": count} for rating, count in summary_rows],
+            "top_positive": positive,
+            "top_negative": negative,
+            "recent": [
+                {
+                    "id": int(row[0]),
+                    "run_id": str(row[1]),
+                    "item_id": str(row[2]),
+                    "rating": int(row[3]),
+                    "label": str(row[4]),
+                    "comment": str(row[5]),
+                    "created_at": str(row[6]),
+                }
+                for row in feedback_rows[: max(1, limit)]
+            ],
+        }
 
     @app.get("/api/timeline/export")
     def get_timeline_export(
@@ -1991,6 +2147,162 @@ def _build_source_health_items(store: SQLiteStore) -> list[dict[str, Any]]:
         aggregate.values(),
         key=lambda r: (str(r["kind"]), str(r["source"])),
     )
+
+
+def _feedback_rating_for_label(label: str) -> int:
+    normalized = str(label or "").strip().lower()
+    mapping = {
+        "more_like_this": 5,
+        "prefer_source": 5,
+        "not_relevant": 2,
+        "too_technical": 1,
+        "repeat_source": 1,
+        "less_source": 2,
+        "mute_source": 1,
+    }
+    if normalized not in mapping:
+        raise HTTPException(status_code=400, detail="unsupported feedback label")
+    return mapping[normalized]
+
+
+def _feedback_features_for_item_feedback(
+    row: dict[str, Any],
+    *,
+    label: str,
+) -> list[tuple[str, str]]:
+    features: list[tuple[str, str]] = [
+        ("source", str(row.get("source_family") or "unknown").strip().lower()),
+        ("source_exact", str(row.get("source") or "").strip().lower()),
+        ("type", str(row.get("type") or "").strip().lower()),
+    ]
+    author = str(row.get("author") or "").strip().lower()
+    if author:
+        features.append(("author", author))
+    for tag in row.get("topic_tags", []) or []:
+        clean = str(tag or "").strip().lower()
+        if clean:
+            features.append(("topic", clean))
+    for tag in row.get("format_tags", []) or []:
+        clean = str(tag or "").strip().lower()
+        if clean:
+            features.append(("format", clean))
+    if label == "repeat_source":
+        features.extend(
+            feature
+            for feature in features
+            if feature[0] in {"source", "source_exact", "author", "github_org"}
+        )
+    if label == "too_technical":
+        features.append(("format", "technical"))
+    return _dedupe_feedback_features(features)
+
+
+def _feedback_features_for_source_feedback(
+    *,
+    source_type: str,
+    source_value: str,
+    label: str,
+) -> list[tuple[str, str]]:
+    st = str(source_type or "").strip().lower()
+    value = str(source_value or "").strip().lower()
+    features: list[tuple[str, str]] = []
+    if st == "x_author":
+        features.extend([("source", "x.com"), ("author", value)])
+    elif st == "github_org":
+        features.extend([("source", "github"), ("github_org", value)])
+    elif st == "github_repo":
+        owner = value.split("/", 1)[0].strip()
+        features.extend([("source", "github"), ("source_exact", f"github:{value}")])
+        if owner:
+            features.append(("github_org", owner))
+    elif st == "github_topic":
+        features.extend([("source", "github"), ("topic", value)])
+    elif st == "x_theme":
+        features.append(("topic", value))
+    elif st == "rss":
+        parsed = urlparse(value)
+        host = (parsed.netloc or "").strip().lower()
+        if host.startswith("www."):
+            host = host[4:]
+        if host:
+            features.append(("source", host))
+        features.append(("source_exact", value))
+    else:
+        features.append(("source_exact", value))
+    if label == "mute_source" and not features:
+        features.append(("source_exact", value))
+    return _dedupe_feedback_features(features)
+
+
+def _dedupe_feedback_features(
+    rows: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    seen: set[tuple[str, str]] = set()
+    out: list[tuple[str, str]] = []
+    for feature_type, feature_key in rows:
+        clean = (str(feature_type or "").strip().lower(), str(feature_key or "").strip().lower())
+        if not clean[0] or not clean[1] or clean in seen:
+            continue
+        seen.add(clean)
+        out.append(clean)
+    return out
+
+
+def _apply_blocked_source_preference(
+    settings: WebSettings,
+    *,
+    source_type: str,
+    source_value: str,
+) -> dict[str, Any]:
+    profile = load_effective_profile_dict(
+        settings.profile_path,
+        settings.profile_overlay_path,
+    )
+    source_type_key = str(source_type or "").strip().lower()
+    value = str(source_value or "").strip()
+    if source_type_key == "x_author":
+        bucket_key = "blocked_authors_x"
+    elif source_type_key == "github_org":
+        bucket_key = "blocked_orgs_github"
+    else:
+        bucket_key = "blocked_sources"
+    current = profile.get(bucket_key, [])
+    rows = [str(v or "").strip() for v in current] if isinstance(current, list) else []
+    if value not in rows:
+        rows.append(value)
+    profile[bucket_key] = rows
+    save_profile_overlay(
+        settings.profile_path,
+        settings.profile_overlay_path,
+        profile,
+    )
+    return load_effective_profile_dict(
+        settings.profile_path,
+        settings.profile_overlay_path,
+    )
+
+
+def _feedback_feature_rows_from_feedback_tuple(
+    row: tuple[Any, ...],
+) -> list[tuple[str, str]]:
+    if len(row) < 10:
+        return []
+    raw = str(row[9] or "[]")
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return []
+    if not isinstance(payload, list):
+        return []
+    out: list[tuple[str, str]] = []
+    for entry in payload:
+        if not isinstance(entry, list) or len(entry) != 2:
+            continue
+        feature_type = str(entry[0] or "").strip().lower()
+        feature_key = str(entry[1] or "").strip().lower()
+        if feature_type and feature_key:
+            out.append((feature_type, feature_key))
+    return out
 
 
 def _build_source_preview_rows(

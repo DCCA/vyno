@@ -82,6 +82,36 @@ class TestSelection(unittest.TestCase):
         )
         self.assertLessEqual(arxiv_count, 2)
 
+    def test_digest_cap_spreads_must_read_and_skim(self):
+        rows = []
+        for i in range(1, 13):
+            rows.append(_mk(i, source="https://news.ycombinator.com/rss"))
+            rows[-1].score.total = 200 - i
+        rows.append(_mk(90, source="https://simonwillison.net/atom/everything/"))
+        rows[-1].score.total = 120
+        rows.append(
+            _mk(91, source="https://www.theverge.com/rss/tech/index.xml")
+        )
+        rows[-1].score.total = 119
+        rows.append(_mk(92, source="https://www.latent.space/rss/"))
+        rows[-1].score.total = 118
+        rows.append(_mk(93, source="https://www.axios.com/technology.rss"))
+        rows[-1].score.total = 117
+
+        sections = select_digest_sections(
+            rows,
+            must_read_max_per_source=2,
+            digest_max_per_source=3,
+        )
+        combined = sections.must_read + sections.skim
+        hacker_news_count = sum(
+            1
+            for row in combined
+            if row.item.source == "https://news.ycombinator.com/rss"
+        )
+        self.assertLessEqual(hacker_news_count, 3)
+        self.assertGreaterEqual(len(sections.must_read), 4)
+
 
 if __name__ == "__main__":
     unittest.main()

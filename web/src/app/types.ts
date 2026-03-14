@@ -256,6 +256,53 @@ export type TimelineNote = {
   actions: string[]
 }
 
+export type RunItem = {
+  run_id: string
+  item_id: string
+  section: string
+  section_rank: number
+  source_family: string
+  score_total: number
+  summary: string
+  tags: string[]
+  topic_tags: string[]
+  format_tags: string[]
+  url: string
+  title: string
+  source: string
+  author: string
+  published_at: string
+  type: string
+  description: string
+}
+
+export type RunArtifact = {
+  id: number
+  run_id: string
+  channel: string
+  artifact_type: string
+  storage_path: string
+  preview_mode: boolean
+  chunk_count: number
+  created_at: string
+  content: string
+}
+
+export type FeedbackSummary = {
+  ratings: Array<{ rating: number; count: number }>
+  top_positive: Array<{ feature_type: string; feature_key: string; weight: number }>
+  top_negative: Array<{ feature_type: string; feature_key: string; weight: number }>
+  recent: Array<{
+    id: number
+    run_id: string
+    item_id: string
+    rating: number
+    label: string
+    comment: string
+    created_at: string
+  }>
+}
+
 export type RunPolicy = {
   default_mode: "fresh_only" | "balanced" | "replay_recent" | "backfill"
   allow_run_override: boolean
@@ -266,6 +313,7 @@ export type SaveAction =
   | ""
   | "source-add"
   | "source-remove"
+  | "source-feedback"
   | "onboarding-preflight"
   | "source-pack"
   | "schedule-save"
@@ -273,9 +321,11 @@ export type SaveAction =
   | "profile-diff"
   | "profile-save"
   | "run-policy-save"
+  | "profile-feedback-refresh"
   | "timeline-refresh"
   | "timeline-export"
   | "timeline-note"
+  | "timeline-item-feedback"
   | "seen-reset-preview"
   | "seen-reset-apply"
   | "rollback"

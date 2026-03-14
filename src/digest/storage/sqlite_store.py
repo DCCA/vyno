@@ -122,6 +122,32 @@ class SQLiteStore:
                     created_at TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS run_selected_items (
+                    run_id TEXT NOT NULL,
+                    item_id TEXT NOT NULL,
+                    section TEXT NOT NULL,
+                    section_rank INTEGER NOT NULL,
+                    source_family TEXT NOT NULL,
+                    score_total INTEGER NOT NULL,
+                    summary TEXT,
+                    tags_json TEXT NOT NULL,
+                    topic_tags_json TEXT NOT NULL,
+                    format_tags_json TEXT NOT NULL,
+                    PRIMARY KEY (run_id, item_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS run_artifacts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    channel TEXT NOT NULL,
+                    artifact_type TEXT NOT NULL,
+                    storage_path TEXT NOT NULL,
+                    preview_mode INTEGER NOT NULL,
+                    chunk_count INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE (run_id, channel, artifact_type)
+                );
+
                 CREATE TABLE IF NOT EXISTS admin_audit (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     actor TEXT,
@@ -212,6 +238,10 @@ class SQLiteStore:
             self._ensure_column(conn, "scores", "topic_tags_json", "TEXT")
             self._ensure_column(conn, "scores", "format_tags_json", "TEXT")
             self._ensure_column(conn, "scores", "provider", "TEXT")
+            self._ensure_column(conn, "feedback", "target_kind", "TEXT")
+            self._ensure_column(conn, "feedback", "target_key", "TEXT")
+            self._ensure_column(conn, "feedback", "features_json", "TEXT")
+            self._ensure_column(conn, "feedback", "actor", "TEXT")
 
     def _ensure_column(
         self, conn: sqlite3.Connection, table: str, column: str, col_type: str
@@ -451,6 +481,173 @@ class SQLiteStore:
                     for s in scores
                 ],
             )
+
+    def replace_run_selected_items(
+        self,
+        run_id: str,
+        selections: list[dict[str, object]],
+    ) -> None:
+        rid = run_id.strip()
+        if not rid:
+            return
+        with self._conn() as conn:
+            conn.execute("DELETE FROM run_selected_items WHERE run_id = ?", (rid,))
+            conn.executemany(
+                (
+                    "INSERT INTO run_selected_items "
+                    "(run_id, item_id, section, section_rank, source_family, score_total, summary, "
+                    "tags_json, topic_tags_json, format_tags_json) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                ),
+                [
+                    (
+                        rid,
+                        str(row.get("item_id") or "").strip(),
+                        str(row.get("section") or "").strip(),
+                        int(row.get("section_rank") or 0),
+                        str(row.get("source_family") or "").strip() or "unknown",
+                        int(row.get("score_total") or 0),
+                        str(row.get("summary") or "").strip(),
+                        json.dumps(row.get("tags") or [], ensure_ascii=True),
+                        json.dumps(row.get("topic_tags") or [], ensure_ascii=True),
+                        json.dumps(row.get("format_tags") or [], ensure_ascii=True),
+                    )
+                    for row in selections
+                    if str(row.get("item_id") or "").strip()
+                ],
+            )
+
+    def list_run_items(self, *, run_id: str) -> list[dict[str, object]]:
+        rid = run_id.strip()
+        if not rid:
+            return []
+        with self._conn() as conn:
+            rows = conn.execute(
+                (
+                    "SELECT s.run_id, s.item_id, s.section, s.section_rank, s.source_family, s.score_total, "
+                    "s.summary, s.tags_json, s.topic_tags_json, s.format_tags_json, "
+                    "i.url, i.title, i.source, i.author, i.published_at, i.type, i.description "
+                    "FROM run_selected_items s "
+                    "JOIN items i ON i.id = s.item_id "
+                    "WHERE s.run_id = ? "
+                    "ORDER BY CASE s.section "
+                    "WHEN 'must_read' THEN 0 WHEN 'skim' THEN 1 WHEN 'videos' THEN 2 ELSE 3 END, "
+                    "s.section_rank ASC"
+                ),
+                (rid,),
+            ).fetchall()
+        out: list[dict[str, object]] = []
+        for row in rows:
+            out.append(
+                {
+                    "run_id": str(row[0]),
+                    "item_id": str(row[1]),
+                    "section": str(row[2]),
+                    "section_rank": int(row[3] or 0),
+                    "source_family": str(row[4] or "unknown"),
+                    "score_total": int(row[5] or 0),
+                    "summary": str(row[6] or ""),
+                    "tags": _json_list(row[7]),
+                    "topic_tags": _json_list(row[8]),
+                    "format_tags": _json_list(row[9]),
+                    "url": str(row[10] or ""),
+                    "title": str(row[11] or ""),
+                    "source": str(row[12] or ""),
+                    "author": str(row[13] or ""),
+                    "published_at": str(row[14] or ""),
+                    "type": str(row[15] or ""),
+                    "description": str(row[16] or ""),
+                }
+            )
+        return out
+
+    def upsert_run_artifact(
+        self,
+        *,
+        run_id: str,
+        channel: str,
+        artifact_type: str,
+        storage_path: str,
+        preview_mode: bool = False,
+        chunk_count: int = 0,
+    ) -> None:
+        rid = run_id.strip()
+        if not rid:
+            return
+        now = datetime.now(tz=timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                (
+                    "INSERT INTO run_artifacts "
+                    "(run_id, channel, artifact_type, storage_path, preview_mode, chunk_count, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(run_id, channel, artifact_type) DO UPDATE SET "
+                    "storage_path=excluded.storage_path, preview_mode=excluded.preview_mode, "
+                    "chunk_count=excluded.chunk_count, created_at=excluded.created_at"
+                ),
+                (
+                    rid,
+                    channel.strip(),
+                    artifact_type.strip(),
+                    storage_path.strip(),
+                    1 if preview_mode else 0,
+                    max(0, int(chunk_count)),
+                    now,
+                ),
+            )
+
+    def list_run_artifacts(self, *, run_id: str) -> list[dict[str, object]]:
+        rid = run_id.strip()
+        if not rid:
+            return []
+        with self._conn() as conn:
+            rows = conn.execute(
+                (
+                    "SELECT id, run_id, channel, artifact_type, storage_path, preview_mode, chunk_count, created_at "
+                    "FROM run_artifacts WHERE run_id = ? ORDER BY created_at ASC, channel ASC"
+                ),
+                (rid,),
+            ).fetchall()
+        out: list[dict[str, object]] = []
+        for row in rows:
+            out.append(
+                {
+                    "id": int(row[0] or 0),
+                    "run_id": str(row[1] or ""),
+                    "channel": str(row[2] or ""),
+                    "artifact_type": str(row[3] or ""),
+                    "storage_path": str(row[4] or ""),
+                    "preview_mode": bool(row[5]),
+                    "chunk_count": int(row[6] or 0),
+                    "created_at": str(row[7] or ""),
+                }
+            )
+        return out
+
+    def list_archived_runs(self, limit: int = 50) -> list[dict[str, object]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                (
+                    "SELECT a.run_id, COALESCE(r.status, 'unknown'), COALESCE(r.started_at, MAX(a.created_at)), "
+                    "COUNT(*), MAX(a.created_at) "
+                    "FROM run_artifacts a "
+                    "LEFT JOIN runs r ON r.run_id = a.run_id "
+                    "WHERE a.preview_mode = 0 "
+                    "GROUP BY a.run_id, r.status, r.started_at "
+                    "ORDER BY MAX(a.created_at) DESC LIMIT ?"
+                ),
+                (max(1, limit),),
+            ).fetchall()
+        return [
+            {
+                "run_id": str(row[0] or ""),
+                "status": str(row[1] or "unknown"),
+                "started_at": str(row[2] or ""),
+                "artifact_count": int(row[3] or 0),
+                "archived_at": str(row[4] or ""),
+            }
+            for row in rows
+        ]
 
     def mark_seen(self, keys: list[str]) -> None:
         now = datetime.now(tz=timezone.utc).isoformat()
@@ -813,8 +1010,8 @@ class SQLiteStore:
         with self._conn() as conn:
             rows = conn.execute(
                 (
-                    "SELECT f.rating, i.source, i.type "
-                    "FROM feedback f JOIN items i ON i.id = f.item_id "
+                    "SELECT f.rating, f.features_json, i.source, i.type "
+                    "FROM feedback f LEFT JOIN items i ON i.id = f.item_id "
                     "WHERE f.created_at >= ?"
                 ),
                 (cutoff.isoformat(),),
@@ -822,20 +1019,21 @@ class SQLiteStore:
 
         sums: dict[tuple[str, str], float] = {}
         counts: Counter[tuple[str, str]] = Counter()
-        for rating_raw, source_raw, type_raw in rows:
+        for rating_raw, features_raw, source_raw, type_raw in rows:
             try:
                 rating = int(rating_raw)
             except Exception:
                 continue
             centered = max(-2.0, min(2.0, float(rating - 3))) / 2.0
-            source_key = source_family(str(source_raw or ""))
-            type_key = str(type_raw or "").strip().lower()
-            if source_key:
-                key = ("source", source_key)
-                sums[key] = float(sums.get(key, 0.0)) + centered
-                counts[key] += 1
-            if type_key:
-                key = ("type", type_key)
+            features = _json_feature_list(features_raw)
+            if not features:
+                source_key = source_family(str(source_raw or ""))
+                type_key = str(type_raw or "").strip().lower()
+                if source_key:
+                    features.append(("source", source_key))
+                if type_key:
+                    features.append(("type", type_key))
+            for key in features:
                 sums[key] = float(sums.get(key, 0.0)) + centered
                 counts[key] += 1
 
@@ -856,13 +1054,18 @@ class SQLiteStore:
         rating: int,
         label: str,
         comment: str,
+        target_kind: str = "item",
+        target_key: str = "",
+        features: list[tuple[str, str]] | None = None,
+        actor: str = "",
     ) -> None:
         now = datetime.now(tz=timezone.utc).isoformat()
         with self._conn() as conn:
             conn.execute(
                 (
-                    "INSERT INTO feedback (run_id, item_id, rating, label, comment, created_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?)"
+                    "INSERT INTO feedback "
+                    "(run_id, item_id, rating, label, comment, created_at, target_kind, target_key, features_json, actor) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 ),
                 (
                     run_id.strip(),
@@ -871,16 +1074,24 @@ class SQLiteStore:
                     label.strip(),
                     comment.strip(),
                     now,
+                    target_kind.strip() or "item",
+                    target_key.strip(),
+                    json.dumps(
+                        [[ft, fk] for ft, fk in (features or []) if ft and fk],
+                        ensure_ascii=True,
+                    ),
+                    actor.strip(),
                 ),
             )
 
     def list_feedback(
         self, limit: int = 200
-    ) -> list[tuple[int, str, str, int, str, str, str]]:
+    ) -> list[tuple[int, str, str, int, str, str, str, str, str, str, str]]:
         with self._conn() as conn:
             rows = conn.execute(
                 (
-                    "SELECT id, run_id, item_id, rating, label, comment, created_at "
+                    "SELECT id, run_id, item_id, rating, label, comment, created_at, "
+                    "target_kind, target_key, features_json, actor "
                     "FROM feedback ORDER BY created_at DESC LIMIT ?"
                 ),
                 (max(1, limit),),
@@ -1322,6 +1533,28 @@ def _json_dict(raw: object) -> dict[str, object]:
     if not isinstance(payload, dict):
         return {}
     return payload
+
+
+def _json_feature_list(raw: object) -> list[tuple[str, str]]:
+    try:
+        payload = json.loads(str(raw or "[]"))
+    except Exception:
+        return []
+    if not isinstance(payload, list):
+        return []
+    out: list[tuple[str, str]] = []
+    for row in payload:
+        if isinstance(row, list) and len(row) == 2:
+            feature_type = str(row[0] or "").strip().lower()
+            feature_key = str(row[1] or "").strip().lower()
+        elif isinstance(row, dict):
+            feature_type = str(row.get("type") or "").strip().lower()
+            feature_key = str(row.get("key") or "").strip().lower()
+        else:
+            continue
+        if feature_type and feature_key:
+            out.append((feature_type, feature_key))
+    return out
 
 
 def _timeline_run_mode(events: list[dict[str, object]]) -> dict[str, object]:

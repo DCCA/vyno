@@ -13,6 +13,8 @@ import { WorkspaceHeader } from "@/components/system/page-header"
 import { formatElapsed } from "@/lib/console-utils"
 import type {
   Notice,
+  RunArtifact,
+  RunItem,
   SaveAction,
   TimelineEvent,
   TimelineNote,
@@ -40,6 +42,8 @@ export function TimelinePage({
   onRefreshTimeline,
   onExportTimeline,
   timelineSummary,
+  timelineRunItems,
+  timelineRunArtifacts,
   timelineEvents,
   timelineSelectedEventId,
   setTimelineSelectedEventId,
@@ -50,6 +54,7 @@ export function TimelinePage({
   setTimelineNoteText,
   onAddTimelineNote,
   timelineNotes,
+  onSubmitItemFeedback,
 }: {
   notice: Notice | null | undefined
   onDismissNotice: () => void
@@ -70,6 +75,8 @@ export function TimelinePage({
   onRefreshTimeline: () => void
   onExportTimeline: () => void
   timelineSummary: TimelineSummary | null
+  timelineRunItems: RunItem[]
+  timelineRunArtifacts: RunArtifact[]
   timelineEvents: TimelineEvent[]
   timelineSelectedEventId: number
   setTimelineSelectedEventId: (value: number) => void
@@ -80,7 +87,10 @@ export function TimelinePage({
   setTimelineNoteText: (value: string) => void
   onAddTimelineNote: () => void
   timelineNotes: TimelineNote[]
+  onSubmitItemFeedback: (itemId: string, label: "more_like_this" | "not_relevant" | "too_technical" | "repeat_source") => void
 }) {
+  const telegramArtifact = timelineRunArtifacts.find((row) => row.channel === "telegram")
+  const obsidianArtifact = timelineRunArtifacts.find((row) => row.channel === "obsidian")
   return (
     <div className="space-y-4">
       <WorkspaceHeader
@@ -258,6 +268,71 @@ export function TimelinePage({
               ) : (
                 <p className="text-sm text-muted-foreground">No summary available for this run.</p>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-display">Delivered Digest Review</CardTitle>
+              <CardDescription>Review the archived digest exactly as rendered and capture item-level feedback for future runs.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold">Telegram archive</p>
+                  {telegramArtifact ? (
+                    <pre className="max-h-[280px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs whitespace-pre-wrap">
+                      {telegramArtifact.content}
+                    </pre>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No archived Telegram payload for this run.</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold">Obsidian archive</p>
+                  {obsidianArtifact ? (
+                    <pre className="max-h-[280px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs whitespace-pre-wrap">
+                      {obsidianArtifact.content}
+                    </pre>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No archived Obsidian note for this run.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-sm font-semibold">Selected items</p>
+                {timelineRunItems.length > 0 ? (
+                  timelineRunItems.map((row) => (
+                    <div key={`${row.run_id}:${row.item_id}`} className="rounded-md border bg-muted/10 p-3">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <Badge variant="secondary">{row.section}</Badge>
+                        <span>rank {row.section_rank}</span>
+                        <span>source {row.source_family}</span>
+                        <span>score {row.score_total}</span>
+                      </div>
+                      <p className="mt-2 text-sm font-semibold">{row.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{row.summary || row.description || row.url}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" onClick={() => onSubmitItemFeedback(row.item_id, "more_like_this")}>
+                          More like this
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => onSubmitItemFeedback(row.item_id, "not_relevant")}>
+                          Not relevant
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => onSubmitItemFeedback(row.item_id, "too_technical")}>
+                          Too technical
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => onSubmitItemFeedback(row.item_id, "repeat_source")}>
+                          Repeat source
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No selected items are archived for this run yet.</p>
+                )}
+              </div>
             </CardContent>
           </Card>
 

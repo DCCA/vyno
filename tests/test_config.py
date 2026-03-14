@@ -144,6 +144,16 @@ class TestConfig(unittest.TestCase):
             profile = load_profile(path)
             self.assertEqual(profile.output.render_mode, "source_segmented")
 
+    def test_profile_loads_content_depth_preference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                "content_depth_preference: practical\n",
+                encoding="utf-8",
+            )
+            profile = load_profile(path)
+            self.assertEqual(profile.content_depth_preference, "practical")
+
     def test_profile_loads_llm_coverage_controls(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "profile.yaml"
@@ -173,6 +183,16 @@ class TestConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "profile.yaml"
             path.write_text("quality_repair_threshold: 120\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_profile(path)
+
+    def test_profile_rejects_invalid_content_depth_preference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                "content_depth_preference: impossible\n",
+                encoding="utf-8",
+            )
             with self.assertRaises(ValueError):
                 load_profile(path)
 

@@ -27,7 +27,7 @@ from digest.models import Item, RunReport, ScoredItem
 from digest.pipeline.dedupe import dedupe_and_cluster
 from digest.pipeline.github_issue_impact import evaluate_github_issue_impact
 from digest.pipeline.normalize import normalize_items
-from digest.pipeline.scoring import is_blocked, score_item
+from digest.pipeline.scoring import content_depth_adjustment, is_blocked, score_item
 from digest.pipeline.selection import rank_scored_items, select_digest_sections
 from digest.pipeline.summarize import FallbackSummarizer
 from digest.quality.online_repair import (
@@ -36,6 +36,7 @@ from digest.quality.online_repair import (
     compute_repair_feature_deltas,
     item_features,
     rebuild_sections_with_repair,
+    source_family,
 )
 from digest.ops.source_registry import source_key_for
 from digest.storage.sqlite_store import SQLiteStore
@@ -713,6 +714,8 @@ def run_digest(
     quality_model = ""
 
     rank_overrides: dict[str, float] | None = None
+    depth_adjustment_count = 0
+    depth_adjustment_total = 0.0
     if profile.quality_learning_enabled and scored_items:
         prior_weights = store.quality_prior_weights(
             half_life_days=profile.quality_learning_half_life_days,
@@ -744,12 +747,46 @@ def run_digest(
             feedback_feature_count=len(feedback_weights),
         )
 
+    if scored_items:
+        depth_adjustments: dict[str, float] = {}
+        for scored in scored_items:
+            adjustment = float(content_depth_adjustment(scored.item, profile))
+            if adjustment == 0:
+                continue
+            depth_adjustments[scored.item.id] = adjustment
+            depth_adjustment_count += 1
+            depth_adjustment_total += adjustment
+        if depth_adjustments:
+            if rank_overrides is None:
+                rank_overrides = {}
+            for scored in scored_items:
+                base = float(rank_overrides.get(scored.item.id, scored.score.total))
+                rank_overrides[scored.item.id] = base + depth_adjustments.get(
+                    scored.item.id, 0.0
+                )
+            log_event(
+                run_logger,
+                "info",
+                "content_depth",
+                "Applied content depth preference",
+                preference=profile.content_depth_preference,
+                adjusted_item_count=depth_adjustment_count,
+                adjustment_total=round(depth_adjustment_total, 2),
+            )
+            emit_progress(
+                "content_depth",
+                "Applied content depth preference",
+                preference=profile.content_depth_preference,
+                adjusted_item_count=depth_adjustment_count,
+            )
+
     ranked_items = rank_scored_items(scored_items, rank_overrides=rank_overrides)
     ranked_non_videos = [si for si in ranked_items if si.item.type != "video"]
     sections = select_digest_sections(
         scored_items,
         rank_overrides=rank_overrides,
         must_read_max_per_source=profile.must_read_max_per_source,
+        digest_max_per_source=max(2, profile.must_read_max_per_source + 1),
     )
 
     if profile.quality_repair_enabled and ranked_non_videos and sections.must_read:
@@ -1238,6 +1275,29 @@ def run_digest(
     store.upsert_items(normalized)
     store.link_source_items(run_id=run_id, links=source_links)
     store.insert_scores(run_id, scores)
+    store.replace_run_selected_items(
+        run_id,
+        _selected_item_rows(
+            must_read=sections.must_read,
+            skim=sections.skim,
+            videos=sections.videos,
+        ),
+    )
+    if not preview_mode:
+        artifact_rows = _archive_run_artifacts(
+            run_id,
+            telegram_messages=telegram_messages,
+            note=note,
+        )
+        for row in artifact_rows:
+            store.upsert_run_artifact(
+                run_id=run_id,
+                channel=str(row["channel"]),
+                artifact_type=str(row["artifact_type"]),
+                storage_path=str(row["storage_path"]),
+                preview_mode=False,
+                chunk_count=int(row.get("chunk_count") or 0),
+            )
     store.mark_seen([i.url or i.hash for i in candidate_items])
     store.finish_run(run_id, status, source_errors, summary_errors)
     log_event(
@@ -1271,6 +1331,8 @@ def run_digest(
         max_llm_requests_per_run=max_llm_requests_per_run,
         github_issue_kept_high_impact=github_issue_kept_high_impact,
         github_issue_dropped_low_impact=github_issue_dropped_low_impact,
+        depth_adjustment_count=depth_adjustment_count,
+        content_depth_preference=profile.content_depth_preference,
     )
     emit_progress(
         "run_finish",
@@ -1284,6 +1346,7 @@ def run_digest(
         max_llm_requests_per_run=max_llm_requests_per_run,
         github_issue_kept_high_impact=github_issue_kept_high_impact,
         github_issue_dropped_low_impact=github_issue_dropped_low_impact,
+        depth_adjustment_count=depth_adjustment_count,
     )
 
     return RunReport(
@@ -1354,6 +1417,95 @@ def _write_latest_telegram_artifact(run_id: str, messages: list[str]) -> None:
         "updated_at_utc": datetime.now(timezone.utc).isoformat(),
     }
     path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
+
+
+def _archive_root() -> Path:
+    root = Path(".runtime/run-artifacts")
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _archive_run_artifacts(
+    run_id: str,
+    *,
+    telegram_messages: list[str],
+    note: str,
+) -> list[dict[str, object]]:
+    run_dir = _archive_root() / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    telegram_path = run_dir / "telegram.json"
+    telegram_path.write_text(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "chunk_count": len(telegram_messages),
+                "messages": list(telegram_messages),
+                "archived_at_utc": datetime.now(timezone.utc).isoformat(),
+            },
+            ensure_ascii=True,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    obsidian_path = run_dir / "obsidian.md"
+    obsidian_path.write_text(note, encoding="utf-8")
+
+    return [
+        {
+            "channel": "telegram",
+            "artifact_type": "chunks",
+            "storage_path": str(telegram_path),
+            "chunk_count": len(telegram_messages),
+        },
+        {
+            "channel": "obsidian",
+            "artifact_type": "note",
+            "storage_path": str(obsidian_path),
+            "chunk_count": 1 if note else 0,
+        },
+    ]
+
+
+def _selected_item_rows(
+    *,
+    must_read: list[ScoredItem],
+    skim: list[ScoredItem],
+    videos: list[ScoredItem],
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for section_name, items in (
+        ("must_read", must_read),
+        ("skim", skim),
+        ("videos", videos),
+    ):
+        for idx, scored in enumerate(items, start=1):
+            summary = ""
+            if scored.summary is not None:
+                summary = str(scored.summary.tldr or "").strip()
+                if not summary:
+                    summary = " ".join(
+                        str(part or "").strip()
+                        for part in scored.summary.key_points[:2]
+                        if str(part or "").strip()
+                    ).strip()
+            if not summary:
+                summary = str(scored.item.description or "").strip()
+            rows.append(
+                {
+                    "item_id": scored.item.id,
+                    "section": section_name,
+                    "section_rank": idx,
+                    "source_family": source_family(scored.item.source),
+                    "score_total": scored.score.total,
+                    "summary": summary,
+                    "tags": list(scored.score.tags),
+                    "topic_tags": list(scored.score.topic_tags),
+                    "format_tags": list(scored.score.format_tags),
+                }
+            )
+    return rows
 
 
 def _score_with_retries(

@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from digest.models import Item
 from digest.storage.sqlite_store import SQLiteStore
 from digest.web.app import WebSettings, create_app
 
@@ -49,6 +50,49 @@ class TestWebTimeline(unittest.TestCase):
                     "video_count": 0,
                 },
             )
+            artifact_dir = tmp_path / ".runtime" / "run-artifacts" / run_id
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            telegram_artifact = artifact_dir / "telegram.json"
+            telegram_artifact.write_text('["chunk one", "chunk two"]', encoding="utf-8")
+            store.upsert_items(
+                [
+                    Item(
+                        id="item-1",
+                        url="https://example.com/post",
+                        title="Benchmark roundup",
+                        source="https://example.com/feed.xml",
+                        author="alice",
+                        published_at=None,
+                        type="article",
+                        raw_text="benchmark benchmark inference latency",
+                        description="A technical benchmark item",
+                    )
+                ]
+            )
+            store.replace_run_selected_items(
+                run_id,
+                [
+                    {
+                        "item_id": "item-1",
+                        "section": "must_read",
+                        "section_rank": 1,
+                        "source_family": "example.com",
+                        "score_total": 88,
+                        "summary": "Review this benchmark article",
+                        "tags": ["benchmark", "technical"],
+                        "topic_tags": ["infra"],
+                        "format_tags": ["technical"],
+                    }
+                ],
+            )
+            store.upsert_run_artifact(
+                run_id=run_id,
+                channel="telegram",
+                artifact_type="message_bundle",
+                storage_path=str(telegram_artifact),
+                preview_mode=False,
+                chunk_count=2,
+            )
             store.finish_run(run_id, "success", [], [])
             store.mark_seen(["seen-a", "seen-b"])
             yield create_app(settings), run_id
@@ -92,6 +136,17 @@ class TestWebTimeline(unittest.TestCase):
             self.assertEqual(summary["summary"]["run_id"], run_id)
             self.assertEqual(summary["summary"]["event_count"], 2)
 
+            run_items = _route("/api/run-items", "GET").endpoint(run_id=run_id)
+            self.assertEqual(len(run_items["items"]), 1)
+            self.assertEqual(run_items["items"][0]["item_id"], "item-1")
+
+            run_artifacts = _route("/api/run-artifacts", "GET").endpoint(run_id=run_id)
+            self.assertEqual(len(run_artifacts["artifacts"]), 1)
+            self.assertIn("chunk one", run_artifacts["artifacts"][0]["content"])
+
+            archived_runs = _route("/api/run-artifacts/list", "GET").endpoint(limit=10)
+            self.assertEqual(archived_runs["runs"][0]["run_id"], run_id)
+
             created = _route("/api/timeline/notes", "POST").endpoint(
                 payload={"run_id": run_id, "note": "Good run", "author": "ops"}
             )
@@ -129,6 +184,29 @@ class TestWebTimeline(unittest.TestCase):
             )
             self.assertTrue(applied["applied"])
             self.assertIn("deleted_count", applied)
+
+            item_feedback = _route("/api/feedback/item", "POST").endpoint(
+                payload={
+                    "run_id": run_id,
+                    "item_id": "item-1",
+                    "label": "too_technical",
+                }
+            )
+            self.assertTrue(item_feedback["saved"])
+            self.assertEqual(item_feedback["rating"], 1)
+
+            source_feedback = _route("/api/feedback/source", "POST").endpoint(
+                payload={
+                    "source_type": "rss",
+                    "source_value": "https://example.com/feed.xml",
+                    "label": "less_source",
+                }
+            )
+            self.assertTrue(source_feedback["saved"])
+
+            feedback_summary = _route("/api/feedback/summary", "GET").endpoint(limit=10)
+            self.assertTrue(feedback_summary["ratings"])
+            self.assertEqual(feedback_summary["recent"][0]["label"], "less_source")
 
 
 if __name__ == "__main__":

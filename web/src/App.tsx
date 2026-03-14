@@ -28,6 +28,7 @@ import {
 import { navItemsForLifecycle, surfaceForPathname, surfacePaths } from "@/app/navigation"
 import type {
   ConsoleSurface,
+  FeedbackSummary,
   HistoryItem,
   Notice,
   NoticeScope,
@@ -40,6 +41,8 @@ import type {
   ScheduleConfig,
   ScheduleStatus,
   SaveAction,
+  RunArtifact,
+  RunItem,
   SourceHealthItem,
   SourceMap,
   SourcePack,
@@ -117,6 +120,8 @@ function App() {
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([])
   const [timelineSummary, setTimelineSummary] = useState<TimelineSummary | null>(null)
   const [timelineNotes, setTimelineNotes] = useState<TimelineNote[]>([])
+  const [timelineRunItems, setTimelineRunItems] = useState<RunItem[]>([])
+  const [timelineRunArtifacts, setTimelineRunArtifacts] = useState<RunArtifact[]>([])
   const [timelineRunId, setTimelineRunId] = useState("")
   const [timelineStageFilter, setTimelineStageFilter] = useState("all")
   const [timelineSeverityFilter, setTimelineSeverityFilter] = useState("all")
@@ -125,6 +130,7 @@ function App() {
   const [timelineSelectedEventId, setTimelineSelectedEventId] = useState(0)
   const [timelineNoteAuthor, setTimelineNoteAuthor] = useState("admin")
   const [timelineNoteText, setTimelineNoteText] = useState("")
+  const [feedbackSummary, setFeedbackSummary] = useState<FeedbackSummary | null>(null)
   const [globalNotice, setGlobalNotice] = useState<Notice | null>(null)
   const [localNotices, setLocalNotices] = useState<Partial<Record<Exclude<NoticeScope, "global">, Notice>>>({})
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -293,17 +299,23 @@ function App() {
                 ? "Computing profile diff..."
                 : saveAction === "profile-save"
                   ? "Saving profile overlay..."
-                  : saveAction === "run-policy-save"
-                    ? "Saving run policy..."
-                    : saveAction === "timeline-refresh"
-                      ? "Refreshing timeline..."
+                    : saveAction === "run-policy-save"
+                      ? "Saving run policy..."
+                      : saveAction === "profile-feedback-refresh"
+                        ? "Refreshing personalization summary..."
+                      : saveAction === "timeline-refresh"
+                        ? "Refreshing timeline..."
                       : saveAction === "timeline-export"
                         ? "Exporting timeline..."
                         : saveAction === "timeline-note"
                           ? "Saving timeline note..."
-                          : saveAction === "seen-reset-preview"
-                            ? "Previewing seen reset..."
-                            : saveAction === "seen-reset-apply"
+                          : saveAction === "timeline-item-feedback"
+                            ? "Saving item feedback..."
+                            : saveAction === "source-feedback"
+                              ? "Saving source feedback..."
+                            : saveAction === "seen-reset-preview"
+                              ? "Previewing seen reset..."
+                              : saveAction === "seen-reset-apply"
                               ? "Resetting seen history..."
                               : saveAction === "rollback"
                                 ? "Rolling back to snapshot..."
@@ -368,6 +380,7 @@ function App() {
         api<{ schedule_status: ScheduleStatus }>("/api/schedule/status"),
         api<{ runs: TimelineRun[] }>("/api/timeline/runs?limit=50"),
         api<{ run_policy: RunPolicy }>("/api/config/run-policy"),
+        api<FeedbackSummary>("/api/feedback/summary"),
       ]
       const shouldRefreshSourcePreviews = currentSurface === "sources"
       if (shouldRefreshSourcePreviews) {
@@ -375,7 +388,7 @@ function App() {
       }
       void Promise.all(requests)
         .then((results) => {
-          const [status, progress, health, onboardingStatus, scheduleConfigData, scheduleData, timelineData, policyData, previewData] =
+          const [status, progress, health, onboardingStatus, scheduleConfigData, scheduleData, timelineData, policyData, feedbackData, previewData] =
             results as [
               RunStatus,
               RunProgress,
@@ -385,6 +398,7 @@ function App() {
               { schedule_status: ScheduleStatus },
               { runs: TimelineRun[] },
               { run_policy: RunPolicy },
+              FeedbackSummary,
               { items: UnifiedSourceRow[] } | undefined,
             ]
           setRunStatus(status)
@@ -404,6 +418,7 @@ function App() {
             setRunPolicy(policyData.run_policy)
             setRunPolicyBaseline(policyData.run_policy)
           }
+          setFeedbackSummary(feedbackData)
           if (!timelineRunId && timelineData.runs.length > 0) {
             setTimelineRunId(timelineData.runs[0].run_id)
           }
@@ -566,6 +581,7 @@ function App() {
         sourcePackData,
         timelineData,
         policyData,
+        feedbackData,
       ] = await Promise.all([
         api<{ types: string[] }>("/api/config/source-types"),
         api<{ sources: SourceMap }>("/api/config/sources"),
@@ -581,6 +597,7 @@ function App() {
         api<{ packs: SourcePack[] }>("/api/onboarding/source-packs"),
         api<{ runs: TimelineRun[] }>("/api/timeline/runs?limit=50"),
         api<{ run_policy: RunPolicy }>("/api/config/run-policy"),
+        api<FeedbackSummary>("/api/feedback/summary"),
       ])
       const preserveProfileWorkspace = options?.preserveProfileWorkspace ?? true
       const preserveRunPolicyWorkspace = options?.preserveRunPolicyWorkspace ?? true
@@ -610,6 +627,7 @@ function App() {
         setRunPolicy(policyData.run_policy)
         setRunPolicyBaseline(policyData.run_policy)
       }
+      setFeedbackSummary(feedbackData)
       setTimelineRuns(timelineData.runs)
       if (timelineData.runs.length > 0) {
         const preferred = timelineRunId && timelineData.runs.some((row) => row.run_id === timelineRunId)
@@ -898,6 +916,7 @@ function App() {
       setRunPolicy(result.run_policy)
       setRunPolicyBaseline(result.run_policy)
       setScopedNotice(scope, "ok", "Run policy saved.")
+      await refreshFeedbackSummary({ silent: true })
     } catch (error) {
       setScopedNotice(scope, "error", String(error))
     } finally {
@@ -1057,6 +1076,8 @@ function App() {
       setTimelineEvents([])
       setTimelineSummary(null)
       setTimelineNotes([])
+      setTimelineRunItems([])
+      setTimelineRunArtifacts([])
       setTimelineSelectedEventId(0)
       return
     }
@@ -1069,10 +1090,12 @@ function App() {
       const stageQuery = timelineStageFilter === "all" ? "" : `&stage=${encodeURIComponent(timelineStageFilter)}`
       const severityQuery = timelineSeverityFilter === "all" ? "" : `&severity=${encodeURIComponent(timelineSeverityFilter)}`
       const orderQuery = `&order=${encodeURIComponent(timelineOrder)}`
-      const [eventsResult, notesResult, summaryResult] = await Promise.all([
+      const [eventsResult, notesResult, summaryResult, itemsResult, artifactsResult] = await Promise.all([
         api<{ events: TimelineEvent[] }>(`/api/timeline/events?run_id=${runIdQuery}&limit=400${stageQuery}${severityQuery}${orderQuery}`),
         api<{ notes: TimelineNote[] }>(`/api/timeline/notes?run_id=${runIdQuery}&limit=200`),
         api<{ summary: TimelineSummary }>(`/api/timeline/summary?run_id=${runIdQuery}`).catch(() => ({ summary: null as TimelineSummary | null })),
+        api<{ items: RunItem[] }>(`/api/run-items?run_id=${runIdQuery}`),
+        api<{ artifacts: RunArtifact[] }>(`/api/run-artifacts?run_id=${runIdQuery}`),
       ])
       const nextEvents = eventsResult.events ?? []
       setTimelineEvents(nextEvents)
@@ -1083,6 +1106,8 @@ function App() {
       })
       setTimelineNotes(notesResult.notes ?? [])
       setTimelineSummary(summaryResult.summary ?? null)
+      setTimelineRunItems(itemsResult.items ?? [])
+      setTimelineRunArtifacts(artifactsResult.artifacts ?? [])
     } catch (error) {
       setScopedNotice("timeline", "error", String(error))
     } finally {
@@ -1137,6 +1162,71 @@ function App() {
       setScopedNotice("timeline", "ok", "Timeline note saved.")
     } catch (error) {
       setScopedNotice("timeline", "error", String(error))
+    } finally {
+      setSaveAction("")
+      setSaving(false)
+    }
+  }
+
+  async function refreshFeedbackSummary(options?: { silent?: boolean }) {
+    if (!options?.silent) {
+      setSaveAction("profile-feedback-refresh")
+      setSaving(true)
+    }
+    try {
+      const result = await api<FeedbackSummary>("/api/feedback/summary")
+      setFeedbackSummary(result)
+    } catch (error) {
+      setScopedNotice("profile", "error", String(error))
+    } finally {
+      if (!options?.silent) {
+        setSaveAction("")
+        setSaving(false)
+      }
+    }
+  }
+
+  async function submitItemFeedback(itemId: string, label: string) {
+    if (!timelineRunId || !itemId) {
+      setScopedNotice("timeline", "error", "Select a run item before sending feedback.")
+      return
+    }
+    setSaveAction("timeline-item-feedback")
+    setSaving(true)
+    try {
+      await api("/api/feedback/item", {
+        method: "POST",
+        body: JSON.stringify({ run_id: timelineRunId, item_id: itemId, label }),
+      })
+      await refreshFeedbackSummary({ silent: true })
+      setScopedNotice("timeline", "ok", "Item feedback saved.")
+    } catch (error) {
+      setScopedNotice("timeline", "error", String(error))
+    } finally {
+      setSaveAction("")
+      setSaving(false)
+    }
+  }
+
+  async function submitSourceFeedback(row: UnifiedSourceRow, label: string) {
+    setSaveAction("source-feedback")
+    setSaving(true)
+    try {
+      await api("/api/feedback/source", {
+        method: "POST",
+        body: JSON.stringify({
+          source_type: row.type,
+          source_value: row.source,
+          label,
+        }),
+      })
+      await refreshAll({ preserveProfileWorkspace: false, preserveRunPolicyWorkspace: false })
+      await refreshFeedbackSummary({ silent: true })
+      const verb =
+        label === "mute_source" ? "muted" : label === "prefer_source" ? "preferred" : "down-ranked"
+      setScopedNotice("sources", "ok", `Source ${verb}: ${row.source}`)
+    } catch (error) {
+      setScopedNotice("sources", "error", String(error))
     } finally {
       setSaveAction("")
       setSaving(false)
@@ -1510,6 +1600,7 @@ function App() {
                       setShowAllUnifiedSources={setShowAllUnifiedSources}
                       onEditUnifiedSourceRow={editUnifiedSourceRow}
                       onDeleteUnifiedSourceRow={(row) => void deleteUnifiedSourceRow(row)}
+                      onSourceFeedback={(row, label) => void submitSourceFeedback(row, label)}
                     />
                   }
                 />
@@ -1548,6 +1639,7 @@ function App() {
                       onOpenSchedule={() => navigateToSurface("schedule")}
                       onPreviewSeenReset={() => void previewSeenReset()}
                       onApplySeenReset={() => void applySeenReset()}
+                      feedbackSummary={feedbackSummary}
                     />
                   }
                 />
@@ -1595,6 +1687,8 @@ function App() {
                       onRefreshTimeline={() => void refreshTimeline()}
                       onExportTimeline={() => void exportTimeline()}
                       timelineSummary={timelineSummary}
+                      timelineRunItems={timelineRunItems}
+                      timelineRunArtifacts={timelineRunArtifacts}
                       timelineEvents={timelineEvents}
                       timelineSelectedEventId={timelineSelectedEventId}
                       setTimelineSelectedEventId={setTimelineSelectedEventId}
@@ -1605,6 +1699,7 @@ function App() {
                       setTimelineNoteText={setTimelineNoteText}
                       onAddTimelineNote={() => void addTimelineNote()}
                       timelineNotes={timelineNotes}
+                      onSubmitItemFeedback={(itemId, label) => void submitItemFeedback(itemId, label)}
                     />
                   }
                 />

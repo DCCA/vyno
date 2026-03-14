@@ -1,7 +1,9 @@
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
+from digest.models import Item
 from digest.storage.sqlite_store import SQLiteStore
 
 
@@ -196,6 +198,79 @@ class TestTimelineStore(unittest.TestCase):
                 last_item_id="22222",
             )
             self.assertEqual(store.get_x_cursor("x_author", "openai"), "def-next")
+
+    def test_run_archive_and_feedback_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            artifact = Path(tmp) / "telegram.json"
+            artifact.write_text('["hello"]', encoding="utf-8")
+            store = SQLiteStore(str(db))
+            run_id = "run-archive"
+            store.start_run(run_id, "2026-03-01T00:00:00+00:00", "2026-03-01T01:00:00+00:00")
+            store.upsert_items(
+                [
+                    Item(
+                        id="item-1",
+                        url="https://example.com/item-1",
+                        title="Inference benchmark notes",
+                        source="https://example.com/feed.xml",
+                        author="alice",
+                        published_at=datetime.fromisoformat("2026-03-01T00:00:00+00:00"),
+                        type="article",
+                        raw_text="Benchmark coverage for model inference latency",
+                        description="A benchmark-heavy article",
+                    )
+                ]
+            )
+            store.replace_run_selected_items(
+                run_id,
+                [
+                    {
+                        "item_id": "item-1",
+                        "section": "must_read",
+                        "section_rank": 1,
+                        "source_family": "example.com",
+                        "score_total": 91,
+                        "summary": "Strong benchmark-heavy item",
+                        "tags": ["benchmark", "technical"],
+                        "topic_tags": ["infra"],
+                        "format_tags": ["technical"],
+                    }
+                ],
+            )
+            store.upsert_run_artifact(
+                run_id=run_id,
+                channel="telegram",
+                artifact_type="message_bundle",
+                storage_path=str(artifact),
+                preview_mode=False,
+                chunk_count=1,
+            )
+            store.add_feedback(
+                run_id=run_id,
+                item_id="item-1",
+                rating=1,
+                label="too_technical",
+                comment="too dense",
+                target_kind="item",
+                target_key="item-1",
+                features=[("technicality", "high"), ("source", "example.com")],
+                actor="tester",
+            )
+
+            run_items = store.list_run_items(run_id=run_id)
+            artifacts = store.list_run_artifacts(run_id=run_id)
+            archived_runs = store.list_archived_runs(limit=10)
+            summary = store.feedback_summary()
+            bias = store.feedback_feature_bias()
+
+            self.assertEqual(len(run_items), 1)
+            self.assertEqual(run_items[0]["item_id"], "item-1")
+            self.assertEqual(len(artifacts), 1)
+            self.assertEqual(artifacts[0]["channel"], "telegram")
+            self.assertEqual(archived_runs[0]["run_id"], run_id)
+            self.assertEqual(summary[0], (1, 1))
+            self.assertLess(bias[("technicality", "high")], 0.0)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,23 @@ AI_KEYWORDS = {
     "research",
 }
 CLICKBAIT = {"insane", "shocking", "secret", "10x", "unbelievable"}
+TECHNICAL_KEYWORDS = {
+    "arxiv",
+    "benchmark",
+    "kernel",
+    "latency",
+    "kv cache",
+    "throughput",
+    "cuda",
+    "inference engine",
+    "memory bandwidth",
+    "quantization",
+    "distillation",
+    "training dynamics",
+    "optimization",
+    "gradient",
+    "retrieval benchmark",
+}
 
 
 def _contains_any(text: str, words: list[str] | set[str]) -> int:
@@ -82,6 +99,42 @@ def is_blocked(item: Item, profile: ProfileConfig) -> bool:
     return False
 
 
+def content_depth_adjustment(item: Item, profile: ProfileConfig) -> int:
+    preference = str(getattr(profile, "content_depth_preference", "balanced") or "").strip().lower()
+    if preference not in {"practical", "balanced", "deep_technical"}:
+        preference = "balanced"
+    technicality = technicality_level(item)
+    if technicality == "high":
+        if preference == "practical":
+            return -8
+        if preference == "balanced":
+            return -3
+        return 4
+    if technicality == "medium":
+        if preference == "practical":
+            return -4
+        if preference == "deep_technical":
+            return 2
+    return 0
+
+
+def technicality_level(item: Item) -> str:
+    text = f"{item.title} {item.description} {item.raw_text}".lower()
+    signals = 0
+    if item.source.startswith("https://arxiv.org") or item.source.startswith("http://arxiv.org"):
+        signals += 3
+    if item.type in {"github_issue", "github_pr", "github_repo"}:
+        signals += 1
+    signals += _contains_any(text, TECHNICAL_KEYWORDS)
+    if any(token in text for token in {"paper", "ablation", "sota", "state of the art"}):
+        signals += 1
+    if signals >= 4:
+        return "high"
+    if signals >= 2:
+        return "medium"
+    return "low"
+
+
 def _github_owner(source: str) -> str:
     # source format: github:<owner>/<repo> or github:search
     if not source.startswith("github:"):
@@ -121,6 +174,8 @@ def _rule_tags(item: Item) -> tuple[list[str], list[str], list[str]]:
         format_tags.append("benchmark")
     if any(k in text for k in ["paper", "arxiv"]):
         format_tags.append("paper")
+    if technicality_level(item) != "low":
+        format_tags.append("technical")
     if any(k in text for k in ["release", "launch", "announced"]):
         format_tags.append("release-note")
     if any(k in text for k in ["opinion", "thoughts"]):

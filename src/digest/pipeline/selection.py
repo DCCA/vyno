@@ -29,13 +29,18 @@ def select_digest_sections(
     *,
     rank_overrides: dict[str, float] | None = None,
     must_read_max_per_source: int = 2,
+    digest_max_per_source: int = 3,
 ) -> DigestSections:
     ranked = rank_scored_items(scored_items, rank_overrides=rank_overrides)
     videos = [i for i in ranked if i.item.type == "video"][:DIGEST_VIDEO_LIMIT]
     non_videos = [i for i in ranked if i.item.type != "video"]
     must_read = _select_must_read(non_videos, max_per_source=must_read_max_per_source)
     must_read_ids = {item.item.id for item in must_read}
-    skim = [i for i in non_videos if i.item.id not in must_read_ids][:DIGEST_SKIM_LIMIT]
+    skim = _select_skim(
+        [i for i in non_videos if i.item.id not in must_read_ids],
+        selected=must_read,
+        max_per_source=digest_max_per_source,
+    )
 
     total = must_read + skim + videos
     total = total[:DIGEST_TOTAL_LIMIT]
@@ -77,6 +82,36 @@ def _select_must_read(
             break
 
     return selected
+
+
+def _select_skim(
+    candidates: list[ScoredItem],
+    *,
+    selected: list[ScoredItem],
+    max_per_source: int,
+) -> list[ScoredItem]:
+    if max_per_source <= 0:
+        return candidates[:DIGEST_SKIM_LIMIT]
+
+    selected_ids = {row.item.id for row in selected}
+    counts: dict[str, int] = {}
+    for row in selected:
+        source = _source_bucket(row.item.source)
+        counts[source] = counts.get(source, 0) + 1
+
+    skim: list[ScoredItem] = []
+    for scored in candidates:
+        if scored.item.id in selected_ids:
+            continue
+        source = _source_bucket(scored.item.source)
+        if counts.get(source, 0) >= max_per_source:
+            continue
+        skim.append(scored)
+        counts[source] = counts.get(source, 0) + 1
+        if len(skim) >= DIGEST_SKIM_LIMIT:
+            return skim
+
+    return skim
 
 
 def _source_bucket(raw: str) -> str:

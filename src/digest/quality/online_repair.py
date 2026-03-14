@@ -230,8 +230,14 @@ def compute_repair_feature_deltas(
 def item_features(scored: ScoredItem) -> list[FeatureKey]:
     features: list[FeatureKey] = [
         ("source", source_family(scored.item.source)),
+        ("source_exact", normalized_source_exact(scored.item.source)),
         ("type", scored.item.type),
     ]
+    if scored.item.author:
+        features.append(("author", str(scored.item.author).strip().lower()))
+    github_owner = _github_owner(scored.item.source)
+    if github_owner:
+        features.append(("github_org", github_owner))
     for tag in scored.score.topic_tags:
         features.append(("topic", tag.strip().lower()))
     for tag in scored.score.format_tags:
@@ -264,6 +270,25 @@ def source_family(source: str) -> str:
             host = host[4:]
         return host or raw
     return raw
+
+
+def normalized_source_exact(source: str) -> str:
+    raw = (source or "").strip().lower()
+    if not raw:
+        return "unknown"
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+    return raw
+
+
+def _github_owner(source: str) -> str:
+    raw = (source or "").strip().lower()
+    if not raw.startswith("github:"):
+        return ""
+    tail = raw.split(":", 1)[1]
+    if "/" not in tail:
+        return ""
+    return tail.split("/", 1)[0].strip()
 
 
 def decayed_weight(
