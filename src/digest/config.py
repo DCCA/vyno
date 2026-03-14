@@ -112,6 +112,13 @@ def _read_yaml(path: str | Path) -> dict:
     return data
 
 
+def _normalize_path_string(raw: str) -> str:
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    return str(Path(value).expanduser())
+
+
 def load_dotenv(path: str | Path = ".env") -> None:
     env_path = Path(path)
     if not env_path.exists():
@@ -188,7 +195,7 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         raise ValueError("output.render_mode must be 'sectioned' or 'source_segmented'")
     env_telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     env_telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-    env_obsidian_vault = os.getenv("OBSIDIAN_VAULT_PATH", "").strip()
+    env_obsidian_vault = _normalize_path_string(os.getenv("OBSIDIAN_VAULT_PATH", ""))
     env_obsidian_folder = os.getenv("OBSIDIAN_FOLDER", "").strip()
     output = OutputSettings(
         telegram_chat_id=str(out.get("telegram_chat_id", "")).strip()
@@ -196,7 +203,7 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         telegram_bot_token=str(out.get("telegram_bot_token", "")).strip()
         or env_telegram_bot_token,
         obsidian_vault_path=env_obsidian_vault
-        or str(out.get("obsidian_vault_path", "")).strip(),
+        or _normalize_path_string(str(out.get("obsidian_vault_path", ""))),
         obsidian_folder=str(out.get("obsidian_folder", "AI Digest")).strip()
         or env_obsidian_folder
         or "AI Digest",

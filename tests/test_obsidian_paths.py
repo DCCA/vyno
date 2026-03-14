@@ -1,7 +1,10 @@
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
+import tempfile
+from unittest.mock import patch
 
-from digest.delivery.obsidian import build_obsidian_note_path
+from digest.delivery.obsidian import build_obsidian_note_path, write_obsidian_note
 
 
 class TestObsidianPaths(unittest.TestCase):
@@ -22,6 +25,29 @@ class TestObsidianPaths(unittest.TestCase):
         dt = datetime(2026, 2, 22, 13, 45, 10, tzinfo=timezone.utc)
         path = build_obsidian_note_path("/vault", "AI Digest", "daily", dt, "a1")
         self.assertEqual(str(path), "/vault/AI Digest/2026-02-22.md")
+
+    def test_build_path_expands_home_directory(self):
+        dt = datetime(2026, 2, 22, 13, 45, 10, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict("os.environ", {"HOME": tmp}, clear=False):
+                path = build_obsidian_note_path("~/vault", "AI Digest", "daily", dt, "a1")
+        self.assertEqual(str(path), str(Path(tmp) / "vault" / "AI Digest" / "2026-02-22.md"))
+
+    def test_write_obsidian_note_uses_expanded_home_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict("os.environ", {"HOME": tmp}, clear=False):
+                out_path = write_obsidian_note(
+                    "~/vault",
+                    "AI Digest",
+                    "2026-02-22",
+                    "# Test\n",
+                    naming="daily",
+                    run_id="run1",
+                    run_dt_utc=datetime(2026, 2, 22, 13, 45, 10, tzinfo=timezone.utc),
+                )
+                expected = Path(tmp) / "vault" / "AI Digest" / "2026-02-22.md"
+                self.assertEqual(out_path, expected)
+                self.assertTrue(expected.exists())
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ excalidraw.log
 !.env.example
 obsidian-vault/
 logs/
+/~/
 
 # Runtime inbox data (can contain private links). Keep template tracked.
 data/x_inbox.txt
@@ -48,4 +49,3 @@ skills-lock.json
 .dmux/
 .dmux-hooks/
 .vscode
-

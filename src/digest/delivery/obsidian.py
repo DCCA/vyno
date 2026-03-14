@@ -202,7 +202,7 @@ def build_obsidian_note_path(
     run_dt_utc: datetime,
     run_id: str,
 ) -> Path:
-    target_dir = Path(vault_path) / folder
+    target_dir = Path(vault_path).expanduser() / folder
     date_str = run_dt_utc.date().isoformat()
     if naming == "daily":
         return target_dir / f"{date_str}.md"

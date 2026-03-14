@@ -114,6 +114,29 @@ class TestConfig(unittest.TestCase):
                 profile = load_profile(path)
             self.assertEqual(profile.output.obsidian_vault_path, "/host/path")
 
+    def test_profile_obsidian_vault_env_expands_home(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text("output:\n  obsidian_vault_path: /host/path\n", encoding="utf-8")
+            with patch.dict(
+                "os.environ",
+                {
+                    "HOME": tmp,
+                    "OBSIDIAN_VAULT_PATH": "~/vault",
+                },
+                clear=False,
+            ):
+                profile = load_profile(path)
+            self.assertEqual(profile.output.obsidian_vault_path, str(Path(tmp) / "vault"))
+
+    def test_profile_obsidian_vault_yaml_expands_home(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text("output:\n  obsidian_vault_path: ~/vault\n", encoding="utf-8")
+            with patch.dict("os.environ", {"HOME": tmp}, clear=False):
+                profile = load_profile(path)
+            self.assertEqual(profile.output.obsidian_vault_path, str(Path(tmp) / "vault"))
+
     def test_profile_loads_github_guardrails(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "profile.yaml"
