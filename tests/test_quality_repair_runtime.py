@@ -31,7 +31,15 @@ class _LowQualityRepair:
     def __init__(self, model: str = "x", timeout: int = 30) -> None:
         _ = model, timeout
 
-    def evaluate_and_repair(self, current_must_read, candidate_pool):
+    def evaluate_and_repair(
+        self,
+        current_must_read,
+        candidate_pool,
+        *,
+        must_read_max_per_source,
+        digest_max_per_source,
+    ):
+        _ = must_read_max_per_source, digest_max_per_source
         current_ids = [si.item.id for si in current_must_read]
         promoted = candidate_pool[5].item.id
         repaired = [promoted] + [x for x in current_ids if x != promoted][:4]
@@ -48,8 +56,15 @@ class _HighQualityRepair:
     def __init__(self, model: str = "x", timeout: int = 30) -> None:
         _ = model, timeout
 
-    def evaluate_and_repair(self, current_must_read, candidate_pool):
-        _ = candidate_pool
+    def evaluate_and_repair(
+        self,
+        current_must_read,
+        candidate_pool,
+        *,
+        must_read_max_per_source,
+        digest_max_per_source,
+    ):
+        _ = candidate_pool, must_read_max_per_source, digest_max_per_source
         return QualityRepairResult(
             quality_score=91.0,
             confidence=0.88,

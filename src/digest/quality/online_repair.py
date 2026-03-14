@@ -11,6 +11,7 @@ import urllib.request
 
 from digest.constants import DEFAULT_OPENAI_MODEL, DIGEST_MUST_READ_LIMIT
 from digest.models import DigestSections, ScoredItem
+from digest.pipeline.selection import respects_source_cap, select_skim_items
 
 FeatureKey = tuple[str, str]
 
@@ -38,6 +39,9 @@ class ResponsesAPIQualityRepair:
         self,
         current_must_read: list[ScoredItem],
         candidate_pool: list[ScoredItem],
+        *,
+        must_read_max_per_source: int,
+        digest_max_per_source: int,
     ) -> QualityRepairResult:
         current_ids = [si.item.id for si in current_must_read]
         if len(current_ids) < DIGEST_MUST_READ_LIMIT:
@@ -75,6 +79,8 @@ class ResponsesAPIQualityRepair:
                             "text": _quality_eval_input(
                                 current_must_read=current_must_read,
                                 candidate_pool=candidate_pool,
+                                must_read_max_per_source=must_read_max_per_source,
+                                digest_max_per_source=digest_max_per_source,
                             ),
                         }
                     ],
@@ -160,6 +166,9 @@ def rebuild_sections_with_repair(
     sections: DigestSections,
     ranked_non_videos: list[ScoredItem],
     repaired_must_read_ids: list[str],
+    *,
+    must_read_max_per_source: int,
+    digest_max_per_source: int,
 ) -> DigestSections:
     id_map = {si.item.id: si for si in ranked_non_videos}
     missing = [item_id for item_id in repaired_must_read_ids if item_id not in id_map]
@@ -169,19 +178,55 @@ def rebuild_sections_with_repair(
         )
 
     must_read = [id_map[item_id] for item_id in repaired_must_read_ids]
+    validation_error = validate_repaired_must_read(
+        must_read,
+        must_read_max_per_source=must_read_max_per_source,
+        digest_max_per_source=digest_max_per_source,
+    )
+    if validation_error:
+        raise RuntimeError(f"Cannot rebuild sections, {validation_error}")
+
     used = {si.item.id for si in must_read}
-    skim = [si for si in ranked_non_videos if si.item.id not in used][:10]
+    skim = select_skim_items(
+        [si for si in ranked_non_videos if si.item.id not in used],
+        selected=must_read,
+        max_per_source=digest_max_per_source,
+    )
 
     max_skim = max(0, 20 - len(must_read) - len(sections.videos))
     skim = skim[:max_skim]
     max_videos = max(0, 20 - len(must_read) - len(skim))
     videos = sections.videos[:max_videos]
+    if not respects_source_cap(
+        must_read + skim,
+        max_per_source=digest_max_per_source,
+    ):
+        raise RuntimeError("Cannot rebuild sections, final digest source cap violated")
     return DigestSections(
         must_read=must_read,
         skim=skim,
         videos=videos,
         themes=list(sections.themes),
     )
+
+
+def validate_repaired_must_read(
+    must_read: list[ScoredItem],
+    *,
+    must_read_max_per_source: int,
+    digest_max_per_source: int,
+) -> str:
+    if not respects_source_cap(
+        must_read,
+        max_per_source=must_read_max_per_source,
+    ):
+        return "must-read source cap violated"
+    if not respects_source_cap(
+        must_read,
+        max_per_source=digest_max_per_source,
+    ):
+        return "final digest source cap violated"
+    return ""
 
 
 def build_rank_overrides(
@@ -312,6 +357,8 @@ def _quality_eval_input(
     *,
     current_must_read: list[ScoredItem],
     candidate_pool: list[ScoredItem],
+    must_read_max_per_source: int,
+    digest_max_per_source: int,
 ) -> str:
     payload = {
         "current_must_read_ids": [si.item.id for si in current_must_read],
@@ -320,6 +367,8 @@ def _quality_eval_input(
         "selection_policy": {
             "must_read_count": DIGEST_MUST_READ_LIMIT,
             "prefer_source_diversity": True,
+            "must_read_max_per_source": must_read_max_per_source,
+            "digest_max_per_source": digest_max_per_source,
             "avoid_redundant_theme_overlap": True,
             "prefer_actionable_and_specific_items": True,
         },

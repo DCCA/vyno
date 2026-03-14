@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 
 from digest.config import ProfileConfig
-from digest.models import Item, Score
+from digest.models import Item, Score, ScoredItem
+from digest.pipeline.selection import source_bucket
 
 AI_KEYWORDS = {
     "llm",
@@ -126,6 +127,43 @@ def content_depth_adjustment(item: Item, profile: ProfileConfig) -> int:
     return 0
 
 
+def research_concentration_adjustments(
+    scored_items: list[ScoredItem],
+    *,
+    rank_overrides: dict[str, float] | None = None,
+    pool_size: int = 15,
+) -> dict[str, float]:
+    if pool_size <= 0:
+        return {}
+
+    ranked_non_videos = sorted(
+        [row for row in scored_items if row.item.type != "video"],
+        key=lambda row: float((rank_overrides or {}).get(row.item.id, row.score.total)),
+        reverse=True,
+    )[:pool_size]
+    if not ranked_non_videos:
+        return {}
+
+    family_rows: dict[str, list] = {}
+    for scored in ranked_non_videos:
+        if not _is_research_heavy(scored):
+            continue
+        bucket = source_bucket(scored.item.source)
+        family_rows.setdefault(bucket, []).append(scored)
+
+    adjustments: dict[str, float] = {}
+    for rows in family_rows.values():
+        if len(rows) <= 3:
+            continue
+        for index, scored in enumerate(rows, start=1):
+            if index <= 2:
+                continue
+            adjustments[scored.item.id] = adjustments.get(scored.item.id, 0.0) - float(
+                min(3, index - 2)
+            )
+    return adjustments
+
+
 def technicality_level(item: Item) -> str:
     text = f"{item.title} {item.description} {item.raw_text}".lower()
     signals = 0
@@ -141,6 +179,15 @@ def technicality_level(item: Item) -> str:
     if signals >= 2:
         return "medium"
     return "low"
+
+
+def _is_research_heavy(scored: ScoredItem) -> bool:
+    if source_bucket(scored.item.source) == "arxiv.org":
+        return True
+    format_tags = {tag.strip().lower() for tag in scored.score.format_tags}
+    if "paper" in format_tags and technicality_level(scored.item) != "low":
+        return True
+    return False
 
 
 def _github_owner(source: str) -> str:

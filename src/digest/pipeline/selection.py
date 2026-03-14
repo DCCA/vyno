@@ -52,6 +52,65 @@ def select_digest_sections(
     return DigestSections(must_read=must_read, skim=skim, videos=videos)
 
 
+def source_bucket(raw: str) -> str:
+    value = (raw or "").strip().lower()
+    if not value:
+        return "unknown"
+    if value.startswith("github:"):
+        return "github"
+    if value.startswith("http://") or value.startswith("https://"):
+        parsed = urllib.parse.urlparse(value)
+        host = (parsed.netloc or "").strip().lower()
+        if host.startswith("www."):
+            host = host[4:]
+        return host or value
+    return value
+
+
+def count_source_buckets(
+    scored_items: list[ScoredItem],
+    *,
+    include_videos: bool = False,
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for scored in scored_items:
+        if not include_videos and scored.item.type == "video":
+            continue
+        bucket = source_bucket(scored.item.source)
+        counts[bucket] = counts.get(bucket, 0) + 1
+    return counts
+
+
+def respects_source_cap(
+    scored_items: list[ScoredItem],
+    *,
+    max_per_source: int,
+    include_videos: bool = False,
+) -> bool:
+    if max_per_source <= 0:
+        return True
+    return all(
+        count <= max_per_source
+        for count in count_source_buckets(
+            scored_items,
+            include_videos=include_videos,
+        ).values()
+    )
+
+
+def select_skim_items(
+    candidates: list[ScoredItem],
+    *,
+    selected: list[ScoredItem],
+    max_per_source: int,
+) -> list[ScoredItem]:
+    return _select_skim(
+        candidates,
+        selected=selected,
+        max_per_source=max_per_source,
+    )
+
+
 def _select_must_read(
     non_videos: list[ScoredItem],
     *,
@@ -65,7 +124,7 @@ def _select_must_read(
     source_counts: dict[str, int] = {}
 
     for scored in non_videos:
-        source = _source_bucket(scored.item.source)
+        source = source_bucket(scored.item.source)
         if source_counts.get(source, 0) >= max_per_source:
             continue
         selected.append(scored)
@@ -96,14 +155,14 @@ def _select_skim(
     selected_ids = {row.item.id for row in selected}
     counts: dict[str, int] = {}
     for row in selected:
-        source = _source_bucket(row.item.source)
+        source = source_bucket(row.item.source)
         counts[source] = counts.get(source, 0) + 1
 
     skim: list[ScoredItem] = []
     for scored in candidates:
         if scored.item.id in selected_ids:
             continue
-        source = _source_bucket(scored.item.source)
+        source = source_bucket(scored.item.source)
         if counts.get(source, 0) >= max_per_source:
             continue
         skim.append(scored)
@@ -112,18 +171,3 @@ def _select_skim(
             return skim
 
     return skim
-
-
-def _source_bucket(raw: str) -> str:
-    value = (raw or "").strip().lower()
-    if not value:
-        return "unknown"
-    if value.startswith("github:"):
-        return "github"
-    if value.startswith("http://") or value.startswith("https://"):
-        parsed = urllib.parse.urlparse(value)
-        host = (parsed.netloc or "").strip().lower()
-        if host.startswith("www."):
-            host = host[4:]
-        return host or value
-    return value

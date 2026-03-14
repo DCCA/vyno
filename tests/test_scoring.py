@@ -2,8 +2,8 @@ import unittest
 from datetime import datetime
 
 from digest.config import ProfileConfig
-from digest.models import Item
-from digest.pipeline.scoring import score_item
+from digest.models import Item, Score, ScoredItem
+from digest.pipeline.scoring import research_concentration_adjustments, score_item
 
 
 class TestScoring(unittest.TestCase):
@@ -68,6 +68,78 @@ class TestScoring(unittest.TestCase):
         endorsed_score = score_item(endorsed, profile)
         self.assertGreater(endorsed_score.quality, plain_score.quality)
         self.assertIn("x-discovered", endorsed_score.format_tags)
+
+    def test_research_concentration_adjustments_penalize_paper_heavy_pool(self):
+        rows: list[ScoredItem] = []
+        for idx in range(1, 6):
+            item = Item(
+                id=str(idx),
+                url=f"https://arxiv.org/abs/{idx}",
+                title=f"Paper {idx}",
+                source="https://arxiv.org/rss/cs.LG",
+                author=None,
+                published_at=datetime.now(),
+                type="article",
+                raw_text="paper benchmark kv cache distillation",
+            )
+            score = Score(
+                item_id=item.id,
+                relevance=30,
+                quality=20,
+                novelty=10,
+                total=100 - idx,
+                format_tags=["paper", "technical"],
+            )
+            rows.append(ScoredItem(item=item, score=score))
+
+        rows.append(
+            ScoredItem(
+                item=Item(
+                    id="n1",
+                    url="https://example.com/news",
+                    title="AI product release",
+                    source="https://example.com/feed",
+                    author=None,
+                    published_at=datetime.now(),
+                    type="article",
+                    raw_text="launch release feature",
+                ),
+                score=Score("n1", 20, 15, 8, 88, format_tags=["news"]),
+            )
+        )
+
+        adjustments = research_concentration_adjustments(rows, pool_size=6)
+        self.assertEqual(adjustments.get("1", 0.0), 0.0)
+        self.assertEqual(adjustments.get("2", 0.0), 0.0)
+        self.assertLess(adjustments.get("3", 0.0), 0.0)
+        self.assertLess(adjustments.get("4", 0.0), adjustments.get("3", 0.0))
+        self.assertLess(adjustments.get("5", 0.0), 0.0)
+
+    def test_research_concentration_adjustments_do_not_penalize_small_mix(self):
+        rows: list[ScoredItem] = []
+        for idx in range(1, 4):
+            item = Item(
+                id=str(idx),
+                url=f"https://arxiv.org/abs/{idx}",
+                title=f"Paper {idx}",
+                source="https://arxiv.org/rss/cs.AI",
+                author=None,
+                published_at=datetime.now(),
+                type="article",
+                raw_text="paper benchmark kv cache distillation",
+            )
+            score = Score(
+                item_id=item.id,
+                relevance=30,
+                quality=20,
+                novelty=10,
+                total=100 - idx,
+                format_tags=["paper", "technical"],
+            )
+            rows.append(ScoredItem(item=item, score=score))
+
+        adjustments = research_concentration_adjustments(rows, pool_size=6)
+        self.assertEqual(adjustments, {})
 
 
 if __name__ == "__main__":

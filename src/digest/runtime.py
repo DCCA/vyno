@@ -27,8 +27,17 @@ from digest.models import Item, RunReport, ScoredItem
 from digest.pipeline.dedupe import dedupe_and_cluster
 from digest.pipeline.github_issue_impact import evaluate_github_issue_impact
 from digest.pipeline.normalize import normalize_items
-from digest.pipeline.scoring import content_depth_adjustment, is_blocked, score_item
-from digest.pipeline.selection import rank_scored_items, select_digest_sections
+from digest.pipeline.scoring import (
+    content_depth_adjustment,
+    is_blocked,
+    research_concentration_adjustments,
+    score_item,
+)
+from digest.pipeline.selection import (
+    count_source_buckets,
+    rank_scored_items,
+    select_digest_sections,
+)
 from digest.pipeline.summarize import FallbackSummarizer
 from digest.quality.online_repair import (
     ResponsesAPIQualityRepair,
@@ -37,6 +46,7 @@ from digest.quality.online_repair import (
     item_features,
     rebuild_sections_with_repair,
     source_family,
+    validate_repaired_must_read,
 )
 from digest.ops.source_registry import source_key_for
 from digest.storage.sqlite_store import SQLiteStore
@@ -803,13 +813,45 @@ def run_digest(
                 adjusted_item_count=depth_adjustment_count,
             )
 
+    research_adjustment_count = 0
+    research_adjustment_total = 0.0
+    research_adjustments = research_concentration_adjustments(
+        scored_items,
+        rank_overrides=rank_overrides,
+    )
+    if research_adjustments:
+        if rank_overrides is None:
+            rank_overrides = {}
+        for scored in scored_items:
+            adjustment = float(research_adjustments.get(scored.item.id, 0.0))
+            if adjustment == 0:
+                continue
+            base = float(rank_overrides.get(scored.item.id, scored.score.total))
+            rank_overrides[scored.item.id] = base + adjustment
+            research_adjustment_count += 1
+            research_adjustment_total += adjustment
+        log_event(
+            run_logger,
+            "info",
+            "research_balance",
+            "Applied research concentration penalty",
+            adjusted_item_count=research_adjustment_count,
+            adjustment_total=round(research_adjustment_total, 2),
+        )
+        emit_progress(
+            "research_balance",
+            "Applied research concentration penalty",
+            adjusted_item_count=research_adjustment_count,
+        )
+
+    digest_max_per_source = max(2, profile.must_read_max_per_source + 1)
     ranked_items = rank_scored_items(scored_items, rank_overrides=rank_overrides)
     ranked_non_videos = [si for si in ranked_items if si.item.type != "video"]
     sections = select_digest_sections(
         scored_items,
         rank_overrides=rank_overrides,
         must_read_max_per_source=profile.must_read_max_per_source,
-        digest_max_per_source=max(2, profile.must_read_max_per_source + 1),
+        digest_max_per_source=digest_max_per_source,
     )
 
     if profile.quality_repair_enabled and ranked_non_videos and sections.must_read:
@@ -857,6 +899,8 @@ def run_digest(
                     repair_result = quality_judge.evaluate_and_repair(
                         current_must_read=sections.must_read,
                         candidate_pool=candidate_pool,
+                        must_read_max_per_source=profile.must_read_max_per_source,
+                        digest_max_per_source=digest_max_per_source,
                     )
                     quality_score = float(repair_result.quality_score)
                     quality_confidence = float(repair_result.confidence)
@@ -879,30 +923,60 @@ def run_digest(
 
                     after_ids = before_ids
                     if quality_score < profile.quality_repair_threshold:
-                        sections = rebuild_sections_with_repair(
-                            sections,
-                            ranked_non_videos,
-                            repair_result.repaired_must_read_ids,
+                        repaired_must_read = [
+                            si
+                            for si in ranked_non_videos
+                            if si.item.id in set(repair_result.repaired_must_read_ids)
+                        ]
+                        validation_error = validate_repaired_must_read(
+                            repaired_must_read,
+                            must_read_max_per_source=profile.must_read_max_per_source,
+                            digest_max_per_source=digest_max_per_source,
                         )
-                        after_ids = [si.item.id for si in sections.must_read]
-                        quality_repair_applied = True
-                        log_event(
-                            run_logger,
-                            "info",
-                            "quality_repair_applied",
-                            "Applied Must-read online repair",
-                            quality_score=round(quality_score, 2),
-                            threshold=profile.quality_repair_threshold,
-                            issues=quality_issues,
-                            before_ids=before_ids,
-                            after_ids=after_ids,
-                        )
-                        emit_progress(
-                            "quality_repair_applied",
-                            "Applied Must-read online repair",
-                            quality_score=round(quality_score, 2),
-                            threshold=profile.quality_repair_threshold,
-                        )
+                        if validation_error:
+                            log_event(
+                                run_logger,
+                                "info",
+                                "quality_repair_skipped",
+                                "Skipped Must-read repair due to invalid source diversity",
+                                quality_score=round(quality_score, 2),
+                                threshold=profile.quality_repair_threshold,
+                                issues=quality_issues,
+                                validation_error=validation_error,
+                            )
+                            emit_progress(
+                                "quality_repair_skipped",
+                                "Skipped Must-read repair due to invalid source diversity",
+                                quality_score=round(quality_score, 2),
+                                threshold=profile.quality_repair_threshold,
+                            )
+                        else:
+                            sections = rebuild_sections_with_repair(
+                                sections,
+                                ranked_non_videos,
+                                repair_result.repaired_must_read_ids,
+                                must_read_max_per_source=profile.must_read_max_per_source,
+                                digest_max_per_source=digest_max_per_source,
+                            )
+                            after_ids = [si.item.id for si in sections.must_read]
+                            quality_repair_applied = True
+                            log_event(
+                                run_logger,
+                                "info",
+                                "quality_repair_applied",
+                                "Applied Must-read online repair",
+                                quality_score=round(quality_score, 2),
+                                threshold=profile.quality_repair_threshold,
+                                issues=quality_issues,
+                                before_ids=before_ids,
+                                after_ids=after_ids,
+                            )
+                            emit_progress(
+                                "quality_repair_applied",
+                                "Applied Must-read online repair",
+                                quality_score=round(quality_score, 2),
+                                threshold=profile.quality_repair_threshold,
+                            )
                     else:
                         log_event(
                             run_logger,
@@ -999,6 +1073,30 @@ def run_digest(
             continue
         selected_ids.add(scored.item.id)
         selected_items.append(scored)
+    final_source_counts = count_source_buckets(sections.must_read + sections.skim)
+    if any(count > digest_max_per_source for count in final_source_counts.values()):
+        log_event(
+            run_logger,
+            "error",
+            "selection_invariant",
+            "Final digest source cap violated; rebuilding capped selection",
+            digest_max_per_source=digest_max_per_source,
+            source_family_counts=final_source_counts,
+        )
+        sections = select_digest_sections(
+            scored_items,
+            rank_overrides=rank_overrides,
+            must_read_max_per_source=profile.must_read_max_per_source,
+            digest_max_per_source=digest_max_per_source,
+        )
+        selected_items = []
+        selected_ids = set()
+        for scored in sections.must_read + sections.skim + sections.videos:
+            if scored.item.id in selected_ids:
+                continue
+            selected_ids.add(scored.item.id)
+            selected_items.append(scored)
+        final_source_counts = count_source_buckets(sections.must_read + sections.skim)
 
     extractive_summarizer = ExtractiveSummarizer()
     llm_summarizer: FallbackSummarizer | None = None
@@ -1132,6 +1230,8 @@ def run_digest(
             "skim_count": len(sections.skim),
             "video_count": selected_video_count,
             "final_item_count": final_item_count,
+            "source_family_counts": final_source_counts,
+            "digest_max_per_source": digest_max_per_source,
         },
     }
     sparse_context_note = _build_sparse_context_note(
@@ -1356,6 +1456,9 @@ def run_digest(
         github_issue_dropped_low_impact=github_issue_dropped_low_impact,
         depth_adjustment_count=depth_adjustment_count,
         content_depth_preference=profile.content_depth_preference,
+        research_adjustment_count=research_adjustment_count,
+        final_source_family_counts=final_source_counts,
+        digest_max_per_source=digest_max_per_source,
     )
     emit_progress(
         "run_finish",
@@ -1370,6 +1473,7 @@ def run_digest(
         github_issue_kept_high_impact=github_issue_kept_high_impact,
         github_issue_dropped_low_impact=github_issue_dropped_low_impact,
         depth_adjustment_count=depth_adjustment_count,
+        research_adjustment_count=research_adjustment_count,
     )
 
     return RunReport(
