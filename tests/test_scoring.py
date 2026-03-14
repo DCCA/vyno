@@ -42,6 +42,33 @@ class TestScoring(unittest.TestCase):
         self.assertIn("benchmark", score.format_tags)
         self.assertLessEqual(len(score.tags), 5)
 
+    def test_scoring_boosts_x_endorsed_links(self):
+        profile = ProfileConfig()
+        plain = Item(
+            id="3",
+            url="https://example.com/plain",
+            title="Useful AI article",
+            source="example.com",
+            author=None,
+            published_at=datetime.now(),
+            type="link",
+            raw_text="Useful AI article body",
+        )
+        endorsed = Item(
+            id="4",
+            url="https://example.com/endorsed",
+            title="Useful AI article",
+            source="example.com",
+            author=None,
+            published_at=datetime.now(),
+            type="link",
+            raw_text="Useful AI article body | x_endorsed_by:openai | x_endorsed_by:sama",
+        )
+        plain_score = score_item(plain, profile)
+        endorsed_score = score_item(endorsed, profile)
+        self.assertGreater(endorsed_score.quality, plain_score.quality)
+        self.assertIn("x-discovered", endorsed_score.format_tags)
+
 
 if __name__ == "__main__":
     unittest.main()

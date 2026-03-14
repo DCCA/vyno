@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from digest.config import ProfileConfig
 from digest.models import Item, Score
 
@@ -35,11 +37,16 @@ TECHNICAL_KEYWORDS = {
     "gradient",
     "retrieval benchmark",
 }
+X_ENDORSEMENT_RE = re.compile(r"x_endorsed_by:([a-z0-9_]+)")
 
 
 def _contains_any(text: str, words: list[str] | set[str]) -> int:
     t = text.lower()
     return sum(1 for w in words if w.lower() in t)
+
+
+def _count_x_endorsements(text: str) -> int:
+    return len({match.group(1) for match in X_ENDORSEMENT_RE.finditer(text.lower())})
 
 
 def score_item(item: Item, profile: ProfileConfig) -> Score:
@@ -57,6 +64,7 @@ def score_item(item: Item, profile: ProfileConfig) -> Score:
     github_owner = _github_owner(item.source)
     if github_owner and github_owner.lower() in {o.lower() for o in profile.trusted_orgs_github}:
         quality += 8
+    quality += min(12, _count_x_endorsements(text) * 4)
     if len(item.raw_text) > 500:
         quality += 8
     quality -= _contains_any(text, CLICKBAIT) * 5
@@ -176,6 +184,8 @@ def _rule_tags(item: Item) -> tuple[list[str], list[str], list[str]]:
         format_tags.append("paper")
     if technicality_level(item) != "low":
         format_tags.append("technical")
+    if "x_endorsed_by:" in text:
+        format_tags.append("x-discovered")
     if any(k in text for k in ["release", "launch", "announced"]):
         format_tags.append("release-note")
     if any(k in text for k in ["opinion", "thoughts"]):

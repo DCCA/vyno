@@ -99,6 +99,8 @@ class ProfileConfig:
     quality_learning_half_life_days: int = 14
     must_read_max_per_source: int = 2
     content_depth_preference: str = "balanced"
+    x_cost_per_post_usd: float = 0.005
+    x_max_spend_per_run_usd: float = 0.05
     run_policy: RunPolicySettings = field(default_factory=RunPolicySettings)
     schedule: ScheduleSettings = field(default_factory=ScheduleSettings)
 
@@ -216,6 +218,14 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
     )
     if quality_learning_max_offset < 0:
         raise ValueError("quality_learning_max_offset must be >= 0")
+    x_cost_per_post_usd = float(data.get("x_cost_per_post_usd", 0.005) or 0.005)
+    x_max_spend_per_run_usd = float(
+        data.get("x_max_spend_per_run_usd", 0.05) or 0.05
+    )
+    if x_cost_per_post_usd <= 0:
+        raise ValueError("x_cost_per_post_usd must be > 0")
+    if x_max_spend_per_run_usd < 0:
+        raise ValueError("x_max_spend_per_run_usd must be >= 0")
     content_depth_preference = (
         str(data.get("content_depth_preference", "balanced")).strip().lower()
         or "balanced"
@@ -355,6 +365,8 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
             1, int(data.get("must_read_max_per_source", 2) or 2)
         ),
         content_depth_preference=content_depth_preference,
+        x_cost_per_post_usd=x_cost_per_post_usd,
+        x_max_spend_per_run_usd=x_max_spend_per_run_usd,
         run_policy=run_policy,
         schedule=schedule,
     )

@@ -64,14 +64,72 @@ class TestXSelectors(unittest.TestCase):
                 x_themes=["ai agents"],
             )
             fake = _FakeProvider()
-            with patch("digest.connectors.x_selectors.get_x_provider", return_value=fake):
+            with (
+                patch("digest.connectors.x_selectors.get_x_provider", return_value=fake),
+                patch(
+                    "digest.connectors.x_selectors.fetch_link_preview_metadata",
+                    return_value={
+                        "url": "https://example.com/article",
+                        "resolved_url": "https://example.com/article",
+                        "host": "example.com",
+                        "title": "Example AI article",
+                        "description": "Deep article from X discovery",
+                        "image_url": "",
+                        "status": "ready",
+                        "error": "",
+                    },
+                ),
+            ):
                 items, errors = fetch_x_selector_items(sources, store, provider_mode="x_api")
 
             self.assertEqual(errors, [])
-            self.assertEqual(len(items), 2)
-            self.assertTrue(all(item.type == "x_post" for item in items))
+            self.assertEqual(len(items), 3)
+            self.assertEqual([item.type for item in items].count("x_post"), 2)
+            self.assertEqual([item.type for item in items].count("link"), 1)
+            promoted = next(item for item in items if item.type == "link")
+            self.assertEqual(promoted.url, "https://example.com/article")
+            self.assertEqual(promoted.source, "example.com")
+            self.assertIn("x_endorsed_by:openai", promoted.raw_text)
             self.assertEqual(store.get_x_cursor("x_author", "openai"), "next-author-cursor")
             self.assertEqual(store.get_x_cursor("x_theme", "ai agents"), "next-theme-cursor")
+
+    def test_selector_limits_skip_zero_budget_themes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = SQLiteStore(str(Path(tmp) / "digest.db"))
+            sources = SourceConfig(
+                rss_feeds=["https://example.com/rss.xml"],
+                x_authors=["openai"],
+                x_themes=["ai agents"],
+            )
+            fake = _FakeProvider()
+            with (
+                patch("digest.connectors.x_selectors.get_x_provider", return_value=fake),
+                patch(
+                    "digest.connectors.x_selectors.fetch_link_preview_metadata",
+                    return_value={
+                        "url": "https://example.com/article",
+                        "resolved_url": "https://example.com/article",
+                        "host": "example.com",
+                        "title": "Example AI article",
+                        "description": "Deep article from X discovery",
+                        "image_url": "",
+                        "status": "ready",
+                        "error": "",
+                    },
+                ),
+            ):
+                items, errors = fetch_x_selector_items(
+                    sources,
+                    store,
+                    provider_mode="x_api",
+                    author_limits={"openai": 3},
+                    theme_limits={"ai agents": 0},
+                )
+
+            self.assertEqual(errors, [])
+            self.assertEqual(fake.author_calls[0][2], 3)
+            self.assertEqual(fake.theme_calls, [])
+            self.assertEqual([item.type for item in items].count("link"), 1)
 
 
 if __name__ == "__main__":

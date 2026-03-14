@@ -116,6 +116,9 @@ export function ProfilePage({
   const qualityRepairEnabled = asBoolean(profile.quality_repair_enabled, false)
   const diversityMode = diversityModeFromValue(asNumber(profile.must_read_max_per_source, 2))
   const depthPreference = asString(profile.content_depth_preference, "balanced")
+  const xCostPerPost = asNumber(profile.x_cost_per_post_usd, 0.005)
+  const xMaxSpendPerRun = asNumber(profile.x_max_spend_per_run_usd, 0.05)
+  const xMaxPostsPerRun = xCostPerPost > 0 ? Math.floor(xMaxSpendPerRun / xCostPerPost) : 0
   const localDiffCount = Object.keys(localProfileDiff).length
   const serverDiffCount = Object.keys(profileDiff).length
 
@@ -341,8 +344,27 @@ export function ProfilePage({
                 checked={qualityRepairEnabled}
                 onChange={(checked) => updateProfileField("quality_repair_enabled", checked)}
               />
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <NumberField
+                  label="X cost per post (USD)"
+                  description="Used to derive the hard X read budget for each run."
+                  value={xCostPerPost}
+                  onChange={(value) => updateProfileField("x_cost_per_post_usd", value)}
+                />
+                <NumberField
+                  label="X max spend per run (USD)"
+                  description="Caps total X read spend for a single digest run."
+                  value={xMaxSpendPerRun}
+                  onChange={(value) => updateProfileField("x_max_spend_per_run_usd", value)}
+                />
+              </div>
             </div>
             <InlineEffect title="Current effect" text={qualitySummary} />
+            <InlineEffect
+              title="X budget"
+              text={`Current X cap: up to ${xMaxPostsPerRun} posts per run at $${xCostPerPost.toFixed(3)} per post.`}
+            />
             <InlineEffect
               title="Personalization pulse"
               text={

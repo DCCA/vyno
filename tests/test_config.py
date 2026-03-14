@@ -154,6 +154,20 @@ class TestConfig(unittest.TestCase):
             profile = load_profile(path)
             self.assertEqual(profile.content_depth_preference, "practical")
 
+    def test_profile_loads_x_budget_controls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                (
+                    "x_cost_per_post_usd: 0.01\n"
+                    "x_max_spend_per_run_usd: 0.07\n"
+                ),
+                encoding="utf-8",
+            )
+            profile = load_profile(path)
+            self.assertEqual(profile.x_cost_per_post_usd, 0.01)
+            self.assertEqual(profile.x_max_spend_per_run_usd, 0.07)
+
     def test_profile_loads_llm_coverage_controls(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "profile.yaml"
@@ -191,6 +205,19 @@ class TestConfig(unittest.TestCase):
             path = Path(tmp) / "profile.yaml"
             path.write_text(
                 "content_depth_preference: impossible\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError):
+                load_profile(path)
+
+    def test_profile_rejects_invalid_x_budget_controls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                (
+                    "x_cost_per_post_usd: 0\n"
+                    "x_max_spend_per_run_usd: -1\n"
+                ),
                 encoding="utf-8",
             )
             with self.assertRaises(ValueError):

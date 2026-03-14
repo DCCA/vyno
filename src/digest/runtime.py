@@ -286,9 +286,18 @@ def run_digest(
     if sources.x_authors or sources.x_themes:
         selector_fetched = 0
         selector_errors: list[str] = []
+        x_budget_plan = _plan_x_selector_limits(
+            authors=sources.x_authors,
+            themes=sources.x_themes,
+            max_spend_usd=profile.x_max_spend_per_run_usd,
+            cost_per_post_usd=profile.x_cost_per_post_usd,
+        )
         try:
             linked_selector_items, selector_errors = fetch_x_selector_items_linked(
-                sources, store
+                sources,
+                store,
+                author_limits=x_budget_plan["author_limits"],
+                theme_limits=x_budget_plan["theme_limits"],
             )
             fetched = [item for _selector_type, _selector_value, item in linked_selector_items]
             raw_items.extend(fetched)
@@ -313,6 +322,13 @@ def run_digest(
             "Fetched X selector items",
             author_selector_count=len(sources.x_authors),
             theme_selector_count=len(sources.x_themes),
+            x_posts_budget_per_run=x_budget_plan["post_budget"],
+            x_max_spend_per_run_usd=profile.x_max_spend_per_run_usd,
+            x_cost_per_post_usd=profile.x_cost_per_post_usd,
+            author_selector_budget=x_budget_plan["author_budget"],
+            theme_selector_budget=x_budget_plan["theme_budget"],
+            author_selector_skips=x_budget_plan["author_skipped"],
+            theme_selector_skips=x_budget_plan["theme_skipped"],
             item_count=selector_fetched,
             error_count=len(selector_errors),
         )
@@ -321,6 +337,13 @@ def run_digest(
             "Fetched X selector items",
             author_selector_count=len(sources.x_authors),
             theme_selector_count=len(sources.x_themes),
+            x_posts_budget_per_run=x_budget_plan["post_budget"],
+            x_max_spend_per_run_usd=profile.x_max_spend_per_run_usd,
+            x_cost_per_post_usd=profile.x_cost_per_post_usd,
+            author_selector_budget=x_budget_plan["author_budget"],
+            theme_selector_budget=x_budget_plan["theme_budget"],
+            author_selector_skips=x_budget_plan["author_skipped"],
+            theme_selector_skips=x_budget_plan["theme_skipped"],
             item_count=selector_fetched,
             error_count=len(selector_errors),
         )
@@ -1391,6 +1414,58 @@ def _build_sparse_context_note(
 
 def _count_item_type(items: list[Item], item_type: str) -> int:
     return sum(1 for item in items if item.type == item_type)
+
+
+def _x_posts_budget_per_run(*, max_spend_usd: float, cost_per_post_usd: float) -> int:
+    if max_spend_usd <= 0 or cost_per_post_usd <= 0:
+        return 0
+    return max(0, int(max_spend_usd / cost_per_post_usd))
+
+
+def _split_evenly(values: list[str], budget: int) -> dict[str, int]:
+    rows = [str(value or "").strip() for value in values if str(value or "").strip()]
+    if not rows:
+        return {}
+    if budget <= 0:
+        return {row: 0 for row in rows}
+    base = budget // len(rows)
+    remainder = budget % len(rows)
+    return {
+        row: base + (1 if index < remainder else 0)
+        for index, row in enumerate(rows)
+    }
+
+
+def _plan_x_selector_limits(
+    *,
+    authors: list[str],
+    themes: list[str],
+    max_spend_usd: float,
+    cost_per_post_usd: float,
+) -> dict[str, object]:
+    post_budget = _x_posts_budget_per_run(
+        max_spend_usd=max_spend_usd,
+        cost_per_post_usd=cost_per_post_usd,
+    )
+    clean_authors = [str(value or "").strip() for value in authors if str(value or "").strip()]
+    clean_themes = [str(value or "").strip() for value in themes if str(value or "").strip()]
+
+    if clean_authors:
+        author_limits = _split_evenly(clean_authors, post_budget)
+        theme_limits = {theme: 0 for theme in clean_themes}
+    else:
+        author_limits = {}
+        theme_limits = _split_evenly(clean_themes, post_budget)
+
+    return {
+        "post_budget": post_budget,
+        "author_budget": sum(author_limits.values()),
+        "theme_budget": sum(theme_limits.values()),
+        "author_limits": author_limits,
+        "theme_limits": theme_limits,
+        "author_skipped": sum(1 for value in author_limits.values() if value <= 0),
+        "theme_skipped": sum(1 for value in theme_limits.values() if value <= 0),
+    }
 
 
 def _filter_window(items: list[Item], window_start_iso: str) -> list[Item]:
