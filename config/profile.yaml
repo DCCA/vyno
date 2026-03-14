@@ -10,7 +10,6 @@ exclusions:
   - giveaway
 trusted_sources:
   - openai.com
-  - arxiv.org
 blocked_sources:
   - example-blocked.com
 trusted_authors_x: []

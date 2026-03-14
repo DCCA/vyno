@@ -51,6 +51,9 @@ class TestRenderers(unittest.TestCase):
         self.assertIn("[!summary]", note)
         self.assertIn("Tags: llm, benchmark", note)
         self.assertIn("<a href=", msg)
+        self.assertIn("<i>src | Must-read | Low 3</i>", msg)
+        self.assertIn("<i>src | Skim | Low 3</i>", msg)
+        self.assertIn("<i>YouTube | Video | Low 3</i>", msg)
         self.assertNotIn("Context", msg)
         self.assertNotIn("(https://x/1)", msg)
 
@@ -83,9 +86,11 @@ class TestRenderers(unittest.TestCase):
         self.assertIn("AI Digest - 2026-02-21", chunks[0])
         for i in range(1, 10):
             title = f"Title {i}"
-            summary = "x" * 159 + "…"
+            summary = "x" * 139 + "…"
             block = (
-                f'{i}. <a href="https://x/{i}"><b>{title}</b></a>\n{summary}'
+                f'{i}. <a href="https://x/{i}"><b>{title}</b></a>\n'
+                f"<i>src | Must-read | Low 3</i>\n"
+                f"{summary}"
             )
             joined = "\n\n".join(chunks)
             self.assertIn(block, joined)
@@ -114,6 +119,17 @@ class TestRenderers(unittest.TestCase):
         self.assertLess(len(msg), 1200)
         self.assertIn("<a href=", msg)
 
+    def test_telegram_uses_adjusted_score_for_display(self):
+        scored = _scored(1)
+        scored.score.raw_total = 95
+        scored.score.adjusted_total = 71
+        sec = DigestSections(must_read=[scored], skim=[], videos=[])
+
+        msg = render_telegram_message("2026-02-21", sec)
+
+        self.assertIn("<i>src | Must-read | High 71</i>", msg)
+        self.assertNotIn("High 95", msg)
+
     def test_telegram_backfills_to_ten_items_from_selected_pool(self):
         must_read = [_scored(i) for i in range(1, 6)]
         skim = [_scored(i) for i in range(6, 14)]
@@ -124,7 +140,10 @@ class TestRenderers(unittest.TestCase):
 
         self.assertEqual(len(selected), 10)
         self.assertEqual(msg.count('<a href="https://x/'), 10)
-        self.assertIn('10. <a href="https://x/10"><b>Title 10</b></a>', msg)
+        self.assertIn(
+            '10. <a href="https://x/10"><b>Title 10</b></a>\n<i>src | Skim | Low 3</i>',
+            msg,
+        )
 
     def test_telegram_promotes_diverse_sources_before_duplicates(self):
         must_read = []
@@ -169,7 +188,10 @@ class TestRenderers(unittest.TestCase):
 
         self.assertEqual(len(selected), 4)
         self.assertEqual(msg.count('<a href="https://x/'), 4)
-        self.assertIn('4. <a href="https://x/4"><b>Title 4</b></a>', msg)
+        self.assertIn(
+            '4. <a href="https://x/4"><b>Title 4</b></a>\n<i>YouTube | Video | Low 3</i>',
+            msg,
+        )
 
     def test_obsidian_caps_overlong_fields(self):
         long_title = "A" * 400
@@ -248,6 +270,7 @@ class TestRenderers(unittest.TestCase):
         msg = render_telegram_message("2026-02-21", sec)
         self.assertEqual(note.count("https://x/1"), 1)
         self.assertIn('<a href="https://x/1">', msg)
+        self.assertIn("<i>src | Must-read | Low 3</i>", msg)
         self.assertNotIn("(https://x/1)", msg)
 
     def test_renderers_include_context_feedback(self):
@@ -320,9 +343,9 @@ class TestRenderers(unittest.TestCase):
         self.assertEqual(segmented, msg)
         self.assertNotIn("Top Highlights", msg)
         self.assertNotIn("Themes", msg)
-        self.assertNotIn("GitHub", msg)
-        self.assertNotIn("Skim", msg)
-        self.assertNotIn("Videos", msg)
+        self.assertIn("Must-read", msg)
+        self.assertIn("Skim", msg)
+        self.assertIn("Video", msg)
 
     def test_telegram_escapes_html_in_titles_and_note(self):
         item = Item(
@@ -356,6 +379,7 @@ class TestRenderers(unittest.TestCase):
         self.assertIn("&lt;b&gt;boom&lt;/b&gt;", msg)
         self.assertIn("&lt;note&gt;", msg)
         self.assertIn("https://x/1?a=1&amp;b=2", msg)
+        self.assertIn("<i>src | Must-read | Low 3</i>", msg)
 
     def test_telegram_prefers_key_point_when_tldr_matches_title(self):
         item = Item(
@@ -382,6 +406,29 @@ class TestRenderers(unittest.TestCase):
         msg = render_telegram_message("2026-02-21", sec)
         self.assertIn("Useful distinct takeaway", msg)
         self.assertEqual(msg.count("Same headline"), 1)
+
+    def test_telegram_renders_source_alias_and_score_tier(self):
+        item = Item(
+            "1",
+            "https://arxiv.org/abs/1234",
+            "Paper",
+            "https://export.arxiv.org/rss/cs.LG",
+            None,
+            datetime.now(),
+            "article",
+            "body",
+        )
+        score = Score("1", 30, 30, 15, 75, tags=["llm"])
+        summary = Summary(tldr="Readable summary", key_points=[], why_it_matters="why")
+        sec = DigestSections(
+            must_read=[ScoredItem(item=item, score=score, summary=summary)],
+            skim=[],
+            videos=[],
+        )
+
+        msg = render_telegram_message("2026-02-21", sec)
+
+        self.assertIn("<i>arXiv | Must-read | High 75</i>", msg)
 
     def test_send_telegram_message_uses_html_parse_mode(self):
         response = MagicMock()

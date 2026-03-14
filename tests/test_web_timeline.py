@@ -139,6 +139,10 @@ class TestWebTimeline(unittest.TestCase):
             run_items = _route("/api/run-items", "GET").endpoint(run_id=run_id)
             self.assertEqual(len(run_items["items"]), 1)
             self.assertEqual(run_items["items"][0]["item_id"], "item-1")
+            self.assertEqual(run_items["items"][0]["score_total"], 88)
+            self.assertEqual(run_items["items"][0]["raw_total"], 88)
+            self.assertEqual(run_items["items"][0]["adjusted_total"], 88)
+            self.assertEqual(run_items["items"][0]["score_mode"], "adjusted")
 
             run_artifacts = _route("/api/run-artifacts", "GET").endpoint(run_id=run_id)
             self.assertEqual(len(run_artifacts["artifacts"]), 1)

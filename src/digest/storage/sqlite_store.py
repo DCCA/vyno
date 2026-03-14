@@ -129,6 +129,9 @@ class SQLiteStore:
                     section_rank INTEGER NOT NULL,
                     source_family TEXT NOT NULL,
                     score_total INTEGER NOT NULL,
+                    raw_total INTEGER,
+                    adjusted_total INTEGER,
+                    adjustment_breakdown_json TEXT,
                     summary TEXT,
                     tags_json TEXT NOT NULL,
                     topic_tags_json TEXT NOT NULL,
@@ -242,6 +245,11 @@ class SQLiteStore:
             self._ensure_column(conn, "feedback", "target_key", "TEXT")
             self._ensure_column(conn, "feedback", "features_json", "TEXT")
             self._ensure_column(conn, "feedback", "actor", "TEXT")
+            self._ensure_column(conn, "run_selected_items", "raw_total", "INTEGER")
+            self._ensure_column(conn, "run_selected_items", "adjusted_total", "INTEGER")
+            self._ensure_column(
+                conn, "run_selected_items", "adjustment_breakdown_json", "TEXT"
+            )
 
     def _ensure_column(
         self, conn: sqlite3.Connection, table: str, column: str, col_type: str
@@ -495,9 +503,9 @@ class SQLiteStore:
             conn.executemany(
                 (
                     "INSERT INTO run_selected_items "
-                    "(run_id, item_id, section, section_rank, source_family, score_total, summary, "
-                    "tags_json, topic_tags_json, format_tags_json) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    "(run_id, item_id, section, section_rank, source_family, score_total, raw_total, adjusted_total, "
+                    "adjustment_breakdown_json, summary, tags_json, topic_tags_json, format_tags_json) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 ),
                 [
                     (
@@ -506,7 +514,22 @@ class SQLiteStore:
                         str(row.get("section") or "").strip(),
                         int(row.get("section_rank") or 0),
                         str(row.get("source_family") or "").strip() or "unknown",
-                        int(row.get("score_total") or 0),
+                        int(
+                            row.get("adjusted_total")
+                            or row.get("score_total")
+                            or 0
+                        ),
+                        int(row.get("raw_total") or row.get("score_total") or 0),
+                        int(
+                            row.get("adjusted_total")
+                            or row.get("score_total")
+                            or 0
+                        ),
+                        json.dumps(
+                            row.get("adjustment_breakdown") or {},
+                            ensure_ascii=True,
+                            sort_keys=True,
+                        ),
                         str(row.get("summary") or "").strip(),
                         json.dumps(row.get("tags") or [], ensure_ascii=True),
                         json.dumps(row.get("topic_tags") or [], ensure_ascii=True),
@@ -525,7 +548,8 @@ class SQLiteStore:
             rows = conn.execute(
                 (
                     "SELECT s.run_id, s.item_id, s.section, s.section_rank, s.source_family, s.score_total, "
-                    "s.summary, s.tags_json, s.topic_tags_json, s.format_tags_json, "
+                    "s.raw_total, s.adjusted_total, s.adjustment_breakdown_json, s.summary, "
+                    "s.tags_json, s.topic_tags_json, s.format_tags_json, "
                     "i.url, i.title, i.source, i.author, i.published_at, i.type, i.description "
                     "FROM run_selected_items s "
                     "JOIN items i ON i.id = s.item_id "
@@ -538,6 +562,22 @@ class SQLiteStore:
             ).fetchall()
         out: list[dict[str, object]] = []
         for row in rows:
+            raw_total = row[6]
+            adjusted_total = row[7]
+            breakdown = _json_object(row[8])
+            legacy_score = raw_total is None and adjusted_total is None and not breakdown
+            final_score = int(
+                adjusted_total
+                if adjusted_total is not None
+                else row[5]
+                or 0
+            )
+            original_score = int(
+                raw_total
+                if raw_total is not None
+                else row[5]
+                or 0
+            )
             out.append(
                 {
                     "run_id": str(row[0]),
@@ -545,18 +585,22 @@ class SQLiteStore:
                     "section": str(row[2]),
                     "section_rank": int(row[3] or 0),
                     "source_family": str(row[4] or "unknown"),
-                    "score_total": int(row[5] or 0),
-                    "summary": str(row[6] or ""),
-                    "tags": _json_list(row[7]),
-                    "topic_tags": _json_list(row[8]),
-                    "format_tags": _json_list(row[9]),
-                    "url": str(row[10] or ""),
-                    "title": str(row[11] or ""),
-                    "source": str(row[12] or ""),
-                    "author": str(row[13] or ""),
-                    "published_at": str(row[14] or ""),
-                    "type": str(row[15] or ""),
-                    "description": str(row[16] or ""),
+                    "score_total": final_score,
+                    "raw_total": original_score,
+                    "adjusted_total": final_score,
+                    "adjustment_breakdown": breakdown,
+                    "score_mode": "legacy_raw" if legacy_score else "adjusted",
+                    "summary": str(row[9] or ""),
+                    "tags": _json_list(row[10]),
+                    "topic_tags": _json_list(row[11]),
+                    "format_tags": _json_list(row[12]),
+                    "url": str(row[13] or ""),
+                    "title": str(row[14] or ""),
+                    "source": str(row[15] or ""),
+                    "author": str(row[16] or ""),
+                    "published_at": str(row[17] or ""),
+                    "type": str(row[18] or ""),
+                    "description": str(row[19] or ""),
                 }
             )
         return out
@@ -1535,6 +1579,20 @@ def _json_dict(raw: object) -> dict[str, object]:
     return payload
 
 
+def _json_object(raw: object) -> dict[str, float]:
+    payload = _json_dict(raw)
+    out: dict[str, float] = {}
+    for key, value in payload.items():
+        label = str(key or "").strip()
+        if not label:
+            continue
+        try:
+            out[label] = round(float(value), 3)
+        except Exception:
+            continue
+    return out
+
+
 def _json_feature_list(raw: object) -> list[tuple[str, str]]:
     try:
         payload = json.loads(str(raw or "[]"))
@@ -1703,7 +1761,9 @@ def _timeline_restriction_details(
     elif top_key == "blocked":
         recommendations.append("Review blocked sources and exclusion keywords.")
     elif top_key == "ranking":
-        recommendations.append("Adjust topics, trusted sources, or must-read source cap.")
+        recommendations.append(
+            "Adjust topics, preferred reliable sources, or must-read source cap."
+        )
     if strictness_level == "high":
         recommendations.append("Run once with Replay Recent to compare output volume.")
     if not recommendations:

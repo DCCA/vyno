@@ -236,16 +236,48 @@ def build_rank_overrides(
     feedback_weights: dict[FeatureKey, float],
     max_offset: float,
 ) -> dict[str, float]:
-    merged = Counter(prior_weights)
-    merged.update(feedback_weights)
+    breakdown = build_rank_adjustment_breakdown(
+        scored_items,
+        prior_weights=prior_weights,
+        feedback_weights=feedback_weights,
+        max_offset=max_offset,
+    )
     overrides: dict[str, float] = {}
     for scored in scored_items:
-        adjustment = 0.0
-        for feature in item_features(scored):
-            adjustment += float(merged.get(feature, 0.0))
-        adjustment = _clamp(adjustment, -max_offset, max_offset)
-        overrides[scored.item.id] = float(scored.score.total) + adjustment
+        item_breakdown = breakdown.get(scored.item.id, {})
+        overrides[scored.item.id] = float(scored.score.total) + float(
+            item_breakdown.get("quality_prior", 0.0)
+        ) + float(item_breakdown.get("feedback_bias", 0.0))
     return overrides
+
+
+def build_rank_adjustment_breakdown(
+    scored_items: list[ScoredItem],
+    *,
+    prior_weights: dict[FeatureKey, float],
+    feedback_weights: dict[FeatureKey, float],
+    max_offset: float,
+) -> dict[str, dict[str, float]]:
+    adjustments: dict[str, dict[str, float]] = {}
+    for scored in scored_items:
+        prior_adjustment = 0.0
+        feedback_adjustment = 0.0
+        for feature in item_features(scored):
+            prior_adjustment += float(prior_weights.get(feature, 0.0))
+            feedback_adjustment += float(feedback_weights.get(feature, 0.0))
+        combined = prior_adjustment + feedback_adjustment
+        clamped = _clamp(combined, -max_offset, max_offset)
+        if combined != 0 and clamped != combined:
+            scale = clamped / combined
+            prior_adjustment *= scale
+            feedback_adjustment *= scale
+        item_adjustments: dict[str, float] = {}
+        if prior_adjustment:
+            item_adjustments["quality_prior"] = float(prior_adjustment)
+        if feedback_adjustment:
+            item_adjustments["feedback_bias"] = float(feedback_adjustment)
+        adjustments[scored.item.id] = item_adjustments
+    return adjustments
 
 
 def compute_repair_feature_deltas(
@@ -384,7 +416,7 @@ def _item_payload(scored: ScoredItem) -> dict[str, object]:
         "url": scored.item.url,
         "source": scored.item.source,
         "type": scored.item.type,
-        "score_total": scored.score.total,
+        "score_total": scored.score.final_total,
         "tags": list(scored.score.tags),
         "topic_tags": list(scored.score.topic_tags),
         "format_tags": list(scored.score.format_tags),

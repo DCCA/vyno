@@ -42,6 +42,19 @@ class Score:
     topic_tags: list[str] = field(default_factory=list)
     format_tags: list[str] = field(default_factory=list)
     provider: str = "rules"
+    raw_total: int | None = None
+    adjusted_total: int | None = None
+    adjustment_breakdown: dict[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.raw_total is None:
+            self.raw_total = int(self.total)
+        if self.adjusted_total is None:
+            self.adjusted_total = int(self.total)
+
+    @property
+    def final_total(self) -> int:
+        return int(self.adjusted_total if self.adjusted_total is not None else self.total)
 
 
 @dataclass(slots=True)

@@ -123,7 +123,7 @@ export function ProfilePage({
   const serverDiffCount = Object.keys(profileDiff).length
 
   const goalSummary = describeGoal(runPolicy.default_mode)
-  const focusSummary = `${topics.length} topics, ${trustedSources.length} trusted, ${exclusions.length} excluded`
+  const focusSummary = `${topics.length} topics, ${trustedSources.length} preferred, ${exclusions.length} excluded`
   const qualitySummary = describeQuality(selectionMode, summaryMode, diversityMode, qualityRepairEnabled, depthPreference)
   const outputSummary = renderMode === "source_segmented" ? `Source-grouped notes in ${obsidianFolder}` : `Sectioned digest in ${obsidianFolder}`
   const automationSummary = scheduleEnabled
@@ -204,7 +204,7 @@ export function ProfilePage({
           <SectionCard
             title="Focus"
             summary={focusSummary}
-            description="Prioritize themes and trusted inputs."
+            description="Prioritize themes and preferred reliable inputs."
             open={openSection === "focus"}
             onToggle={() => setOpenSection((current) => (current === "focus" ? "quality" : "focus"))}
             actionLabel={openSection === "focus" ? "Next section" : "Edit"}
@@ -218,11 +218,11 @@ export function ProfilePage({
               onChange={(next) => updateProfileField("topics", next)}
             />
             <TokenEditor
-              label="Trusted sources"
-              description="Trusted sources carry more weight during ranking."
+              label="Preferred reliable sources"
+              description="These sources act as a soft ranking preference, not an automatic boost."
               placeholder="Add a source like simonwillison.net"
               values={trustedSources}
-              emptyHint="No trusted sources configured."
+              emptyHint="No preferred reliable sources configured."
               onChange={(next) => updateProfileField("trusted_sources", next)}
             />
             <TokenEditor
@@ -237,7 +237,7 @@ export function ProfilePage({
               title="Current effect"
               text={
                 topics.length > 0 || trustedSources.length > 0 || exclusions.length > 0
-                  ? `Priority guidance is active across ${topics.length} topic${topics.length === 1 ? "" : "s"} and ${trustedSources.length} trusted source${trustedSources.length === 1 ? "" : "s"}.`
+                  ? `Priority guidance is active across ${topics.length} topic${topics.length === 1 ? "" : "s"} and ${trustedSources.length} preferred reliable source${trustedSources.length === 1 ? "" : "s"}.`
                   : "Selection is currently driven mostly by source quality and ranking rules."
               }
             />
@@ -598,8 +598,8 @@ export function ProfilePage({
                     onChange={(value) => updateProfileField("blocked_sources", fromLines(value))}
                   />
                   <ListAreaField
-                    label="Trusted X authors"
-                    description="Extra X authors to boost even if they are not in your sources list."
+                    label="Preferred X authors"
+                    description="Extra X authors that may receive a soft ranking preference even when discovered indirectly."
                     value={toLines(trustedAuthorsX)}
                     onChange={(value) => updateProfileField("trusted_authors_x", fromLines(value))}
                   />
@@ -610,8 +610,8 @@ export function ProfilePage({
                     onChange={(value) => updateProfileField("blocked_authors_x", fromLines(value))}
                   />
                   <ListAreaField
-                    label="Trusted GitHub owners"
-                    description="GitHub owners that should carry extra trust during scoring."
+                    label="Preferred GitHub owners"
+                    description="GitHub owners that may receive a soft ranking preference after content quality is scored."
                     value={toLines(trustedGithubOrgs)}
                     onChange={(value) => updateProfileField("trusted_orgs_github", fromLines(value))}
                   />

@@ -39,6 +39,7 @@ TECHNICAL_KEYWORDS = {
     "retrieval benchmark",
 }
 X_ENDORSEMENT_RE = re.compile(r"x_endorsed_by:([a-z0-9_]+)")
+SOURCE_PREFERENCE_MAX_BONUS = 2.0
 
 
 def _contains_any(text: str, words: list[str] | set[str]) -> int:
@@ -58,13 +59,6 @@ def score_item(item: Item, profile: ProfileConfig) -> Score:
     relevance = max(0, min(60, relevance - _contains_any(text, profile.exclusions) * 10))
 
     quality = 10
-    if any(src.lower() in item.source.lower() for src in profile.trusted_sources):
-        quality += 12
-    if item.source == "x.com" and item.author and item.author.lower() in {a.lower() for a in profile.trusted_authors_x}:
-        quality += 8
-    github_owner = _github_owner(item.source)
-    if github_owner and github_owner.lower() in {o.lower() for o in profile.trusted_orgs_github}:
-        quality += 8
     quality += min(12, _count_x_endorsements(text) * 4)
     if len(item.raw_text) > 500:
         quality += 8
@@ -106,6 +100,24 @@ def is_blocked(item: Item, profile: ProfileConfig) -> bool:
     if github_owner and github_owner.lower() in {o.lower() for o in profile.blocked_orgs_github}:
         return True
     return False
+
+
+def source_preference_adjustment(item: Item, score: Score, profile: ProfileConfig) -> float:
+    if score.quality < _source_preference_quality_floor(score):
+        return 0.0
+    preferred = False
+    if any(src.lower() in item.source.lower() for src in profile.trusted_sources):
+        preferred = True
+    if (
+        item.source == "x.com"
+        and item.author
+        and item.author.lower() in {a.lower() for a in profile.trusted_authors_x}
+    ):
+        preferred = True
+    github_owner = _github_owner(item.source)
+    if github_owner and github_owner.lower() in {o.lower() for o in profile.trusted_orgs_github}:
+        preferred = True
+    return SOURCE_PREFERENCE_MAX_BONUS if preferred else 0.0
 
 
 def content_depth_adjustment(item: Item, profile: ProfileConfig) -> int:
@@ -198,6 +210,12 @@ def _github_owner(source: str) -> str:
     if "/" in tail:
         return tail.split("/", 1)[0]
     return ""
+
+
+def _source_preference_quality_floor(score: Score) -> int:
+    if str(score.provider or "").strip().lower() == "agent":
+        return 15
+    return 14
 
 
 def _rule_tags(item: Item) -> tuple[list[str], list[str], list[str]]:

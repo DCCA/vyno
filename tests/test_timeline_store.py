@@ -231,6 +231,12 @@ class TestTimelineStore(unittest.TestCase):
                         "section_rank": 1,
                         "source_family": "example.com",
                         "score_total": 91,
+                        "raw_total": 93,
+                        "adjusted_total": 91,
+                        "adjustment_breakdown": {
+                            "source_preference": 2.0,
+                            "research_balance": -4.0,
+                        },
                         "summary": "Strong benchmark-heavy item",
                         "tags": ["benchmark", "technical"],
                         "topic_tags": ["infra"],
@@ -266,11 +272,65 @@ class TestTimelineStore(unittest.TestCase):
 
             self.assertEqual(len(run_items), 1)
             self.assertEqual(run_items[0]["item_id"], "item-1")
+            self.assertEqual(run_items[0]["score_total"], 91)
+            self.assertEqual(run_items[0]["raw_total"], 93)
+            self.assertEqual(run_items[0]["adjusted_total"], 91)
+            self.assertEqual(run_items[0]["score_mode"], "adjusted")
+            self.assertEqual(
+                run_items[0]["adjustment_breakdown"]["research_balance"], -4.0
+            )
             self.assertEqual(len(artifacts), 1)
             self.assertEqual(artifacts[0]["channel"], "telegram")
             self.assertEqual(archived_runs[0]["run_id"], run_id)
             self.assertEqual(summary[0], (1, 1))
             self.assertLess(bias[("technicality", "high")], 0.0)
+
+    def test_list_run_items_falls_back_for_legacy_score_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            store = SQLiteStore(str(db))
+            run_id = "legacy-run"
+            store.start_run(run_id, "2026-03-01T00:00:00+00:00", "2026-03-01T01:00:00+00:00")
+            store.upsert_items(
+                [
+                    Item(
+                        id="legacy-item",
+                        url="https://example.com/legacy",
+                        title="Legacy score row",
+                        source="https://example.com/feed.xml",
+                        author="alice",
+                        published_at=datetime.fromisoformat("2026-03-01T00:00:00+00:00"),
+                        type="article",
+                        raw_text="legacy row",
+                        description="old row",
+                    )
+                ]
+            )
+            with store._conn() as conn:
+                conn.execute(
+                    (
+                        "INSERT INTO run_selected_items "
+                        "(run_id, item_id, section, section_rank, source_family, score_total, raw_total, adjusted_total, "
+                        "adjustment_breakdown_json, summary, tags_json, topic_tags_json, format_tags_json) "
+                        "VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, '', ?, '[]', '[]', '[]')"
+                    ),
+                    (
+                        run_id,
+                        "legacy-item",
+                        "must_read",
+                        1,
+                        "example.com",
+                        77,
+                        "legacy summary",
+                    ),
+                )
+
+            run_items = store.list_run_items(run_id=run_id)
+
+            self.assertEqual(run_items[0]["score_total"], 77)
+            self.assertEqual(run_items[0]["raw_total"], 77)
+            self.assertEqual(run_items[0]["adjusted_total"], 77)
+            self.assertEqual(run_items[0]["score_mode"], "legacy_raw")
 
 
 if __name__ == "__main__":

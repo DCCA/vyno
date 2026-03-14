@@ -263,6 +263,10 @@ export type RunItem = {
   section_rank: number
   source_family: string
   score_total: number
+  raw_total: number
+  adjusted_total: number
+  adjustment_breakdown: Record<string, number>
+  score_mode: "adjusted" | "legacy_raw"
   summary: string
   tags: string[]
   topic_tags: string[]

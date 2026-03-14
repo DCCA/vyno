@@ -11,6 +11,20 @@ from digest.models import DigestSections
 
 TELEGRAM_PRIMARY_MIN_ITEMS = 10
 TELEGRAM_PRIMARY_MIN_SOURCES = 5
+TELEGRAM_TITLE_MAX_LEN = 90
+TELEGRAM_SUMMARY_MAX_LEN = 140
+
+SOURCE_LABEL_ALIASES = {
+    "arxiv.org": "arXiv",
+    "export.arxiv.org": "arXiv",
+    "news.ycombinator.com": "Hacker News",
+    "simonwillison.net": "Simon Willison",
+    "youtube.com": "YouTube",
+    "theverge.com": "The Verge",
+    "techcrunch.com": "TechCrunch",
+    "feeds.arstechnica.com": "Ars Technica",
+    "latent.space": "Latent Space",
+}
 
 NOISE_PHRASE_RE = re.compile(
     r"\b(check out|patreon|sponsor|support us|sign up)\b", re.IGNORECASE
@@ -84,8 +98,15 @@ def _build_digest_blocks(
         blocks.append(sparse_note)
 
     primary_items = _select_primary_items(sections)
+    section_labels = _section_labels(sections)
     for idx, item in enumerate(primary_items, start=1):
-        blocks.append(_render_item_block(idx, item))
+        blocks.append(
+            _render_item_block(
+                idx,
+                item,
+                section_label=section_labels.get(item.item.id, "Selected"),
+            )
+        )
     return blocks
 
 
@@ -225,20 +246,27 @@ def _source_bucket(raw: str) -> str:
     return value
 
 
-def _render_item_block(idx: int, scored_item) -> str:
-    title = _clean_text(scored_item.item.title, max_len=90) or "Untitled item"
+def _render_item_block(idx: int, scored_item, *, section_label: str) -> str:
+    title = _clean_text(scored_item.item.title, max_len=TELEGRAM_TITLE_MAX_LEN) or "Untitled item"
     summary = _best_summary_text(scored_item)
+    source_label = _source_label(scored_item)
+    score_label = _score_label(scored_item)
     safe_url = html.escape(scored_item.item.url, quote=True)
     safe_title = html.escape(title, quote=True)
+    safe_meta = html.escape(
+        f"{source_label} | {section_label} | {score_label}",
+        quote=True,
+    )
     safe_summary = html.escape(summary, quote=True)
     return (
         f"{idx}. <a href=\"{safe_url}\"><b>{safe_title}</b></a>\n"
+        f"<i>{safe_meta}</i>\n"
         f"{safe_summary}"
     )
 
 
 def _best_summary_text(scored_item) -> str:
-    title = _clean_text(scored_item.item.title, max_len=90)
+    title = _clean_text(scored_item.item.title, max_len=TELEGRAM_TITLE_MAX_LEN)
     candidates: list[str] = []
     summary = scored_item.summary
     if summary:
@@ -250,13 +278,56 @@ def _best_summary_text(scored_item) -> str:
 
     normalized_title = _normalize_compare_text(title)
     for candidate in candidates:
-        cleaned = _clean_text(candidate, max_len=160)
+        cleaned = _clean_text(candidate, max_len=TELEGRAM_SUMMARY_MAX_LEN)
         if not cleaned:
             continue
         if _normalize_compare_text(cleaned) == normalized_title:
             continue
         return cleaned
     return title or "Open item"
+
+
+def _section_labels(sections: DigestSections) -> dict[str, str]:
+    labels: dict[str, str] = {}
+    for scored in sections.must_read:
+        labels[scored.item.id] = "Must-read"
+    for scored in sections.skim:
+        labels[scored.item.id] = "Skim"
+    for scored in sections.videos:
+        labels[scored.item.id] = "Video"
+    return labels
+
+
+def _source_label(scored_item) -> str:
+    item = scored_item.item
+    source = (item.source or "").strip().lower()
+    if item.type.startswith("github_") or source.startswith("github:"):
+        return "GitHub"
+    if item.type == "video" or source == "youtube" or _source_bucket(source) == "youtube.com":
+        return "YouTube"
+    if item.type == "x_post" or source == "x.com":
+        return "X"
+    bucket = _source_bucket(source)
+    if bucket in SOURCE_LABEL_ALIASES:
+        return SOURCE_LABEL_ALIASES[bucket]
+    if bucket == "github":
+        return "GitHub"
+    if bucket == "unknown":
+        return "Unknown"
+    return bucket
+
+
+def _score_label(scored_item) -> str:
+    total = int(getattr(scored_item.score, "final_total", 0) or 0)
+    return f"{_score_tier(total)} {total}"
+
+
+def _score_tier(total: int) -> str:
+    if total >= 70:
+        return "High"
+    if total >= 40:
+        return "Medium"
+    return "Low"
 
 
 def _normalize_compare_text(value: str) -> str:

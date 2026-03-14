@@ -309,10 +309,22 @@ export function TimelinePage({
                         <Badge variant="secondary">{row.section}</Badge>
                         <span>rank {row.section_rank}</span>
                         <span>source {row.source_family}</span>
-                        <span>score {row.score_total}</span>
+                        <span>score {row.adjusted_total}</span>
+                        {row.raw_total !== row.adjusted_total ? <span>raw {row.raw_total}</span> : null}
+                        {row.score_mode === "legacy_raw" ? <Badge variant="outline">legacy score</Badge> : null}
                       </div>
                       <p className="mt-2 text-sm font-semibold">{row.title}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{row.summary || row.description || row.url}</p>
+                      {Object.keys(row.adjustment_breakdown ?? {}).length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          {Object.entries(row.adjustment_breakdown).map(([key, value]) => (
+                            <span key={key}>
+                              {formatAdjustmentLabel(key)} {value > 0 ? "+" : ""}
+                              {value}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Button variant="outline" size="sm" onClick={() => onSubmitItemFeedback(row.item_id, "more_like_this")}>
                           More like this
@@ -453,6 +465,23 @@ export function TimelinePage({
       </div>
     </div>
   )
+}
+
+function formatAdjustmentLabel(value: string): string {
+  switch (value) {
+    case "quality_prior":
+      return "quality prior"
+    case "feedback_bias":
+      return "feedback"
+    case "source_preference":
+      return "source preference"
+    case "content_depth":
+      return "content depth"
+    case "research_balance":
+      return "research balance"
+    default:
+      return value.replace(/_/g, " ")
+  }
 }
 
 function TimelineMetric({ label, value }: { label: string; value: string }) {

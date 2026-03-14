@@ -32,6 +32,7 @@ from digest.pipeline.scoring import (
     is_blocked,
     research_concentration_adjustments,
     score_item,
+    source_preference_adjustment,
 )
 from digest.pipeline.selection import (
     count_source_buckets,
@@ -41,7 +42,7 @@ from digest.pipeline.selection import (
 from digest.pipeline.summarize import FallbackSummarizer
 from digest.quality.online_repair import (
     ResponsesAPIQualityRepair,
-    build_rank_overrides,
+    build_rank_adjustment_breakdown,
     compute_repair_feature_deltas,
     item_features,
     rebuild_sections_with_repair,
@@ -747,6 +748,9 @@ def run_digest(
     quality_model = ""
 
     rank_overrides: dict[str, float] | None = None
+    adjustment_breakdowns: dict[str, dict[str, float]] = {
+        scored.item.id: {} for scored in scored_items
+    }
     depth_adjustment_count = 0
     depth_adjustment_total = 0.0
     if profile.quality_learning_enabled and scored_items:
@@ -757,11 +761,35 @@ def run_digest(
         feedback_weights = store.feedback_feature_bias(
             max_abs_bias=max(1.0, profile.quality_learning_max_offset / 2.0)
         )
-        rank_overrides = build_rank_overrides(
+        learning_breakdown = build_rank_adjustment_breakdown(
             scored_items,
             prior_weights=prior_weights,
             feedback_weights=feedback_weights,
             max_offset=profile.quality_learning_max_offset,
+        )
+        prior_adjustments = {
+            item_id: float(parts.get("quality_prior", 0.0))
+            for item_id, parts in learning_breakdown.items()
+            if float(parts.get("quality_prior", 0.0)) != 0.0
+        }
+        feedback_adjustments = {
+            item_id: float(parts.get("feedback_bias", 0.0))
+            for item_id, parts in learning_breakdown.items()
+            if float(parts.get("feedback_bias", 0.0)) != 0.0
+        }
+        rank_overrides = _apply_rank_adjustments(
+            scored_items,
+            rank_overrides=rank_overrides,
+            adjustment_breakdowns=adjustment_breakdowns,
+            label="quality_prior",
+            adjustments=prior_adjustments,
+        )
+        rank_overrides = _apply_rank_adjustments(
+            scored_items,
+            rank_overrides=rank_overrides,
+            adjustment_breakdowns=adjustment_breakdowns,
+            label="feedback_bias",
+            adjustments=feedback_adjustments,
         )
         log_event(
             run_logger,
@@ -780,6 +808,41 @@ def run_digest(
             feedback_feature_count=len(feedback_weights),
         )
 
+    source_preference_count = 0
+    source_preference_total = 0.0
+    if scored_items:
+        source_preference_adjustments: dict[str, float] = {}
+        for scored in scored_items:
+            adjustment = float(
+                source_preference_adjustment(scored.item, scored.score, profile)
+            )
+            if adjustment == 0.0:
+                continue
+            source_preference_adjustments[scored.item.id] = adjustment
+            source_preference_count += 1
+            source_preference_total += adjustment
+        if source_preference_adjustments:
+            rank_overrides = _apply_rank_adjustments(
+                scored_items,
+                rank_overrides=rank_overrides,
+                adjustment_breakdowns=adjustment_breakdowns,
+                label="source_preference",
+                adjustments=source_preference_adjustments,
+            )
+            log_event(
+                run_logger,
+                "info",
+                "source_preference",
+                "Applied source preference prior",
+                adjusted_item_count=source_preference_count,
+                adjustment_total=round(source_preference_total, 2),
+            )
+            emit_progress(
+                "source_preference",
+                "Applied source preference prior",
+                adjusted_item_count=source_preference_count,
+            )
+
     if scored_items:
         depth_adjustments: dict[str, float] = {}
         for scored in scored_items:
@@ -790,13 +853,13 @@ def run_digest(
             depth_adjustment_count += 1
             depth_adjustment_total += adjustment
         if depth_adjustments:
-            if rank_overrides is None:
-                rank_overrides = {}
-            for scored in scored_items:
-                base = float(rank_overrides.get(scored.item.id, scored.score.total))
-                rank_overrides[scored.item.id] = base + depth_adjustments.get(
-                    scored.item.id, 0.0
-                )
+            rank_overrides = _apply_rank_adjustments(
+                scored_items,
+                rank_overrides=rank_overrides,
+                adjustment_breakdowns=adjustment_breakdowns,
+                label="content_depth",
+                adjustments=depth_adjustments,
+            )
             log_event(
                 run_logger,
                 "info",
@@ -820,16 +883,18 @@ def run_digest(
         rank_overrides=rank_overrides,
     )
     if research_adjustments:
-        if rank_overrides is None:
-            rank_overrides = {}
-        for scored in scored_items:
-            adjustment = float(research_adjustments.get(scored.item.id, 0.0))
-            if adjustment == 0:
+        for item_id, adjustment in research_adjustments.items():
+            if float(adjustment) == 0.0:
                 continue
-            base = float(rank_overrides.get(scored.item.id, scored.score.total))
-            rank_overrides[scored.item.id] = base + adjustment
             research_adjustment_count += 1
-            research_adjustment_total += adjustment
+            research_adjustment_total += float(adjustment)
+        rank_overrides = _apply_rank_adjustments(
+            scored_items,
+            rank_overrides=rank_overrides,
+            adjustment_breakdowns=adjustment_breakdowns,
+            label="research_balance",
+            adjustments=research_adjustments,
+        )
         log_event(
             run_logger,
             "info",
@@ -843,6 +908,12 @@ def run_digest(
             "Applied research concentration penalty",
             adjusted_item_count=research_adjustment_count,
         )
+
+    _annotate_adjusted_scores(
+        scored_items,
+        rank_overrides=rank_overrides,
+        adjustment_breakdowns=adjustment_breakdowns,
+    )
 
     digest_max_per_source = max(2, profile.must_read_max_per_source + 1)
     ranked_items = rank_scored_items(scored_items, rank_overrides=rank_overrides)
@@ -1647,6 +1718,47 @@ def _archive_run_artifacts(
     ]
 
 
+def _apply_rank_adjustments(
+    scored_items: list[ScoredItem],
+    *,
+    rank_overrides: dict[str, float] | None,
+    adjustment_breakdowns: dict[str, dict[str, float]],
+    label: str,
+    adjustments: dict[str, float],
+) -> dict[str, float] | None:
+    if not adjustments:
+        return rank_overrides
+    if rank_overrides is None:
+        rank_overrides = {}
+    for scored in scored_items:
+        delta = float(adjustments.get(scored.item.id, 0.0))
+        if delta == 0.0:
+            continue
+        base = float(rank_overrides.get(scored.item.id, scored.score.total))
+        rank_overrides[scored.item.id] = base + delta
+        breakdown = adjustment_breakdowns.setdefault(scored.item.id, {})
+        breakdown[label] = round(float(breakdown.get(label, 0.0)) + delta, 3)
+    return rank_overrides
+
+
+def _annotate_adjusted_scores(
+    scored_items: list[ScoredItem],
+    *,
+    rank_overrides: dict[str, float] | None,
+    adjustment_breakdowns: dict[str, dict[str, float]],
+) -> None:
+    for scored in scored_items:
+        raw_total = int(scored.score.total)
+        final_total = float((rank_overrides or {}).get(scored.item.id, raw_total))
+        scored.score.raw_total = raw_total
+        scored.score.adjusted_total = int(round(final_total))
+        scored.score.adjustment_breakdown = {
+            key: round(float(value), 3)
+            for key, value in adjustment_breakdowns.get(scored.item.id, {}).items()
+            if float(value) != 0.0
+        }
+
+
 def _selected_item_rows(
     *,
     must_read: list[ScoredItem],
@@ -1677,7 +1789,10 @@ def _selected_item_rows(
                     "section": section_name,
                     "section_rank": idx,
                     "source_family": source_family(scored.item.source),
-                    "score_total": scored.score.total,
+                    "score_total": scored.score.final_total,
+                    "raw_total": scored.score.raw_total,
+                    "adjusted_total": scored.score.adjusted_total,
+                    "adjustment_breakdown": dict(scored.score.adjustment_breakdown),
                     "summary": summary,
                     "tags": list(scored.score.tags),
                     "topic_tags": list(scored.score.topic_tags),

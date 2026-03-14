@@ -50,10 +50,11 @@ class TestSourceSegmentedRendering(unittest.TestCase):
         self.assertTrue(chunks)
         text = "\n".join(chunks)
         self.assertIn('1. <a href="https://e/1"><b>Title 1</b></a>', text)
+        self.assertIn("<i>GitHub | Must-read | Low 30</i>", text)
+        self.assertIn("<i>rss | Skim | Low 20</i>", text)
+        self.assertIn("<i>YouTube | Video | Low 10</i>", text)
         self.assertNotIn("Top Highlights", text)
-        self.assertNotIn("GitHub", text)
         self.assertNotIn("Research & Articles", text)
-        self.assertNotIn("Video", text)
 
     def test_obsidian_source_segmented_mode(self):
         sec = DigestSections(

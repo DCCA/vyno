@@ -3,7 +3,11 @@ from datetime import datetime
 
 from digest.config import ProfileConfig
 from digest.models import Item, Score, ScoredItem
-from digest.pipeline.scoring import research_concentration_adjustments, score_item
+from digest.pipeline.scoring import (
+    research_concentration_adjustments,
+    score_item,
+    source_preference_adjustment,
+)
 
 
 class TestScoring(unittest.TestCase):
@@ -68,6 +72,53 @@ class TestScoring(unittest.TestCase):
         endorsed_score = score_item(endorsed, profile)
         self.assertGreater(endorsed_score.quality, plain_score.quality)
         self.assertIn("x-discovered", endorsed_score.format_tags)
+
+    def test_trusted_sources_do_not_inflate_raw_score(self):
+        trusted_profile = ProfileConfig(trusted_sources=["example.com"])
+        plain_profile = ProfileConfig()
+        item = Item(
+            id="trust-1",
+            url="https://example.com/post",
+            title="AI product launch",
+            source="https://example.com/feed.xml",
+            author=None,
+            published_at=datetime.now(),
+            type="article",
+            raw_text="launch release feature for llm agents",
+        )
+        trusted_score = score_item(item, trusted_profile)
+        plain_score = score_item(item, plain_profile)
+        self.assertEqual(trusted_score.quality, plain_score.quality)
+        self.assertEqual(trusted_score.total, plain_score.total)
+
+    def test_source_preference_is_soft_and_quality_gated(self):
+        profile = ProfileConfig(trusted_sources=["example.com"])
+        low_signal = Score(
+            item_id="low",
+            relevance=10,
+            quality=12,
+            novelty=4,
+            total=26,
+        )
+        high_signal = Score(
+            item_id="high",
+            relevance=30,
+            quality=18,
+            novelty=7,
+            total=55,
+        )
+        item = Item(
+            id="pref-1",
+            url="https://example.com/post",
+            title="Strong AI benchmark",
+            source="https://example.com/feed.xml",
+            author=None,
+            published_at=datetime.now(),
+            type="article",
+            raw_text="benchmark inference agents",
+        )
+        self.assertEqual(source_preference_adjustment(item, low_signal, profile), 0.0)
+        self.assertEqual(source_preference_adjustment(item, high_signal, profile), 2.0)
 
     def test_research_concentration_adjustments_penalize_paper_heavy_pool(self):
         rows: list[ScoredItem] = []
