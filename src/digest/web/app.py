@@ -24,7 +24,9 @@ from digest.logging_utils import get_run_logger
 from digest.ops.onboarding import (
     OnboardingSettings,
     apply_source_pack,
+    apply_source_selection,
     build_onboarding_status,
+    list_source_catalog,
     list_source_packs,
     mark_step_completed,
     run_preflight,
@@ -1162,6 +1164,21 @@ def create_app(settings: WebSettings):
         )
         run_options = _web_live_run_options(trigger=trigger, mode=resolved_mode)
 
+        # Compute effective min_items threshold: only for scheduled runs.
+        effective_min_items = 0
+        if trigger == "schedule" and profile.min_items_for_delivery > 0:
+            effective_min_items = profile.min_items_for_delivery
+            # Safety valve: if too long since last real delivery, force it
+            store_check = SQLiteStore(settings.db_path)
+            last_end = store_check.last_completed_window_end()
+            if last_end:
+                last_dt = datetime.fromisoformat(last_end)
+                if last_dt.tzinfo is None:
+                    last_dt = last_dt.replace(tzinfo=timezone.utc)
+                hours_since = (datetime.now(timezone.utc) - last_dt).total_seconds() / 3600
+                if hours_since >= profile.max_accumulation_hours:
+                    effective_min_items = 0
+
         _init_run_progress(run_id=run_request_id, mode=resolved_mode)
 
         def worker() -> None:
@@ -1178,6 +1195,7 @@ def create_app(settings: WebSettings):
                     profile,
                     store,
                     **run_options,
+                    min_items_for_delivery=effective_min_items,
                     logger=worker_logger,
                     progress_cb=lambda event: _record_run_progress(
                         run_request_id, event
@@ -1407,6 +1425,43 @@ def create_app(settings: WebSettings):
                 settings.onboarding_state_path,
                 "sources",
                 details=f"pack:{pack_id}",
+            )
+
+        return result
+
+    @app.get("/api/onboarding/source-catalog")
+    def get_onboarding_source_catalog() -> dict[str, Any]:
+        return list_source_catalog(
+            settings.sources_path,
+            settings.sources_overlay_path,
+        )
+
+    @app.post("/api/onboarding/sources/apply-selection")
+    def post_onboarding_apply_selection(
+        payload: dict[str, Any] = Body(...),
+    ) -> dict[str, Any]:
+        entries = payload.get("entries")
+        if not isinstance(entries, list):
+            raise HTTPException(status_code=400, detail="entries list is required")
+        result = apply_source_selection(onboarding_settings, entries)
+
+        _save_snapshot(
+            settings,
+            action="source_catalog_apply",
+            details={
+                "added_count": int(result.get("added_count", 0)),
+                "error_count": int(result.get("error_count", 0)),
+            },
+        )
+
+        if (
+            int(result.get("added_count", 0)) > 0
+            or int(result.get("existing_count", 0)) > 0
+        ):
+            mark_step_completed(
+                settings.onboarding_state_path,
+                "sources",
+                details="catalog_selection",
             )
 
         return result

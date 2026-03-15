@@ -98,6 +98,8 @@ class ProfileConfig:
     quality_learning_max_offset: float = 8.0
     quality_learning_half_life_days: int = 14
     must_read_max_per_source: int = 2
+    min_items_for_delivery: int = 0
+    max_accumulation_hours: int = 6
     content_depth_preference: str = "balanced"
     x_cost_per_post_usd: float = 0.005
     x_max_spend_per_run_usd: float = 0.05
@@ -371,6 +373,8 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         must_read_max_per_source=max(
             1, int(data.get("must_read_max_per_source", 2) or 2)
         ),
+        min_items_for_delivery=max(0, int(data["min_items_for_delivery"] if "min_items_for_delivery" in data and data["min_items_for_delivery"] is not None else 0)),
+        max_accumulation_hours=max(1, int(data["max_accumulation_hours"] if "max_accumulation_hours" in data and data["max_accumulation_hours"] is not None else 6)),
         content_depth_preference=content_depth_preference,
         x_cost_per_post_usd=x_cost_per_post_usd,
         x_max_spend_per_run_usd=x_max_spend_per_run_usd,

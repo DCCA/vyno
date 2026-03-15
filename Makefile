@@ -1,4 +1,4 @@
-.PHONY: test doctor live schedule logs bot web-api web-ui web-ui-build web-screenshots app security-check security-check-extended docker-build docker-up docker-down docker-logs docker-ps docker-restart docker-scheduler-build docker-scheduler-up docker-scheduler-down docker-scheduler-logs docker-scheduler-ps docker-scheduler-restart docker-scheduler-deploy
+.PHONY: setup test doctor live schedule logs bot web-api web-ui web-ui-build web-screenshots app security-check security-check-extended docker-build docker-up docker-down docker-logs docker-ps docker-restart docker-scheduler-build docker-scheduler-up docker-scheduler-down docker-scheduler-logs docker-scheduler-ps docker-scheduler-restart docker-scheduler-deploy
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && echo 1 || echo 0)
 
@@ -9,6 +9,9 @@ else
 PYTHON_CMD := PYTHONPATH=src python3
 DIGEST_CMD := PYTHONPATH=src ./bin/digest
 endif
+
+setup:
+	./scripts/setup.sh
 
 test:
 	$(PYTHON_CMD) -m unittest discover -s tests -p 'test_*.py' -v

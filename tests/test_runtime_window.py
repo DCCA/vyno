@@ -25,6 +25,17 @@ class TestRuntimeWindow(unittest.TestCase):
             store.finish_run("r1", "success", [], [])
             self.assertEqual(store.last_completed_window_end(), "2026-02-21T00:00:00+00:00")
 
+    def test_store_ignores_accumulated_runs_for_window_end(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "digest.db"
+            store = SQLiteStore(str(db))
+            store.start_run("r1", "2026-02-20T00:00:00+00:00", "2026-02-21T00:00:00+00:00")
+            store.finish_run("r1", "success", [], [])
+            store.start_run("r2", "2026-02-21T00:00:00+00:00", "2026-02-21T01:00:00+00:00")
+            store.finish_run("r2", "accumulated", [], [])
+            # Window end should be from r1, not r2
+            self.assertEqual(store.last_completed_window_end(), "2026-02-21T00:00:00+00:00")
+
 
 if __name__ == "__main__":
     unittest.main()

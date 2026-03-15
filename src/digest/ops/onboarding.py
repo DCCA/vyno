@@ -39,6 +39,59 @@ ONBOARDING_STEPS: list[tuple[str, str]] = [
 ]
 
 
+@dataclass(slots=True)
+class CatalogEntry:
+    source_type: str
+    value: str
+    label: str
+    description: str
+    categories: tuple[str, ...]
+
+
+_CATEGORIES: list[dict[str, str]] = [
+    {"id": "core", "label": "Core AI News", "description": "Essential sources for staying current on AI"},
+    {"id": "research", "label": "Research", "description": "Papers, labs, and academic channels"},
+    {"id": "engineering", "label": "AI Engineering", "description": "Builder-focused channels, repos, and tutorials"},
+    {"id": "industry", "label": "Industry & Analysis", "description": "Tech press, market analysis, and trends"},
+]
+
+_SOURCE_CATALOG: tuple[CatalogEntry, ...] = (
+    # --- Core AI News ---
+    CatalogEntry("rss", "https://openai.com/news/rss.xml", "OpenAI News", "Official blog and announcements", ("core", "industry")),
+    CatalogEntry("rss", "https://blog.google/technology/ai/rss/", "Google AI Blog", "Research and product updates from Google AI", ("core", "industry")),
+    CatalogEntry("rss", "https://export.arxiv.org/rss/cs.AI", "arXiv cs.AI", "AI preprints and new papers", ("core", "research")),
+    CatalogEntry("youtube_channel", "UCMLtBahI5DMrt0NPvDSoIRQ", "Yannic Kilcher", "AI research paper breakdowns and commentary", ("core", "research")),
+    CatalogEntry("youtube_channel", "UCXUPKJO5MZQN11PqgIvyuvQ", "Two Minute Papers", "Quick visual summaries of AI research", ("core", "research")),
+    CatalogEntry("github_repo", "openai/openai-cookbook", "OpenAI Cookbook", "Examples and guides for the OpenAI API", ("core", "engineering")),
+    CatalogEntry("github_org", "https://github.com/vercel-labs", "Vercel Labs", "Experimental AI projects from Vercel", ("core", "engineering")),
+    # --- Research ---
+    CatalogEntry("rss", "https://export.arxiv.org/rss/cs.LG", "arXiv cs.LG", "Machine learning preprints", ("research",)),
+    CatalogEntry("rss", "https://export.arxiv.org/rss/cs.CL", "arXiv cs.CL", "Computational linguistics and NLP papers", ("research",)),
+    CatalogEntry("rss", "https://news.mit.edu/rss/topic/artificial-intelligence2", "MIT AI News", "AI research and breakthroughs from MIT", ("research",)),
+    CatalogEntry("youtube_channel", "UCbfYPyITQ-7l4upoX8nvctg", "3Blue1Brown", "Visual math and ML explainers", ("research",)),
+    CatalogEntry("youtube_channel", "UCv83tO5cePwHMt1952IVVHw", "DeepMind", "Research talks and demos from DeepMind", ("research",)),
+    CatalogEntry("youtube_channel", "UCbmNph6atAoGfqLoCL_duAg", "Stanford Online", "Stanford CS and AI lectures", ("research",)),
+    # --- AI Engineering ---
+    CatalogEntry("youtube_channel", "UCmOwsoHty5PrmE-3QhUBfPQ", "Fireship", "Fast-paced dev news and tutorials", ("engineering",)),
+    CatalogEntry("youtube_channel", "UCFbNIlppjAuEX4znoulh0Cw", "AssemblyAI", "Applied AI and speech-to-text tutorials", ("engineering",)),
+    CatalogEntry("youtube_channel", "UCsBjURrPoezykLs9EqgamOA", "Tech With Tim", "Python and AI programming tutorials", ("engineering",)),
+    CatalogEntry("youtube_channel", "UCW8Ews7tdKKkBT6GdtQaXvQ", "freeCodeCamp.org", "Free full-length coding courses", ("engineering",)),
+    CatalogEntry("github_repo", "anthropics/claude-code", "Claude Code", "Anthropic's CLI coding assistant", ("engineering",)),
+    CatalogEntry("github_topic", "llm", "GitHub LLM Topic", "Trending repos tagged with LLM", ("engineering",)),
+    CatalogEntry("github_query", "is:issue llm", "LLM Issues", "Open issues mentioning LLM across GitHub", ("engineering",)),
+    # --- Industry & Analysis ---
+    CatalogEntry("rss", "https://techcrunch.com/category/artificial-intelligence/feed/", "TechCrunch AI", "AI startup and industry coverage", ("industry",)),
+    CatalogEntry("rss", "https://venturebeat.com/category/ai/feed", "VentureBeat AI", "Enterprise AI news and analysis", ("industry",)),
+    CatalogEntry("rss", "https://blogs.nvidia.com/feed/", "NVIDIA Blog", "GPU and AI platform updates from NVIDIA", ("industry",)),
+    CatalogEntry("rss", "https://feeds.arstechnica.com/arstechnica/index", "Ars Technica", "In-depth tech reporting and analysis", ("industry",)),
+    CatalogEntry("rss", "https://www.theverge.com/rss/tech/index.xml", "The Verge Tech", "Consumer tech and industry news", ("industry",)),
+    CatalogEntry("rss", "https://www.wired.com/feed/tag/ai/latest/rss", "WIRED AI", "AI features and long-form analysis", ("industry",)),
+    CatalogEntry("rss", "https://news.ycombinator.com/rss", "Hacker News", "Community-curated tech and startup links", ("industry", "engineering")),
+    CatalogEntry("youtube_channel", "UCfMJ2MchTSW2kWaT0kK94Yw", "The Verge (YouTube)", "Tech news videos and reviews", ("industry",)),
+    CatalogEntry("youtube_channel", "UCSJbGtTlrDami-tDGPUV9-w", "Bloomberg Technology", "Tech business and market coverage", ("industry",)),
+)
+
+
 _SOURCE_PACKS: list[dict[str, Any]] = [
     {
         "id": "quickstart-core",
@@ -417,6 +470,86 @@ def list_source_packs() -> list[dict[str, Any]]:
             }
         )
     return packs
+
+
+def list_source_catalog(
+    sources_path: str,
+    sources_overlay_path: str,
+) -> dict[str, Any]:
+    active_keys: set[str] = set()
+    try:
+        cfg = load_effective_sources(sources_path, sources_overlay_path)
+        for url in cfg.rss_feeds:
+            active_keys.add(f"rss:{url}")
+        for ch in cfg.youtube_channels:
+            active_keys.add(f"youtube_channel:{ch}")
+        for q in cfg.youtube_queries:
+            active_keys.add(f"youtube_query:{q}")
+        for r in cfg.github_repos:
+            active_keys.add(f"github_repo:{r}")
+        for t in cfg.github_topics:
+            active_keys.add(f"github_topic:{t}")
+        for q in cfg.github_search_queries:
+            active_keys.add(f"github_query:{q}")
+        for o in cfg.github_orgs:
+            active_keys.add(f"github_org:{o}")
+    except Exception:
+        pass
+
+    entries = []
+    for entry in _SOURCE_CATALOG:
+        key = f"{entry.source_type}:{entry.value}"
+        entries.append({
+            "source_type": entry.source_type,
+            "value": entry.value,
+            "label": entry.label,
+            "description": entry.description,
+            "categories": list(entry.categories),
+            "already_active": key in active_keys,
+        })
+
+    return {"categories": _CATEGORIES, "entries": entries}
+
+
+def apply_source_selection(
+    settings: OnboardingSettings,
+    entries: list[dict[str, str]],
+) -> dict[str, Any]:
+    added: list[dict[str, str]] = []
+    existing: list[dict[str, str]] = []
+    errors: list[str] = []
+
+    for item in entries:
+        source_type = str(item.get("source_type", "") or "").strip()
+        value = str(item.get("value", "") or "").strip()
+        if not source_type or not value:
+            errors.append(f"Missing source_type or value: {item}")
+            continue
+        try:
+            created, canonical = add_source(
+                settings.sources_path,
+                settings.sources_overlay_path,
+                source_type,
+                value,
+            )
+        except Exception as exc:
+            errors.append(f"{source_type}:{value}: {exc}")
+            continue
+
+        row = {"source_type": source_type, "value": canonical}
+        if created:
+            added.append(row)
+        else:
+            existing.append(row)
+
+    return {
+        "added": added,
+        "existing": existing,
+        "errors": errors,
+        "added_count": len(added),
+        "existing_count": len(existing),
+        "error_count": len(errors),
+    }
 
 
 def apply_source_pack(settings: OnboardingSettings, pack_id: str) -> dict[str, Any]:

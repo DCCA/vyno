@@ -34,53 +34,24 @@ When onboarding is incomplete, the primary nav stays focused on setup surfaces. 
 - `.docs/`: Firehose product, architecture, backlog, and completion history
 
 ## Quick Start
-1. Create local env config:
 
 ```bash
-cp .env.example .env
+git clone <repo-url> && cd vyno
+make setup
 ```
 
-2. Install dependencies:
+The setup wizard checks your system, installs dependencies, and starts the app.
+No API keys required for your first run — add them later for AI-powered features.
 
-Preferred:
+<details>
+<summary>Manual setup (advanced)</summary>
 
-```bash
-uv sync
-```
+1. `cp .env.example .env` — optionally add your OpenAI key
+2. `uv sync` + `npm --prefix web install`
+3. `make app`
+4. Open http://127.0.0.1:5173
 
-Fallback:
-
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-```
-
-3. Review the tracked base config and local overlays:
-- `config/sources.yaml`
-- `config/profile.yaml`
-- `data/x_inbox.txt` if you want manual X inbox ingestion
-- optional overlays:
-  - `data/sources.local.yaml`
-  - `data/profile.local.yaml`
-
-4. Start the local app:
-
-```bash
-make app
-```
-
-5. Run one digest manually:
-
-```bash
-make live
-```
-
-6. Run preflight checks before activating delivery or schedule flows:
-
-```bash
-make doctor
-```
+</details>
 
 ## Common Commands
 - `make app`: start API and UI together using `scripts/start-app.sh`

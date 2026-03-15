@@ -43,6 +43,8 @@ quality_learning_enabled: true
 quality_learning_max_offset: 8.0
 quality_learning_half_life_days: 14
 must_read_max_per_source: 2
+min_items_for_delivery: 0
+max_accumulation_hours: 6
 x_cost_per_post_usd: 0.005
 x_max_spend_per_run_usd: 0.05
 run_policy:

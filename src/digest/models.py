@@ -83,7 +83,7 @@ class DigestSections:
 @dataclass(slots=True)
 class RunReport:
     run_id: str
-    status: Literal["success", "partial", "failed"]
+    status: Literal["success", "partial", "failed", "accumulated"]
     source_errors: list[str] = field(default_factory=list)
     summary_errors: list[str] = field(default_factory=list)
     telegram_messages: list[str] = field(default_factory=list)

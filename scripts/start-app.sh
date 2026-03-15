@@ -103,7 +103,7 @@ if ! command -v uv >/dev/null 2>&1 && [ ! -x "${ROOT_DIR}/bin/digest" ]; then
   exit 1
 fi
 
-mkdir -p "${ROOT_DIR}/logs" "${ROOT_DIR}/.runtime" "${UV_CACHE_DIR}"
+mkdir -p "${ROOT_DIR}/logs" "${ROOT_DIR}/.runtime" "${ROOT_DIR}/data" "${ROOT_DIR}/obsidian-vault" "${UV_CACHE_DIR}"
 
 ensure_port_available "${API_PORT}" "API"
 ensure_port_available "${UI_PORT}" "UI"
@@ -201,5 +201,14 @@ fi
 
 printf "API log: %s\n" "${API_LOG}"
 printf "UI log: %s\n" "${UI_LOG}"
+
+if [ "${OPEN_BROWSER:-0}" = "1" ]; then
+  _url="http://${UI_HOST}:${UI_PORT}"
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$_url" >/dev/null 2>&1 &
+  elif command -v open >/dev/null 2>&1; then
+    open "$_url" >/dev/null 2>&1 &
+  fi
+fi
 
 wait "${UI_PID}"

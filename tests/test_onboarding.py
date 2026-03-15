@@ -9,7 +9,9 @@ import yaml
 from digest.ops.onboarding import (
     OnboardingSettings,
     apply_source_pack,
+    apply_source_selection,
     build_onboarding_status,
+    list_source_catalog,
     mark_step_completed,
     run_preflight,
 )
@@ -214,6 +216,56 @@ class TestOnboarding(unittest.TestCase):
             status = build_onboarding_status(settings)
 
             self.assertEqual(status["lifecycle"], "ready")
+
+
+    def test_list_source_catalog_returns_entries_with_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = self._write_base_files(tmp, safe_profile=True)
+            catalog = list_source_catalog(
+                settings.sources_path, settings.sources_overlay_path
+            )
+
+            self.assertIn("categories", catalog)
+            self.assertIn("entries", catalog)
+            self.assertGreater(len(catalog["categories"]), 0)
+            self.assertGreater(len(catalog["entries"]), 0)
+
+            entry = catalog["entries"][0]
+            self.assertIn("source_type", entry)
+            self.assertIn("value", entry)
+            self.assertIn("label", entry)
+            self.assertIn("description", entry)
+            self.assertIn("categories", entry)
+            self.assertIn("already_active", entry)
+
+            # The base sources include https://example.com/rss.xml but that is
+            # not in the catalog, so check an entry that IS in both base sources
+            # and catalog — none overlap in this minimal fixture, so all should
+            # be already_active=False.
+            active_count = sum(1 for e in catalog["entries"] if e["already_active"])
+            # The base fixture has https://example.com/rss.xml which is NOT in
+            # the catalog, so zero entries should be already_active.
+            self.assertEqual(active_count, 0)
+
+    def test_apply_source_selection_adds_and_dedupes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = self._write_base_files(tmp, safe_profile=True)
+
+            entries = [
+                {"source_type": "rss", "value": "https://openai.com/news/rss.xml"},
+                {"source_type": "rss", "value": "https://techcrunch.com/category/artificial-intelligence/feed/"},
+            ]
+            first = apply_source_selection(settings, entries)
+
+            self.assertEqual(first["added_count"], 2)
+            self.assertEqual(first["existing_count"], 0)
+            self.assertEqual(first["error_count"], 0)
+
+            # Second call — same entries should be existing, not added again
+            second = apply_source_selection(settings, entries)
+            self.assertEqual(second["added_count"], 0)
+            self.assertEqual(second["existing_count"], 2)
+            self.assertEqual(second["error_count"], 0)
 
 
 if __name__ == "__main__":

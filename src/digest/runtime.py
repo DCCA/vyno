@@ -69,6 +69,7 @@ def run_digest(
     only_new: bool = True,
     allow_seen_fallback: bool = True,
     preview_mode: bool = False,
+    min_items_for_delivery: int = 0,
     logger: logging.Logger | logging.LoggerAdapter | None = None,
     progress_cb: ProgressCallback | None = None,
 ) -> RunReport:
@@ -1311,6 +1312,26 @@ def run_digest(
         github_issue_dropped_low_impact=github_issue_dropped_low_impact,
         candidate_count=len(candidate_items),
     )
+
+    delivery_suppressed = (
+        min_items_for_delivery > 0
+        and final_item_count < min_items_for_delivery
+        and not preview_mode
+    )
+    if delivery_suppressed:
+        sparse_context_note = (sparse_context_note + " " if sparse_context_note else "") + (
+            f"Accumulating items ({final_item_count}/{min_items_for_delivery} threshold)."
+            " Delivery will happen when enough quality content is available."
+        )
+        log_event(run_logger, "info", "delivery_suppressed",
+                  "Delivery suppressed — accumulating items for next run",
+                  final_item_count=final_item_count,
+                  min_items_for_delivery=min_items_for_delivery)
+        emit_progress("delivery_suppressed",
+                      "Delivery suppressed — accumulating items for next run",
+                      final_item_count=final_item_count,
+                      min_items_for_delivery=min_items_for_delivery)
+
     if sparse_context_note:
         context_payload["sparse_note"] = sparse_context_note
 
@@ -1386,7 +1407,8 @@ def run_digest(
         status = "failed"
 
     if (
-        not preview_mode
+        not delivery_suppressed
+        and not preview_mode
         and profile.output.telegram_bot_token
         and profile.output.telegram_chat_id
     ):
@@ -1427,7 +1449,7 @@ def run_digest(
                 error=str(exc),
             )
 
-    if not preview_mode and profile.output.obsidian_vault_path:
+    if not delivery_suppressed and not preview_mode and profile.output.obsidian_vault_path:
         try:
             out_path = write_obsidian_note(
                 profile.output.obsidian_vault_path,
@@ -1492,14 +1514,19 @@ def run_digest(
                 preview_mode=False,
                 chunk_count=int(row.get("chunk_count") or 0),
             )
-    store.mark_seen([i.url or i.hash for i in candidate_items])
-    store.finish_run(run_id, status, source_errors, summary_errors)
+    if delivery_suppressed:
+        final_status = "accumulated"
+        store.finish_run(run_id, final_status, source_errors, summary_errors)
+    else:
+        final_status = status
+        store.mark_seen([i.url or i.hash for i in candidate_items])
+        store.finish_run(run_id, final_status, source_errors, summary_errors)
     log_event(
         run_logger,
         "info",
         "run_finish",
         "Digest run finished",
-        status=status,
+        status=final_status,
         llm_coverage=round(llm_coverage, 4),
         fallback_share=round(fallback_share, 4),
         agent_scope_count=agent_scope_count,
@@ -1534,7 +1561,7 @@ def run_digest(
     emit_progress(
         "run_finish",
         "Digest run finished",
-        status=status,
+        status=final_status,
         preview_mode=preview_mode,
         source_error_count=len(source_errors),
         summary_error_count=len(summary_errors),
@@ -1549,7 +1576,7 @@ def run_digest(
 
     return RunReport(
         run_id=run_id,
-        status=status,
+        status=final_status,
         source_errors=source_errors,
         summary_errors=summary_errors,
         telegram_messages=telegram_messages,

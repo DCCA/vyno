@@ -336,6 +336,36 @@ class TestConfig(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_profile(path)
 
+    def test_profile_loads_accumulation_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                "min_items_for_delivery: 5\nmax_accumulation_hours: 8\n",
+                encoding="utf-8",
+            )
+            profile = load_profile(path)
+            self.assertEqual(profile.min_items_for_delivery, 5)
+            self.assertEqual(profile.max_accumulation_hours, 8)
+
+    def test_profile_accumulation_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text("topics:\n  - llm\n", encoding="utf-8")
+            profile = load_profile(path)
+            self.assertEqual(profile.min_items_for_delivery, 0)
+            self.assertEqual(profile.max_accumulation_hours, 6)
+
+    def test_profile_accumulation_clamps_minimum(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.yaml"
+            path.write_text(
+                "min_items_for_delivery: -3\nmax_accumulation_hours: 0\n",
+                encoding="utf-8",
+            )
+            profile = load_profile(path)
+            self.assertEqual(profile.min_items_for_delivery, 0)
+            self.assertEqual(profile.max_accumulation_hours, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
