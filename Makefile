@@ -1,4 +1,4 @@
-.PHONY: test doctor live schedule logs bot web-api web-ui web-ui-build app security-check security-check-extended docker-build docker-up docker-down docker-logs docker-ps docker-restart docker-scheduler-build docker-scheduler-up docker-scheduler-down docker-scheduler-logs docker-scheduler-ps docker-scheduler-restart docker-scheduler-deploy
+.PHONY: test doctor live schedule logs bot web-api web-ui web-ui-build web-screenshots app security-check security-check-extended docker-build docker-up docker-down docker-logs docker-ps docker-restart docker-scheduler-build docker-scheduler-up docker-scheduler-down docker-scheduler-logs docker-scheduler-ps docker-scheduler-restart docker-scheduler-deploy
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && echo 1 || echo 0)
 
@@ -36,6 +36,9 @@ web-ui:
 
 web-ui-build:
 	npm --prefix web run build
+
+web-screenshots:
+	npm --prefix web run screenshot
 
 app:
 	./scripts/start-app.sh

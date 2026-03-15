@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { History, Loader2, Undo2 } from "lucide-react"
 
 import { useHistoryState, useUiState } from "@/app/console-context"
@@ -14,6 +15,7 @@ export function HistoryPage() {
   const { saving, saveAction, localNotices, clearScopedNotice } = useUiState()
   const { history, activeRollbackId, onRollback } = useHistoryState()
   const notice = localNotices.history
+  const [rowsVisible, setRowsVisible] = useState(25)
 
   return (
     <div className="space-y-4">
@@ -43,6 +45,7 @@ export function HistoryPage() {
               description="Configuration changes will appear here as snapshots you can roll back to."
             />
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -53,7 +56,7 @@ export function HistoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {history.map((row) => (
+                {history.slice(0, rowsVisible).map((row) => (
                   <TableRow key={row.id}>
                     <TableCell>{formatTimestamp(row.created_at)}</TableCell>
                     <TableCell>{row.action}</TableCell>
@@ -72,6 +75,14 @@ export function HistoryPage() {
                 ))}
               </TableBody>
             </Table>
+            {history.length > rowsVisible && (
+              <div className="mt-3 text-center">
+                <Button variant="outline" size="sm" onClick={() => setRowsVisible((n) => n + 25)}>
+                  Show {Math.min(25, history.length - rowsVisible)} more ({history.length - rowsVisible} remaining)
+                </Button>
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>

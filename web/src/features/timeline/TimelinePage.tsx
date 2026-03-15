@@ -29,6 +29,7 @@ export function TimelinePage() {
   } = useTimelineState()
   const notice = localNotices.timeline
   const [feedbackGiven, setFeedbackGiven] = useState<Record<string, string>>({})
+  const [eventsVisible, setEventsVisible] = useState(50)
 
   function handleItemFeedback(itemId: string, label: "more_like_this" | "not_relevant" | "too_technical" | "repeat_source") {
     onSubmitItemFeedback(itemId, label)
@@ -303,6 +304,7 @@ export function TimelinePage() {
                   description="No events match the selected filters for this run."
                 />
               ) : (
+              <>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -315,7 +317,7 @@ export function TimelinePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {timelineEvents.map((row) => (
+                  {timelineEvents.slice(0, eventsVisible).map((row) => (
                     <TableRow
                       key={`${row.run_id}:${row.id}`}
                       className="cursor-pointer"
@@ -336,6 +338,14 @@ export function TimelinePage() {
                   ))}
                 </TableBody>
               </Table>
+              {timelineEvents.length > eventsVisible && (
+                <div className="mt-3 text-center">
+                  <Button variant="outline" size="sm" onClick={() => setEventsVisible((n) => n + 50)}>
+                    Show {Math.min(50, timelineEvents.length - eventsVisible)} more ({timelineEvents.length - eventsVisible} remaining)
+                  </Button>
+                </div>
+              )}
+              </>
               )}
             </CardContent>
           </Card>
