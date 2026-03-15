@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
+import { MetricCard } from "@/components/ui/metric-card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
@@ -52,9 +53,9 @@ export function RunCenterPage({
       <InlineNotice notice={notice} onDismiss={onDismissNotice} />
 
       <div className="grid gap-4 md:grid-cols-3">
-        <MetricTile label="Run state" value={runStatus?.active ? "Running" : "Idle"} />
-        <MetricTile label="Override" value={runPolicy.allow_run_override ? "Allowed" : "Locked"} />
-        <MetricTile label="Latest result" value={runStatus?.latest_completed?.status ?? "n/a"} />
+        <MetricCard variant="compact" label="Run state" value={runStatus?.active ? "Running" : "Idle"} />
+        <MetricCard variant="compact" label="Override" value={runPolicy.allow_run_override ? "Allowed" : "Locked"} />
+        <MetricCard variant="compact" label="Latest result" value={runStatus?.latest_completed?.status ?? "n/a"} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -118,13 +119,3 @@ export function RunCenterPage({
   )
 }
 
-function MetricTile({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardHeader className="pb-4">
-        <CardDescription className="text-[11px] uppercase tracking-[0.14em]">{label}</CardDescription>
-        <CardTitle className="font-display text-[1.75rem]">{value}</CardTitle>
-      </CardHeader>
-    </Card>
-  )
-}

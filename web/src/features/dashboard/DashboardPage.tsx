@@ -3,6 +3,7 @@ import { Activity, Database, Rocket } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { MetricCard } from "@/components/ui/metric-card"
 import { WorkspaceHeader } from "@/components/system/page-header"
 import type { RunStatus, ScheduleStatus, SourceHealthItem, TimelineRun } from "@/app/types"
 
@@ -123,10 +124,10 @@ export function DashboardPage({
             <CardDescription>High-signal readout for the workspace without opening deeper diagnostic screens.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <StatusLine label="Lifecycle" value={onboardingDone ? "Recurring use" : "Guided setup"} />
-            <StatusLine label="Last completed run" value={runStatus?.latest_completed?.status ?? "n/a"} />
-            <StatusLine label="Source health" value={sourceHealth.length > 0 ? `${sourceHealth.length} active alerts` : "No active alerts"} />
-            <StatusLine label="Schedule" value={scheduleStatus?.enabled ? "Enabled" : "Disabled"} />
+            <MetricCard variant="inline" label="Lifecycle" value={onboardingDone ? "Recurring use" : "Guided setup"} />
+            <MetricCard variant="inline" label="Last completed run" value={runStatus?.latest_completed?.status ?? "n/a"} />
+            <MetricCard variant="inline" label="Source health" value={sourceHealth.length > 0 ? `${sourceHealth.length} active alerts` : "No active alerts"} />
+            <MetricCard variant="inline" label="Schedule" value={scheduleStatus?.enabled ? "Enabled" : "Disabled"} />
           </CardContent>
         </Card>
       </div>
@@ -164,23 +165,3 @@ export function DashboardPage({
   )
 }
 
-function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <Card className="overflow-hidden">
-      <CardHeader className="bg-gradient-to-br from-white/95 via-white/92 to-secondary/35 pb-4">
-        <CardDescription className="text-[11px] uppercase tracking-[0.14em]">{label}</CardDescription>
-        <CardTitle className="font-display text-[1.85rem]">{value}</CardTitle>
-        <p className="text-sm text-muted-foreground">{detail}</p>
-      </CardHeader>
-    </Card>
-  )
-}
-
-function StatusLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-[1.2rem] border border-border/80 bg-secondary/25 px-4 py-3">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-sm font-semibold text-foreground">{value}</span>
-    </div>
-  )
-}

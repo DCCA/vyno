@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { MetricCard } from "@/components/ui/metric-card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { sourceValuePlaceholderForType, truncateText } from "@/lib/console-utils"
 
@@ -77,9 +78,9 @@ export function SourcesPage({
       />
 
       <div className="grid gap-4 md:grid-cols-3">
-        <MetricTile label="Library size" value={String(totalSourceCount)} detail="Tracked source entries" />
-        <MetricTile label="Active types" value={String(sortedSourceRows.length)} detail="Distinct connectors in use" />
-        <MetricTile label="Health posture" value={sourceHealth.length > 0 ? "Watch" : "Clear"} detail={sourceHealth.length > 0 ? `${sourceHealth.length} sources need attention` : "No current failures"} />
+        <MetricCard variant="compact" label="Library size" value={String(totalSourceCount)} detail="Tracked source entries" />
+        <MetricCard variant="compact" label="Active types" value={String(sortedSourceRows.length)} detail="Distinct connectors in use" />
+        <MetricCard variant="compact" label="Health posture" value={sourceHealth.length > 0 ? "Watch" : "Clear"} detail={sourceHealth.length > 0 ? `${sourceHealth.length} sources need attention` : "No current failures"} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
@@ -193,17 +194,6 @@ export function SourcesPage({
   )
 }
 
-function MetricTile({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <Card>
-      <CardHeader className="pb-4">
-        <CardDescription className="text-[11px] uppercase tracking-[0.14em]">{label}</CardDescription>
-        <CardTitle className="font-display text-[1.8rem]">{value}</CardTitle>
-        <p className="text-sm text-muted-foreground">{detail}</p>
-      </CardHeader>
-    </Card>
-  )
-}
 
 function SourcePreviewCard({
   row,

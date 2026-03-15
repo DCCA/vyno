@@ -17,6 +17,9 @@ import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { InlineNotice } from "@/components/system/notice"
+import { ErrorBoundary } from "@/components/system/error-boundary"
+import { ConfirmDialog, useConfirm } from "@/components/system/confirm-dialog"
+import { Toaster } from "@/components/system/toast"
 import { api } from "@/lib/api"
 import {
   diffObjects,
@@ -65,6 +68,7 @@ function App() {
   const navigate = useNavigate()
   const location = useLocation()
   const uiStateHydratedRef = useRef(false)
+  const { confirmState, confirm, handleClose: handleConfirmClose } = useConfirm()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [sourceTypes, setSourceTypes] = useState<string[]>([])
@@ -722,7 +726,13 @@ function App() {
 
   async function deleteUnifiedSourceRow(row: UnifiedSourceRow) {
     if (!row.can_delete) return
-    if (!window.confirm(`Delete ${row.type} source?\n${row.source}`)) return
+    const confirmed = await confirm({
+      title: `Delete ${row.type} source?`,
+      description: row.source,
+      confirmLabel: "Delete",
+      variant: "destructive",
+    })
+    if (!confirmed) return
     setSaveAction("source-remove")
     setSaving(true)
     try {
@@ -1240,7 +1250,10 @@ function App() {
   return (
     <main className="min-h-screen bg-console-canvas pb-10" aria-label="Digest Control Center">
       <div className="mx-auto grid w-full max-w-[1560px] gap-5 px-4 py-5 md:px-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-8 lg:py-7">
-        <aside className={`${mobileNavOpen ? "block" : "hidden"} lg:sticky lg:top-6 lg:block lg:self-start`}>
+        {mobileNavOpen ? (
+          <div className="fixed inset-0 z-40 bg-black/30 lg:hidden" onClick={() => setMobileNavOpen(false)} />
+        ) : null}
+        <aside className={`${mobileNavOpen ? "fixed inset-x-0 top-0 z-50 max-h-screen overflow-y-auto p-4" : "hidden"} lg:sticky lg:relative lg:inset-auto lg:top-6 lg:z-auto lg:block lg:max-h-none lg:overflow-visible lg:p-0 lg:self-start`}>
           <div className="bg-console-rail space-y-5 rounded-[2rem] p-5 text-white shadow-[0_30px_70px_-40px_rgba(15,23,42,0.9)] animate-surface-enter lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-3 [scrollbar-gutter:stable]">
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-3">
@@ -1254,6 +1267,7 @@ function App() {
                   className="border border-white/10 bg-white/5 text-white hover:bg-white/10 lg:hidden"
                   onClick={() => setMobileNavOpen((prev) => !prev)}
                   aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
+                  aria-expanded={mobileNavOpen}
                 >
                   {mobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
                 </Button>
@@ -1354,6 +1368,7 @@ function App() {
                   className="lg:hidden"
                   onClick={() => setMobileNavOpen((prev) => !prev)}
                   aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
+                  aria-expanded={mobileNavOpen}
                 >
                   {mobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
                   {mobileNavOpen ? "Close" : "Menu"}
@@ -1504,7 +1519,7 @@ function App() {
                   path="/"
                   element={
                     onboardingDone ? (
-                      <DashboardPage
+                      <ErrorBoundary><DashboardPage
                         runStatus={runStatus}
                       sourceHealth={sourceHealth}
                       setupPercent={setupPercent}
@@ -1516,7 +1531,7 @@ function App() {
                       onOpenSources={() => navigateToSurface("sources")}
                       onOpenTimeline={() => navigateToSurface("timeline")}
                         onOpenOnboarding={() => navigateToSurface("onboarding")}
-                      />
+                      /></ErrorBoundary>
                     ) : (
                       <Navigate to={surfacePaths.onboarding} replace />
                     )
@@ -1525,7 +1540,7 @@ function App() {
                 <Route
                   path="/run"
                   element={
-                    <RunCenterPage
+                    <ErrorBoundary><RunCenterPage
                       notice={localNotices.run}
                       onDismissNotice={() => clearScopedNotice("run")}
                       runNowModeOverride={runNowModeOverride}
@@ -1539,13 +1554,13 @@ function App() {
                       onRefreshAll={() => void refreshAll()}
                       onRunNow={() => void runNow()}
                       onOpenTimeline={() => navigateToSurface("timeline")}
-                    />
+                    /></ErrorBoundary>
                   }
                 />
                 <Route
                   path="/onboarding"
                   element={
-                    <OnboardingPage
+                    <ErrorBoundary><OnboardingPage
                       notice={localNotices.onboarding}
                       onDismissNotice={() => clearScopedNotice("onboarding")}
                       onboarding={onboarding}
@@ -1571,13 +1586,13 @@ function App() {
                       onRunPreview={() => void runOnboardingPreview()}
                       onActivate={() => void activateOnboarding()}
                       onOpenSchedule={() => navigateToSurface("schedule")}
-                    />
+                    /></ErrorBoundary>
                   }
                 />
                 <Route
                   path="/sources"
                   element={
-                    <SourcesPage
+                    <ErrorBoundary><SourcesPage
                       notice={localNotices.sources}
                       onDismissNotice={() => clearScopedNotice("sources")}
                       sources={sources}
@@ -1601,13 +1616,13 @@ function App() {
                       onEditUnifiedSourceRow={editUnifiedSourceRow}
                       onDeleteUnifiedSourceRow={(row) => void deleteUnifiedSourceRow(row)}
                       onSourceFeedback={(row, label) => void submitSourceFeedback(row, label)}
-                    />
+                    /></ErrorBoundary>
                   }
                 />
                 <Route
                   path="/profile"
                   element={
-                    <ProfilePage
+                    <ErrorBoundary><ProfilePage
                       notice={localNotices.profile}
                       onDismissNotice={() => clearScopedNotice("profile")}
                       profile={profile}
@@ -1640,13 +1655,13 @@ function App() {
                       onPreviewSeenReset={() => void previewSeenReset()}
                       onApplySeenReset={() => void applySeenReset()}
                       feedbackSummary={feedbackSummary}
-                    />
+                    /></ErrorBoundary>
                   }
                 />
                 <Route
                   path="/schedule"
                   element={
-                    <SchedulePage
+                    <ErrorBoundary><SchedulePage
                       notice={localNotices.schedule}
                       onDismissNotice={() => clearScopedNotice("schedule")}
                       lifecycle={onboardingLifecycle}
@@ -1661,13 +1676,13 @@ function App() {
                       onOpenTimeline={() => navigateToSurface("timeline")}
                       onOpenRun={() => navigateToSurface("run")}
                       onOpenOnboarding={() => navigateToSurface("onboarding")}
-                    />
+                    /></ErrorBoundary>
                   }
                 />
                 <Route
                   path="/timeline"
                   element={
-                    <TimelinePage
+                    <ErrorBoundary><TimelinePage
                       notice={localNotices.timeline}
                       onDismissNotice={() => clearScopedNotice("timeline")}
                       timelineRunId={timelineRunId}
@@ -1700,13 +1715,13 @@ function App() {
                       onAddTimelineNote={() => void addTimelineNote()}
                       timelineNotes={timelineNotes}
                       onSubmitItemFeedback={(itemId, label) => void submitItemFeedback(itemId, label)}
-                    />
+                    /></ErrorBoundary>
                   }
                 />
                 <Route
                   path="/history"
                   element={
-                    <HistoryPage
+                    <ErrorBoundary><HistoryPage
                       notice={localNotices.history}
                       onDismissNotice={() => clearScopedNotice("history")}
                       history={history}
@@ -1714,7 +1729,7 @@ function App() {
                       activeRollbackId={activeRollbackId}
                       saving={saving}
                       onRollback={(snapshotId) => void rollback(snapshotId)}
-                    />
+                    /></ErrorBoundary>
                   }
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />
@@ -1723,6 +1738,8 @@ function App() {
           </section>
         </div>
       </div>
+      <Toaster />
+      <ConfirmDialog state={confirmState} onClose={handleConfirmClose} />
     </main>
   )
 }

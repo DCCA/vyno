@@ -1,8 +1,10 @@
-import { Loader2, RefreshCcw, Save } from "lucide-react"
+import { Activity, Loader2, RefreshCcw, Save } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { EmptyState } from "@/components/ui/empty-state"
+import { MetricCard } from "@/components/ui/metric-card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -11,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
 import { formatElapsed } from "@/lib/console-utils"
+import { formatTimestamp } from "@/lib/format"
 import type {
   Notice,
   RunArtifact,
@@ -104,10 +107,10 @@ export function TimelinePage({
       />
 
       <div className="grid gap-4 md:grid-cols-4">
-        <TimelineMetric label="Run selected" value={timelineRunId || "n/a"} />
-        <TimelineMetric label="Events" value={timelineSummary ? String(timelineSummary.event_count) : "0"} />
-        <TimelineMetric label="Errors" value={timelineSummary ? String(timelineSummary.error_event_count) : "0"} />
-        <TimelineMetric label="Duration" value={timelineSummary ? formatElapsed(timelineSummary.duration_s) : "n/a"} />
+        <MetricCard variant="compact" label="Run selected" value={timelineRunId || "n/a"} />
+        <MetricCard variant="compact" label="Events" value={timelineSummary ? String(timelineSummary.event_count) : "0"} />
+        <MetricCard variant="compact" label="Errors" value={timelineSummary ? String(timelineSummary.error_event_count) : "0"} />
+        <MetricCard variant="compact" label="Duration" value={timelineSummary ? formatElapsed(timelineSummary.duration_s) : "n/a"} />
       </div>
 
       <Card>
@@ -342,7 +345,7 @@ export function TimelinePage({
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-muted-foreground">No selected items are archived for this run yet.</p>
+                  <EmptyState title="No items archived" description="Selected items will appear here after the run delivers." />
                 )}
               </div>
             </CardContent>
@@ -353,6 +356,13 @@ export function TimelinePage({
               <CardTitle className="font-display">Timeline Events</CardTitle>
             </CardHeader>
             <CardContent>
+              {timelineEvents.length === 0 ? (
+                <EmptyState
+                  icon={Activity}
+                  title="No events"
+                  description="No events match the selected filters for this run."
+                />
+              ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -365,35 +375,28 @@ export function TimelinePage({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {timelineEvents.length > 0 ? (
-                    timelineEvents.map((row) => (
-                      <TableRow
-                        key={`${row.run_id}:${row.id}`}
-                        className="cursor-pointer"
-                        data-state={row.id === timelineSelectedEventId ? "selected" : undefined}
-                        onClick={() => setTimelineSelectedEventId(row.id)}
-                      >
-                        <TableCell>{row.event_index}</TableCell>
-                        <TableCell className="font-mono text-xs">{row.ts_utc}</TableCell>
-                        <TableCell className="font-mono text-xs">{row.stage}</TableCell>
-                        <TableCell>
-                          <Badge variant={row.severity === "error" ? "warning" : row.severity === "warn" ? "outline" : "secondary"}>
-                            {row.severity}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs">{row.message}</TableCell>
-                        <TableCell>{formatElapsed(row.elapsed_s)}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
-                        No events for selected filters/run.
+                  {timelineEvents.map((row) => (
+                    <TableRow
+                      key={`${row.run_id}:${row.id}`}
+                      className="cursor-pointer"
+                      data-state={row.id === timelineSelectedEventId ? "selected" : undefined}
+                      onClick={() => setTimelineSelectedEventId(row.id)}
+                    >
+                      <TableCell>{row.event_index}</TableCell>
+                      <TableCell className="font-mono text-xs">{formatTimestamp(row.ts_utc)}</TableCell>
+                      <TableCell className="font-mono text-xs">{row.stage}</TableCell>
+                      <TableCell>
+                        <Badge variant={row.severity === "error" ? "warning" : row.severity === "warn" ? "outline" : "secondary"}>
+                          {row.severity}
+                        </Badge>
                       </TableCell>
+                      <TableCell className="text-xs">{row.message}</TableCell>
+                      <TableCell>{formatElapsed(row.elapsed_s)}</TableCell>
                     </TableRow>
-                  )}
+                  ))}
                 </TableBody>
               </Table>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -450,13 +453,13 @@ export function TimelinePage({
                     <div key={row.id} className="rounded-md border bg-muted/20 p-3">
                       <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <span className="font-semibold text-foreground">{row.author || "admin"}</span>
-                        <span>{row.created_at_utc}</span>
+                        <span>{formatTimestamp(row.created_at_utc)}</span>
                       </div>
                       <p className="text-sm">{row.note}</p>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-muted-foreground">No notes for this run yet.</p>
+                  <EmptyState title="No notes yet" description="Add a note above to capture observations about this run." />
                 )}
               </div>
             </CardContent>
@@ -484,13 +487,3 @@ function formatAdjustmentLabel(value: string): string {
   }
 }
 
-function TimelineMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardHeader className="pb-4">
-        <CardDescription className="text-[11px] uppercase tracking-[0.14em]">{label}</CardDescription>
-        <CardTitle className="font-display text-[1.7rem]">{value}</CardTitle>
-      </CardHeader>
-    </Card>
-  )
-}

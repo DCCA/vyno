@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { MetricCard } from "@/components/ui/metric-card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import type { Notice, SaveAction, ScheduleConfig, ScheduleStatus } from "@/app/types"
@@ -113,22 +114,22 @@ export function SchedulePage({
             <CardDescription>High-signal readout for the current automation posture before you change anything.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
-            <StatusCard
+            <MetricCard variant="compact"
               label="Next run"
               value={formatTimestamp(scheduleStatus?.next_run_at) || "Not scheduled"}
               detail={enabled ? cadenceSummary : "Automation is paused"}
             />
-            <StatusCard
+            <MetricCard variant="compact"
               label="Last result"
               value={scheduleStatus?.last_result || "No scheduled run yet"}
               detail={formatTimestamp(scheduleStatus?.last_triggered_at) || "No prior trigger recorded"}
             />
-            <StatusCard
+            <MetricCard variant="compact"
               label="Scheduler state"
               value={schedulerState.title}
               detail={schedulerState.detail}
             />
-            <StatusCard
+            <MetricCard variant="compact"
               label="Active run"
               value={scheduleStatus?.active_run_id || "None"}
               detail={scheduleStatus?.active_run_id ? "A digest is currently running." : "No current automation run."}
@@ -327,15 +328,6 @@ export function SchedulePage({
   )
 }
 
-function StatusCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <div className="rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-      <p className="mt-2 font-display text-[1.7rem] leading-none">{value}</p>
-      <p className="mt-2 text-sm text-muted-foreground">{detail}</p>
-    </div>
-  )
-}
 
 function schedulerStateMeta(status: ScheduleStatus | null): {
   label: string
