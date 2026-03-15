@@ -133,11 +133,14 @@ export function SourcesPage() {
 
       {/* Compact cards — sources without items */}
       {compactRows.length > 0 ? (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Waiting for items ({compactRows.length})
-          </p>
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Waiting for items
+            </p>
+            <Badge variant="secondary" className="text-[10px]">{compactRows.length}</Badge>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {compactRows.map((row) => (
               <CompactSourceCard
                 key={row.key}
@@ -155,10 +158,13 @@ export function SourcesPage() {
 
       {/* Preview cards — sources with items */}
       {previewRows.length > 0 ? (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Preview ready ({previewRows.length})
-          </p>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Preview ready
+            </p>
+            <Badge variant="success" className="text-[10px]">{previewRows.length}</Badge>
+          </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {previewRows.map((row) => (
               <SourcePreviewCard
@@ -218,43 +224,52 @@ function CompactSourceCard({
   const isFailing = row.health === "failing"
 
   return (
-    <Card className={`animate-surface-enter overflow-hidden transition-[ring-color] duration-200 ${highlighted ? "ring-2 ring-accent/40" : ""}`}>
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Badge variant="outline" className="text-[10px]">{row.type_label}</Badge>
-              <Badge variant={isFailing ? "warning" : "secondary"} className="text-[10px]">
-                {isFailing ? "failing" : "waiting"}
-              </Badge>
-            </div>
-            <p className="mt-1.5 truncate text-sm font-semibold" title={row.identity_title}>{row.identity_title}</p>
-            <p className="truncate text-xs text-muted-foreground" title={row.source}>{row.identity_subtitle || truncateText(row.source, 50)}</p>
-          </div>
-          <Button variant="ghost" size="sm" className="h-7 w-7 shrink-0 p-0" onClick={() => setExpanded(!expanded)} aria-label="More actions">
-            <MoreHorizontal className="h-3.5 w-3.5" />
-          </Button>
+    <div className={`animate-surface-enter rounded-[1.2rem] border border-border/80 bg-gradient-to-br from-card via-card to-secondary/20 p-4 transition-all duration-200 hover:border-border hover:shadow-sm ${highlighted ? "ring-2 ring-accent/40" : ""}`}>
+      {/* Header: badges + overflow */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline" className="text-[10px]">{row.type_label}</Badge>
+          <Badge variant={isFailing ? "warning" : "secondary"} className="text-[10px]">
+            {isFailing ? "failing" : "waiting"}
+          </Badge>
         </div>
+        <Button variant="ghost" size="sm" className="h-6 w-6 shrink-0 rounded-full p-0 text-muted-foreground hover:text-foreground" onClick={() => setExpanded(!expanded)} aria-label="More actions">
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </Button>
+      </div>
 
-        {isFailing ? (
-          <p className="mt-2 truncate text-xs text-amber-700 dark:text-amber-400" title={row.last_error}>
-            {truncateText(row.last_error, 80)}
+      {/* Identity */}
+      <div className="mt-2.5">
+        <p className="truncate text-sm font-semibold leading-tight" title={row.identity_title}>{row.identity_title}</p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground" title={row.source}>
+          {row.identity_subtitle || truncateText(row.source, 50)}
+        </p>
+      </div>
+
+      {/* Failing detail */}
+      {isFailing ? (
+        <div className="mt-2 rounded-lg bg-amber-50/60 px-2.5 py-1.5 dark:bg-amber-950/20">
+          <p className="flex items-center gap-1 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="h-3 w-3 shrink-0" />
+            {truncateText(row.last_error, 60)}
           </p>
-        ) : null}
-
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onSourceFeedback(row, "prefer_source")} disabled={saving}>Prefer</Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onSourceFeedback(row, "less_source")} disabled={saving}>Less</Button>
-          {expanded ? (
-            <>
-              <Button variant="outline" size="sm" className="h-7 text-xs border-destructive/40 text-destructive" onClick={() => onSourceFeedback(row, "mute_source")} disabled={saving}>Mute</Button>
-              {row.can_edit ? <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => onEditUnifiedSourceRow(row)} disabled={saving}>Edit</Button> : null}
-              {row.can_delete ? <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => onDeleteUnifiedSourceRow(row)} disabled={saving}>Delete</Button> : null}
-            </>
-          ) : null}
         </div>
-      </CardContent>
-    </Card>
+      ) : null}
+
+      {/* Actions */}
+      <div className="mt-3 flex items-center gap-1.5 border-t border-border/50 pt-3">
+        <Button variant="outline" size="sm" className="h-7 rounded-lg text-xs" onClick={() => onSourceFeedback(row, "prefer_source")} disabled={saving}>Prefer</Button>
+        <Button variant="outline" size="sm" className="h-7 rounded-lg text-xs" onClick={() => onSourceFeedback(row, "less_source")} disabled={saving}>Less</Button>
+        <div className="flex-1" />
+        {expanded ? (
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs text-destructive" onClick={() => onSourceFeedback(row, "mute_source")} disabled={saving}>Mute</Button>
+            {row.can_edit ? <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs" onClick={() => onEditUnifiedSourceRow(row)} disabled={saving}>Edit</Button> : null}
+            {row.can_delete ? <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs text-destructive" onClick={() => onDeleteUnifiedSourceRow(row)} disabled={saving}>Delete</Button> : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
   )
 }
 

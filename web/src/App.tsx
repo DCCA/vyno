@@ -1380,8 +1380,8 @@ function App() {
         {mobileNavOpen ? (
           <div className="fixed inset-0 z-40 bg-black/30 lg:hidden" onClick={() => setMobileNavOpen(false)} />
         ) : null}
-        <aside className={`${mobileNavOpen ? "fixed inset-x-0 top-0 z-50 max-h-screen overflow-y-auto p-4" : "hidden"} lg:sticky lg:relative lg:inset-auto lg:top-6 lg:z-auto lg:block lg:max-h-none lg:overflow-visible lg:p-0 lg:self-start`}>
-          <div className="bg-console-rail space-y-5 rounded-[2rem] p-5 text-white shadow-[0_30px_70px_-40px_rgba(15,23,42,0.9)] animate-surface-enter lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-3 [scrollbar-gutter:stable]">
+        <aside className={`${mobileNavOpen ? "fixed inset-x-0 top-0 z-50 max-h-screen overflow-y-auto p-4" : "hidden"} lg:sticky lg:relative lg:inset-auto lg:top-7 lg:z-auto lg:block lg:max-h-none lg:overflow-visible lg:p-0 lg:self-start`}>
+          <div className="bg-console-rail space-y-5 rounded-[2rem] p-5 text-white shadow-[0_30px_70px_-40px_rgba(15,23,42,0.9)] animate-surface-enter lg:max-h-[calc(100vh-3.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-3 [scrollbar-gutter:stable]">
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
