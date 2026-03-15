@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="vyno-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+  <!-- Squircle background -->
+  <rect x="1" y="1" width="30" height="30" rx="7" fill="url(#vyno-gradient)"/>
+  <!-- Back card (outline only, semi-transparent) -->
+  <rect x="7" y="4" width="18" height="13" rx="2.5" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.2"/>
+  <!-- Middle card (outline only, more visible) -->
+  <rect x="6" y="7" width="18" height="13" rx="2.5" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.2"/>
+  <!-- Front card (solid) -->
+  <rect x="5" y="10" width="22" height="16" rx="3" fill="rgba(255,255,255,0.15)" stroke="white" stroke-width="1.2"/>
+  <!-- V on front card -->
+  <path d="M11 14L16 23L21 14" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,12 @@
+{
+  "name": "Vyno",
+  "short_name": "Vyno",
+  "description": "AI Daily Digest — Your AI news, your rules, your machine",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ],
+  "theme_color": "#6366F1",
+  "background_color": "#121212",
+  "display": "standalone"
+}
