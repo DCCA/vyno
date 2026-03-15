@@ -120,7 +120,7 @@ export function SchedulePage() {
             <CardDescription>Save, pause, or resume the cadence used by the background scheduler service.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between rounded-[1.25rem] border border-border/80 bg-secondary/25 p-4">
+            <div className="flex items-center justify-between rounded-lg border border-border/80 bg-secondary/25 p-4">
               <div className="space-y-1">
                 <p className="text-sm font-semibold">Automation enabled</p>
                 <p className="text-sm text-muted-foreground">Pause or resume the schedule without deleting its cadence, quiet hours, or timezone.</p>
@@ -133,7 +133,7 @@ export function SchedulePage() {
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-2 rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
+              <div className="space-y-2 rounded-lg border border-border/80 bg-secondary/20 p-4">
                 <Label htmlFor="schedule-cadence">Cadence</Label>
                 <Select
                   value={scheduleDraft.cadence}
@@ -148,7 +148,7 @@ export function SchedulePage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2 rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
+              <div className="space-y-2 rounded-lg border border-border/80 bg-secondary/20 p-4">
                 <Label htmlFor="schedule-timezone">Timezone</Label>
                 <Input
                   id="schedule-timezone"
@@ -169,7 +169,7 @@ export function SchedulePage() {
 
             {scheduleDraft.cadence === "hourly" ? (
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-2 rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
+                <div className="space-y-2 rounded-lg border border-border/80 bg-secondary/20 p-4">
                   <Label htmlFor="schedule-hourly-minute">Minute past the hour</Label>
                   <Input
                     id="schedule-hourly-minute"
@@ -180,7 +180,7 @@ export function SchedulePage() {
                     onChange={(event) => onChangeScheduleField("hourly_minute", Number(event.target.value || 0))}
                   />
                 </div>
-                <div className="space-y-2 rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
+                <div className="space-y-2 rounded-lg border border-border/80 bg-secondary/20 p-4">
                   <p className="text-sm font-semibold">Hourly preview</p>
                   <p className="text-sm text-muted-foreground">
                     Runs every hour at :{String(scheduleDraft.hourly_minute).padStart(2, "0")} in {scheduleDraft.timezone || "UTC"}.
@@ -188,7 +188,7 @@ export function SchedulePage() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-2 rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
+              <div className="space-y-2 rounded-lg border border-border/80 bg-secondary/20 p-4">
                 <Label htmlFor="schedule-daily-time">Daily time</Label>
                 <Input
                   id="schedule-daily-time"
@@ -199,7 +199,7 @@ export function SchedulePage() {
               </div>
             )}
 
-            <div className="space-y-4 rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
+            <div className="space-y-4 rounded-lg border border-border/80 bg-secondary/20 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold">Quiet hours</p>
@@ -278,7 +278,7 @@ export function SchedulePage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {scheduleStatus?.last_error ? (
-              <div className="rounded-[1.25rem] border border-amber-300/50 bg-amber-50/50 p-4">
+              <div className="rounded-lg border border-amber-300/50 bg-amber-50/50 p-4">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
                   <div className="space-y-1">
@@ -288,13 +288,13 @@ export function SchedulePage() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-[1.25rem] border border-emerald-200/70 bg-emerald-50/55 p-4">
+              <div className="rounded-lg border border-emerald-200/70 bg-emerald-50/55 p-4">
                 <p className="text-sm font-semibold text-emerald-900">No active scheduler issue</p>
                 <p className="mt-1 text-sm text-emerald-800">Automation is clear to continue with the current schedule.</p>
               </div>
             )}
 
-            <div className="space-y-2 rounded-[1.25rem] border border-border/80 bg-secondary/20 p-4">
+            <div className="space-y-2 rounded-lg border border-border/80 bg-secondary/20 p-4">
               <p className="text-sm font-semibold">Current state guidance</p>
               <p className="text-sm text-muted-foreground">{schedulerState.nextStep}</p>
             </div>

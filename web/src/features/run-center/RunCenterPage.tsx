@@ -49,7 +49,7 @@ export function RunCenterPage() {
                 onValueChange={setRunNowModeOverride}
                 disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id) || !runPolicy.allow_run_override}
               >
-                <SelectTrigger className="rounded-[1.1rem]">
+                <SelectTrigger className="rounded-lg">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

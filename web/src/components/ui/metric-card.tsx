@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 const metricVariants = cva("", {
   variants: {
     variant: {
-      stat: "overflow-hidden",
+      stat: "",
       compact: "",
       inline: "",
     },
@@ -30,7 +30,7 @@ export function MetricCard({
 } & VariantProps<typeof metricVariants>) {
   if (variant === "inline") {
     return (
-      <div className={cn("flex items-center justify-between rounded-[1.2rem] border border-border/80 bg-secondary/25 px-4 py-3", className)}>
+      <div className={cn("flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3", className)}>
         <span className="text-sm text-muted-foreground">{label}</span>
         <span className="text-sm font-semibold text-foreground">{value}</span>
       </div>
@@ -39,9 +39,9 @@ export function MetricCard({
 
   return (
     <Card className={cn(metricVariants({ variant }), className)}>
-      <CardHeader className={cn(variant === "stat" && "bg-gradient-to-br from-white/95 via-white/92 to-secondary/35 dark:from-card dark:via-card dark:to-secondary/15", "pb-4")}>
-        <CardDescription className="text-[11px] uppercase tracking-[0.14em]">{label}</CardDescription>
-        <CardTitle className="font-display text-[1.75rem]">{value}</CardTitle>
+      <CardHeader className="pb-4">
+        <CardDescription className="text-[11px] uppercase tracking-[0.06em]">{label}</CardDescription>
+        <CardTitle className="font-display text-2xl">{value}</CardTitle>
         {detail ? <p className="text-sm text-muted-foreground">{detail}</p> : null}
       </CardHeader>
     </Card>

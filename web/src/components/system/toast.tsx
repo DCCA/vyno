@@ -14,9 +14,9 @@ export function Toaster() {
         <div
           key={t.id}
           className={cn(
-            "animate-surface-enter flex min-w-[280px] max-w-[420px] items-start gap-2 rounded-xl border px-4 py-3 shadow-panel",
+            "animate-slide-in-bottom flex min-w-[280px] max-w-[420px] items-start gap-2 rounded-lg border px-4 py-3 shadow-panel-lg",
             t.kind === "error"
-              ? "border-destructive/40 bg-destructive/5 text-destructive"
+              ? "border-destructive/30 bg-destructive/5 text-destructive"
               : "border-border bg-card text-foreground",
           )}
         >

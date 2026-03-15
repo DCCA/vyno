@@ -224,7 +224,7 @@ function CompactSourceCard({
   const isFailing = row.health === "failing"
 
   return (
-    <div className={`animate-surface-enter rounded-[1.2rem] border border-border/80 bg-gradient-to-br from-card via-card to-secondary/20 p-4 transition-all duration-200 hover:border-border hover:shadow-sm ${highlighted ? "ring-2 ring-accent/40" : ""}`}>
+    <div className={`animate-surface-enter rounded-lg border border-border bg-card p-4 transition-colors duration-150 hover:bg-muted/30 ${highlighted ? "ring-2 ring-accent/40" : ""}`}>
       {/* Header: badges + overflow */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
@@ -300,7 +300,7 @@ function SourcePreviewCard({
     .join(" · ")
 
   return (
-    <Card className={`animate-surface-enter overflow-hidden border-border/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,242,237,0.94))] transition-[transform,box-shadow,border-color,ring-color] duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-panel ${highlighted ? "ring-2 ring-accent/40" : ""}`}>
+    <Card className={`animate-surface-enter overflow-hidden transition-[box-shadow,border-color] duration-150 hover:shadow-panel-lg ${highlighted ? "ring-2 ring-accent/40" : ""}`}>
       <div className="flex h-full flex-col">
         {/* Media area */}
         <div className="source-card-media">
@@ -334,10 +334,10 @@ function SourcePreviewCard({
             )
           ) : (
             <div className="source-card-placeholder flex h-full w-full items-end justify-between p-4">
-              <Badge variant="secondary" className="border-white/40 bg-white/70 text-foreground shadow-sm">
+              <Badge variant="secondary">
                 {row.type_label}
               </Badge>
-              <div className="rounded-full border border-foreground/10 bg-white/72 p-2 text-muted-foreground shadow-sm">
+              <div className="rounded-full border border-border bg-card p-2 text-muted-foreground">
                 <ImageOff className="h-4 w-4" aria-hidden="true" />
               </div>
             </div>

@@ -14,19 +14,16 @@ export function WorkspaceHeader({
   badges?: Array<{ label: string; variant?: "default" | "secondary" | "outline" | "success" | "warning" }>
   actions?: ReactNode
 }) {
-  const eyebrow = title === "Dashboard" ? "Overview" : "Workspace"
-
   return (
-    <Card className="overflow-hidden border-border/80">
-      <CardHeader className="gap-5 bg-gradient-to-br from-white/96 via-white/92 to-accent/10 pb-5 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-6">
-        <div className="min-w-0 max-w-[72ch] space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/72">{eyebrow}</p>
-          <div className="space-y-2">
-            <CardTitle className="font-display text-2xl md:text-[2rem]">{title}</CardTitle>
-            <CardDescription className="max-w-[68ch] text-[0.98rem] leading-7 text-balance">{description}</CardDescription>
+    <Card>
+      <CardHeader className="gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-6">
+        <div className="min-w-0 max-w-[72ch] space-y-2">
+          <div className="space-y-1">
+            <CardTitle className="font-display text-xl md:text-2xl">{title}</CardTitle>
+            <CardDescription className="max-w-[68ch] text-balance">{description}</CardDescription>
           </div>
           {badges && badges.length > 0 ? (
-            <div className="flex flex-wrap gap-2 pt-1">
+            <div className="flex flex-wrap gap-1.5">
               {badges.map((badge) => (
                 <Badge key={`${badge.label}:${badge.variant ?? "default"}`} variant={badge.variant ?? "secondary"}>
                   {badge.label}
@@ -36,7 +33,7 @@ export function WorkspaceHeader({
           ) : null}
         </div>
         {actions ? (
-          <div className="w-full rounded-[1.35rem] border border-border/80 bg-background/86 p-2 shadow-[0_18px_32px_-28px_rgba(19,23,30,0.24)] lg:w-auto lg:justify-self-end lg:self-start">
+          <div className="flex flex-wrap items-center gap-2 lg:justify-self-end lg:self-start">
             {actions}
           </div>
         ) : null}

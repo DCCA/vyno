@@ -26,7 +26,10 @@ export function OnboardingPage() {
   const {
     onboarding, setupPercent, preflight, sourcePacks, previewResult,
     previewLoading, activateLoading, activeSourcePackId,
+    sourceCatalog, selectedCatalogKeys, catalogCategoryFilter,
     onRunPreflight, onApplySourcePack, onRunPreview, onActivate,
+    onToggleCatalogEntry, onSetCatalogCategory, onSelectCategory,
+    onDeselectAll, onApplySelectedSources,
   } = useOnboardingState()
   const notice = localNotices.onboarding
   const revisitMode = useMemo(
@@ -199,24 +202,100 @@ export function OnboardingPage() {
       <StepCard
         number={3}
         title="Choose starter sources"
-        detail="Begin with a curated pack so the first digest is useful without manual source editing."
+        detail="Browse recommended sources and pick the ones you want."
         status={stepStatus(onboarding, "sources")}
       >
-        <div className="grid gap-3 md:grid-cols-2">
-          {sourcePacks.map((pack) => (
-            <div key={pack.id} className="rounded-xl border bg-muted/15 p-4">
-              <p className="text-sm font-semibold">{pack.name}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{pack.description}</p>
-              <p className="mt-2 text-xs text-muted-foreground">{pack.item_count} sources</p>
-              <Button className="mt-4" variant="outline" onClick={() => onApplySourcePack(pack.id)} disabled={saving}>
-                {saveAction === "source-pack" && activeSourcePackId === pack.id ? (
+        {sourceCatalog ? (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onSetCatalogCategory("")}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${catalogCategoryFilter === "" ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-muted/40"}`}
+              >
+                All
+              </button>
+              {sourceCatalog.categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => onSetCatalogCategory(cat.id)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${catalogCategoryFilter === cat.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-muted/40"}`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {sourceCatalog.entries
+                .filter((entry) => !catalogCategoryFilter || entry.categories.includes(catalogCategoryFilter))
+                .map((entry) => {
+                  const key = `${entry.source_type}:${entry.value}`
+                  const selected = selectedCatalogKeys.has(key)
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => onToggleCatalogEntry(entry.source_type, entry.value)}
+                      className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${selected ? "border-primary bg-primary/5" : "border-border bg-background"} ${entry.already_active ? "opacity-60" : ""}`}
+                    >
+                      <span
+                        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${selected ? "border-primary bg-primary" : "border-muted-foreground/40 bg-background"}`}
+                        aria-hidden="true"
+                      >
+                        {selected ? <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" /> : null}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold leading-tight">{entry.label}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">{entry.description}</p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <Badge variant="secondary" className="text-[10px]">{entry.source_type.replace("_", " ")}</Badge>
+                          {entry.already_active ? <span className="text-[10px] text-muted-foreground">already added</span> : null}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm text-muted-foreground">
+                {selectedCatalogKeys.size} source{selectedCatalogKeys.size !== 1 ? "s" : ""} selected
+              </span>
+              {catalogCategoryFilter ? (
+                <button type="button" onClick={() => onSelectCategory(catalogCategoryFilter)} className="text-sm text-primary hover:underline">
+                  Select all {sourceCatalog.categories.find((c) => c.id === catalogCategoryFilter)?.label ?? catalogCategoryFilter}
+                </button>
+              ) : null}
+              {selectedCatalogKeys.size > 0 ? (
+                <button type="button" onClick={onDeselectAll} className="text-sm text-muted-foreground hover:underline">
+                  Clear selection
+                </button>
+              ) : null}
+              <Button onClick={onApplySelectedSources} disabled={saving || selectedCatalogKeys.size === 0}>
+                {saveAction === "source-catalog-apply" ? (
                   <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
                 ) : null}
-                {saveAction === "source-pack" && activeSourcePackId === pack.id ? "Applying..." : "Apply pack"}
+                {saveAction === "source-catalog-apply" ? "Applying..." : "Apply selected sources"}
               </Button>
             </div>
-          ))}
-        </div>
+          </>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {sourcePacks.map((pack) => (
+              <div key={pack.id} className="rounded-xl border bg-muted/15 p-4">
+                <p className="text-sm font-semibold">{pack.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{pack.description}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{pack.item_count} sources</p>
+                <Button className="mt-4" variant="outline" onClick={() => onApplySourcePack(pack.id)} disabled={saving}>
+                  {saveAction === "source-pack" && activeSourcePackId === pack.id ? (
+                    <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" />
+                  ) : null}
+                  {saveAction === "source-pack" && activeSourcePackId === pack.id ? "Applying..." : "Apply pack"}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
       </StepCard>
 
       <StepCard

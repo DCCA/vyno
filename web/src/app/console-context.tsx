@@ -17,6 +17,7 @@ import type {
   SaveAction,
   ScheduleConfig,
   ScheduleStatus,
+  SourceCatalog,
   SourceHealthItem,
   SourceMap,
   SourcePack,
@@ -122,12 +123,20 @@ export type OnboardingState = {
   setupPercent: number
   preflight: PreflightReport | null
   sourcePacks: SourcePack[]
+  sourceCatalog: SourceCatalog | null
+  selectedCatalogKeys: Set<string>
+  catalogCategoryFilter: string
   previewResult: PreviewResult | null
   previewLoading: boolean
   activateLoading: boolean
   activeSourcePackId: string
   onRunPreflight: () => void
   onApplySourcePack: (packId: string) => void
+  onToggleCatalogEntry: (sourceType: string, value: string) => void
+  onSetCatalogCategory: (category: string) => void
+  onSelectCategory: (category: string) => void
+  onDeselectAll: () => void
+  onApplySelectedSources: () => void
   onRunPreview: () => void
   onActivate: () => void
 }

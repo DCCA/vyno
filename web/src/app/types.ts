@@ -170,6 +170,26 @@ export type SourcePack = {
   item_count: number
 }
 
+export type SourceCatalogCategory = {
+  id: string
+  label: string
+  description: string
+}
+
+export type SourceCatalogEntry = {
+  source_type: string
+  value: string
+  label: string
+  description: string
+  categories: string[]
+  already_active: boolean
+}
+
+export type SourceCatalog = {
+  categories: SourceCatalogCategory[]
+  entries: SourceCatalogEntry[]
+}
+
 export type PreviewResult = {
   run_id: string
   status: string
@@ -320,6 +340,7 @@ export type SaveAction =
   | "source-feedback"
   | "onboarding-preflight"
   | "source-pack"
+  | "source-catalog-apply"
   | "schedule-save"
   | "profile-validate"
   | "profile-diff"
