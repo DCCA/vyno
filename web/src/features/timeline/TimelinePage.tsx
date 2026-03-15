@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { Activity, Loader2, RefreshCcw, Save } from "lucide-react"
 
 import { useTimelineState, useUiState } from "@/app/console-context"
@@ -27,6 +28,13 @@ export function TimelinePage() {
     onRefreshTimeline, onExportTimeline, onAddTimelineNote, timelineNotes, onSubmitItemFeedback,
   } = useTimelineState()
   const notice = localNotices.timeline
+  const [feedbackGiven, setFeedbackGiven] = useState<Record<string, string>>({})
+
+  function handleItemFeedback(itemId: string, label: "more_like_this" | "not_relevant" | "too_technical" | "repeat_source") {
+    onSubmitItemFeedback(itemId, label)
+    setFeedbackGiven((prev) => ({ ...prev, [itemId]: label }))
+  }
+
   const telegramArtifact = timelineRunArtifacts.find((row) => row.channel === "telegram")
   const obsidianArtifact = timelineRunArtifacts.find((row) => row.channel === "obsidian")
   return (
@@ -257,18 +265,22 @@ export function TimelinePage() {
                         </div>
                       ) : null}
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <Button variant="outline" size="sm" onClick={() => onSubmitItemFeedback(row.item_id, "more_like_this")}>
-                          More like this
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => onSubmitItemFeedback(row.item_id, "not_relevant")}>
-                          Not relevant
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => onSubmitItemFeedback(row.item_id, "too_technical")}>
-                          Too technical
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => onSubmitItemFeedback(row.item_id, "repeat_source")}>
-                          Repeat source
-                        </Button>
+                        {(["more_like_this", "not_relevant", "too_technical", "repeat_source"] as const).map((label) => {
+                          const given = feedbackGiven[row.item_id]
+                          const isSelected = given === label
+                          const isDimmed = given && !isSelected
+                          return (
+                            <Button
+                              key={label}
+                              variant={isSelected ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => handleItemFeedback(row.item_id, label)}
+                              className={isDimmed ? "opacity-40" : ""}
+                            >
+                              {label === "more_like_this" ? "More like this" : label === "not_relevant" ? "Not relevant" : label === "too_technical" ? "Too technical" : "Repeat source"}
+                            </Button>
+                          )
+                        })}
                       </div>
                     </div>
                   ))

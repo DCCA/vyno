@@ -24,6 +24,7 @@ import { ConfirmDialog, useConfirm } from "@/components/system/confirm-dialog"
 import { Toaster } from "@/components/system/toast"
 import { ConsoleProvider, type ConsoleContextValue } from "@/app/console-context"
 import { useTheme } from "@/hooks/use-theme"
+import { useToast } from "@/hooks/use-toast"
 import { api } from "@/lib/api"
 import {
   diffObjects,
@@ -74,6 +75,7 @@ function App() {
   const uiStateHydratedRef = useRef(false)
   const { confirmState, confirm, handleClose: handleConfirmClose } = useConfirm()
   const { theme, toggle: toggleTheme } = useTheme()
+  const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [sourceTypes, setSourceTypes] = useState<string[]>([])
@@ -340,6 +342,7 @@ function App() {
 
   function setScopedNotice(scope: NoticeScope, kind: Notice["kind"], text: string) {
     const next = { kind, text }
+    if (kind === "ok") toast("ok", text)
     if (scope === "global") {
       setGlobalNotice(next)
       return
@@ -1248,9 +1251,27 @@ function App() {
     }
   }
 
-  function navigateToSurface(surface: ConsoleSurface) {
+  async function navigateToSurface(surface: ConsoleSurface) {
+    if (profileWorkspaceDirty || scheduleDirty) {
+      const ok = await confirm({
+        title: "Unsaved changes",
+        description: "You have unsaved changes that will be lost if you navigate away.",
+        confirmLabel: "Discard and leave",
+        variant: "destructive",
+      })
+      if (!ok) return
+    }
     navigate(surfacePaths[surface])
   }
+
+  useEffect(() => {
+    if (!profileWorkspaceDirty && !scheduleDirty) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+    }
+    window.addEventListener("beforeunload", handler)
+    return () => window.removeEventListener("beforeunload", handler)
+  }, [profileWorkspaceDirty, scheduleDirty])
 
   const uiSlice = useMemo(() => ({
     loading, saving, saveAction, globalNotice, localNotices, clearScopedNotice,

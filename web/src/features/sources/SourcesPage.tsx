@@ -24,8 +24,15 @@ export function SourcesPage() {
     onHandleSourceMutation, onEditUnifiedSourceRow, onDeleteUnifiedSourceRow, onSourceFeedback,
   } = useSourceState()
   const notice = localNotices.sources
+  const [lastFeedbackKey, setLastFeedbackKey] = useState("")
   const sortedSourceRows = Object.entries(sources).sort((a, b) => a[0].localeCompare(b[0]))
   const totalSourceCount = sortedSourceRows.reduce((sum, [, values]) => sum + values.length, 0)
+
+  function handleSourceFeedback(row: UnifiedSourceRow, label: "prefer_source" | "less_source" | "mute_source") {
+    setLastFeedbackKey(row.key)
+    onSourceFeedback(row, label)
+    setTimeout(() => setLastFeedbackKey(""), 2000)
+  }
 
   return (
     <div className="space-y-4">
@@ -130,9 +137,10 @@ export function SourcesPage() {
                     key={row.key}
                     row={row}
                     saving={saving}
+                    highlighted={lastFeedbackKey === row.key}
                     onEditUnifiedSourceRow={onEditUnifiedSourceRow}
                     onDeleteUnifiedSourceRow={onDeleteUnifiedSourceRow}
-                    onSourceFeedback={onSourceFeedback}
+                    onSourceFeedback={handleSourceFeedback}
                   />
                 ))
               ) : (
@@ -163,12 +171,14 @@ export function SourcesPage() {
 function SourcePreviewCard({
   row,
   saving,
+  highlighted,
   onEditUnifiedSourceRow,
   onDeleteUnifiedSourceRow,
   onSourceFeedback,
 }: {
   row: UnifiedSourceRow
   saving: boolean
+  highlighted: boolean
   onEditUnifiedSourceRow: (row: UnifiedSourceRow) => void
   onDeleteUnifiedSourceRow: (row: UnifiedSourceRow) => void
   onSourceFeedback: (row: UnifiedSourceRow, label: "prefer_source" | "less_source" | "mute_source") => void
@@ -248,7 +258,7 @@ function SourcePreviewCard({
   )
 
   return (
-    <Card className="animate-surface-enter overflow-hidden border-border/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,242,237,0.94))] transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-panel">
+    <Card className={`animate-surface-enter overflow-hidden border-border/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,242,237,0.94))] transition-[transform,box-shadow,border-color,ring-color] duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-panel ${highlighted ? "ring-2 ring-accent/40" : ""}`}>
       <div className="flex h-full flex-col">
         {hasPreviewLink ? (
           <a
