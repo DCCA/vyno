@@ -1899,6 +1899,23 @@ def create_app(settings: WebSettings):
         rows = _build_source_preview_rows(settings, store)
         return {"items": rows}
 
+    # ── Serve built frontend (production) ────────────────────────────
+    _static_dir = Path("web/dist")
+    if not _static_dir.is_dir():
+        _static_dir = Path(__file__).resolve().parent.parent.parent.parent / "web" / "dist"
+    if _static_dir.is_dir():
+        from fastapi.staticfiles import StaticFiles
+        from fastapi.responses import FileResponse
+
+        _index_html = _static_dir / "index.html"
+
+        @app.get("/{full_path:path}")
+        async def serve_spa(full_path: str) -> Any:
+            file_path = _static_dir / full_path
+            if full_path and file_path.is_file():
+                return FileResponse(file_path)
+            return FileResponse(_index_html)
+
     return app
 
 

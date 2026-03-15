@@ -1,4 +1,4 @@
-.PHONY: setup test doctor live schedule logs bot web-api web-ui web-ui-build web-screenshots app security-check security-check-extended docker-build docker-up docker-down docker-logs docker-ps docker-restart docker-scheduler-build docker-scheduler-up docker-scheduler-down docker-scheduler-logs docker-scheduler-ps docker-scheduler-restart docker-scheduler-deploy
+.PHONY: setup test doctor live schedule logs bot web-api web-ui web-ui-build web-screenshots app security-check security-check-extended docker-build docker-up docker-down docker-logs docker-ps docker-restart docker-deploy docker-scheduler-build docker-scheduler-up docker-scheduler-down docker-scheduler-logs docker-scheduler-ps docker-scheduler-restart docker-scheduler-deploy
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && echo 1 || echo 0)
 
@@ -71,6 +71,11 @@ docker-ps:
 
 docker-restart:
 	docker compose restart digest-bot
+
+docker-deploy:
+	mkdir -p logs .runtime obsidian-vault
+	touch digest-live.db
+	docker compose up -d --build digest-bot digest-scheduler
 
 docker-scheduler-build:
 	docker compose build digest-scheduler
