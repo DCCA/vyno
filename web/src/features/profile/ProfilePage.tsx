@@ -1,6 +1,7 @@
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react"
+import { useState, type ReactNode } from "react"
 import { Loader2, RefreshCcw, Save, ShieldCheck } from "lucide-react"
 
+import { useNavActions, useOnboardingState, useProfileState, useRunState, useScheduleState, useUiState } from "@/app/console-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,78 +14,26 @@ import { Textarea } from "@/components/ui/textarea"
 import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
 import { fromLines, toLines } from "@/lib/console-utils"
-import type { FeedbackSummary, Notice, RunPolicy, SaveAction, ScheduleStatus } from "@/app/types"
+import type { RunPolicy } from "@/app/types"
 
 type ProfileRecord = Record<string, unknown>
 type ProfileSectionId = "goal" | "focus" | "quality" | "output" | "automation"
 
-export function ProfilePage({
-  notice,
-  onDismissNotice,
-  profile,
-  scheduleStatus,
-  onboardingLifecycle,
-  profileJson,
-  setProfileJson,
-  updateProfileField,
-  runPolicy,
-  setRunPolicy,
-  runPolicyDirty,
-  runPolicyChangeCount,
-  profileJsonParseError,
-  profileWorkspaceChangeCount,
-  localProfileDiff,
-  profileDiff,
-  profileDiffComputedAt,
-  seenResetDays,
-  setSeenResetDays,
-  seenResetConfirm,
-  setSeenResetConfirm,
-  seenResetPreviewCount,
-  saveAction,
-  saving,
-  onValidateProfile,
-  onComputeProfileDiff,
-  onSaveProfileWorkspace,
-  onRevisitSetupGuide,
-  onOpenSchedule,
-  onPreviewSeenReset,
-  onApplySeenReset,
-  feedbackSummary,
-}: {
-  notice: Notice | null | undefined
-  onDismissNotice: () => void
-  profile: Record<string, unknown> | null
-  scheduleStatus: ScheduleStatus | null
-  onboardingLifecycle: "needs_setup" | "ready"
-  profileJson: string
-  setProfileJson: (value: string) => void
-  updateProfileField: (path: string, value: unknown) => void
-  runPolicy: RunPolicy
-  setRunPolicy: Dispatch<SetStateAction<RunPolicy>>
-  runPolicyDirty: boolean
-  runPolicyChangeCount: number
-  profileJsonParseError: string
-  profileWorkspaceChangeCount: number
-  localProfileDiff: Record<string, unknown>
-  profileDiff: Record<string, unknown>
-  profileDiffComputedAt: string
-  seenResetDays: string
-  setSeenResetDays: (value: string) => void
-  seenResetConfirm: boolean
-  setSeenResetConfirm: (value: boolean) => void
-  seenResetPreviewCount: number | null
-  saveAction: SaveAction
-  saving: boolean
-  onValidateProfile: () => void
-  onComputeProfileDiff: () => void
-  onSaveProfileWorkspace: () => void
-  onRevisitSetupGuide: () => void
-  onOpenSchedule: () => void
-  onPreviewSeenReset: () => void
-  onApplySeenReset: () => void
-  feedbackSummary: FeedbackSummary | null
-}) {
+export function ProfilePage() {
+  const { saving, saveAction, localNotices, clearScopedNotice } = useUiState()
+  const { runPolicy, setRunPolicy } = useRunState()
+  const { scheduleStatus } = useScheduleState()
+  const { onboardingLifecycle } = useOnboardingState()
+  const { navigateToSurface, onRevisitSetupGuide } = useNavActions()
+  const {
+    profile, profileJson, setProfileJson, updateProfileField, profileJsonParseError,
+    profileWorkspaceChangeCount, localProfileDiff, profileDiff, profileDiffComputedAt,
+    runPolicyDirty, runPolicyChangeCount, seenResetDays, setSeenResetDays,
+    seenResetConfirm, setSeenResetConfirm, seenResetPreviewCount, feedbackSummary,
+    onValidateProfile, onComputeProfileDiff, onSaveProfileWorkspace,
+    onPreviewSeenReset, onApplySeenReset,
+  } = useProfileState()
+  const notice = localNotices.profile
   const [openSection, setOpenSection] = useState<ProfileSectionId>("goal")
   const [showMaintenance, setShowMaintenance] = useState(false)
   const [showExpert, setShowExpert] = useState(false)
@@ -151,7 +100,7 @@ export function ProfilePage({
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-3">
-          <InlineNotice notice={notice} onDismiss={onDismissNotice} />
+          <InlineNotice notice={notice} onDismiss={() => clearScopedNotice("profile")} />
 
           <SectionCard
             title="Digest Goal"
@@ -441,7 +390,7 @@ export function ProfilePage({
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <Button type="button" variant="outline" onClick={onOpenSchedule}>
+              <Button type="button" variant="outline" onClick={() => navigateToSurface("schedule")}>
                 Open schedule controls
               </Button>
               <p className="text-sm text-muted-foreground">Use the dedicated schedule page to save, pause, resume, or inspect automation.</p>

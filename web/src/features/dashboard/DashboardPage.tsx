@@ -1,37 +1,22 @@
 import { Activity, Database, Rocket } from "lucide-react"
 
+import { useNavActions, useOnboardingState, useRunState, useScheduleState, useSourceState, useTimelineState } from "@/app/console-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { MetricCard } from "@/components/ui/metric-card"
 import { WorkspaceHeader } from "@/components/system/page-header"
-import type { RunStatus, ScheduleStatus, SourceHealthItem, TimelineRun } from "@/app/types"
 
-export function DashboardPage({
-  runStatus,
-  sourceHealth,
-  setupPercent,
-  timelineRuns,
-  scheduleStatus,
-  onboardingDone,
-  onOpenSchedule,
-  onOpenRun,
-  onOpenSources,
-  onOpenTimeline,
-  onOpenOnboarding,
-}: {
-  runStatus: RunStatus | null
-  sourceHealth: SourceHealthItem[]
-  setupPercent: number
-  timelineRuns: TimelineRun[]
-  scheduleStatus: ScheduleStatus | null
-  onboardingDone: boolean
-  onOpenSchedule: () => void
-  onOpenRun: () => void
-  onOpenSources: () => void
-  onOpenTimeline: () => void
-  onOpenOnboarding: () => void
-}) {
+export function DashboardPage() {
+  const { runStatus } = useRunState()
+  const { sourceHealth } = useSourceState()
+  const { scheduleStatus } = useScheduleState()
+  const { onboarding, setupPercent } = useOnboardingState()
+  const { timelineRuns } = useTimelineState()
+  const { navigateToSurface } = useNavActions()
+
+  const onboardingDone = (onboarding?.lifecycle ?? "needs_setup") === "ready"
+
   return (
     <div className="space-y-4">
       <WorkspaceHeader
@@ -76,25 +61,25 @@ export function DashboardPage({
           <CardContent className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {onboardingDone ? (
-                <Button className="justify-between" onClick={onOpenRun}>
+                <Button className="justify-between" onClick={() => navigateToSurface("run")}>
                   Open Run Center
                   <Rocket className="h-4 w-4" />
                 </Button>
               ) : (
-                <Button className="justify-between" onClick={onOpenOnboarding}>
+                <Button className="justify-between" onClick={() => navigateToSurface("onboarding")}>
                   Continue Setup
                   <Rocket className="h-4 w-4" />
                 </Button>
               )}
-              <Button variant="outline" className="justify-between" onClick={onOpenSources}>
+              <Button variant="outline" className="justify-between" onClick={() => navigateToSurface("sources")}>
                 Open Sources
                 <Database className="h-4 w-4" />
               </Button>
-              <Button variant="outline" className="justify-between" onClick={onOpenSchedule}>
+              <Button variant="outline" className="justify-between" onClick={() => navigateToSurface("schedule")}>
                 Manage Schedule
                 <Rocket className="h-4 w-4" />
               </Button>
-              <Button variant="outline" className="justify-between" onClick={onOpenTimeline}>
+              <Button variant="outline" className="justify-between" onClick={() => navigateToSurface("timeline")}>
                 Open Timeline
                 <Activity className="h-4 w-4" />
               </Button>
@@ -164,4 +149,3 @@ export function DashboardPage({
     </div>
   )
 }
-

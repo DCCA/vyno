@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 import { AlertTriangle, Clock3, Play, Rocket } from "lucide-react"
 
+import { useNavActions, useOnboardingState, useRunState, useScheduleState, useUiState } from "@/app/console-context"
 import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
 import { Badge } from "@/components/ui/badge"
@@ -11,39 +12,15 @@ import { Label } from "@/components/ui/label"
 import { MetricCard } from "@/components/ui/metric-card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import type { Notice, SaveAction, ScheduleConfig, ScheduleStatus } from "@/app/types"
+import type { ScheduleConfig, ScheduleStatus } from "@/app/types"
 
-export function SchedulePage({
-  notice,
-  onDismissNotice,
-  lifecycle,
-  scheduleDraft,
-  scheduleDirty,
-  scheduleStatus,
-  saveAction,
-  saving,
-  onChangeScheduleField,
-  onSaveSchedule,
-  onRunNow,
-  onOpenTimeline,
-  onOpenRun,
-  onOpenOnboarding,
-}: {
-  notice: Notice | null | undefined
-  onDismissNotice: () => void
-  lifecycle: "needs_setup" | "ready"
-  scheduleDraft: ScheduleConfig
-  scheduleDirty: boolean
-  scheduleStatus: ScheduleStatus | null
-  saveAction: SaveAction
-  saving: boolean
-  onChangeScheduleField: (field: keyof ScheduleConfig, value: string | boolean | number) => void
-  onSaveSchedule: () => void
-  onRunNow: () => void
-  onOpenTimeline: () => void
-  onOpenRun: () => void
-  onOpenOnboarding: () => void
-}) {
+export function SchedulePage() {
+  const { saving, saveAction, localNotices, clearScopedNotice } = useUiState()
+  const { onRunNow } = useRunState()
+  const { scheduleDraft, scheduleDirty, scheduleStatus, onChangeScheduleField, onSaveSchedule } = useScheduleState()
+  const { onboardingLifecycle: lifecycle } = useOnboardingState()
+  const { navigateToSurface } = useNavActions()
+  const notice = localNotices.schedule
   const enabled = scheduleDraft.enabled
   const schedulerState = schedulerStateMeta(scheduleStatus)
   const cadenceSummary = describeSchedule(scheduleDraft)
@@ -77,7 +54,7 @@ export function SchedulePage({
         ]}
         actions={
           <div className="flex flex-wrap gap-2 lg:justify-end">
-            <Button variant="outline" onClick={onOpenTimeline}>
+            <Button variant="outline" onClick={() => navigateToSurface("timeline")}>
               <Clock3 className="h-4 w-4" />
               Open Timeline
             </Button>
@@ -89,7 +66,7 @@ export function SchedulePage({
         }
       />
 
-      <InlineNotice notice={notice} onDismiss={onDismissNotice} />
+      <InlineNotice notice={notice} onDismiss={() => clearScopedNotice("schedule")} />
 
       {lifecycle === "needs_setup" ? (
         <Card>
@@ -100,7 +77,7 @@ export function SchedulePage({
                 This same workspace is available during setup, but it stays out of the main menu until activation is complete.
               </p>
             </div>
-            <Button variant="outline" onClick={onOpenOnboarding}>
+            <Button variant="outline" onClick={() => navigateToSurface("onboarding")}>
               Back to setup guide
             </Button>
           </CardContent>
@@ -263,7 +240,7 @@ export function SchedulePage({
                 <Clock3 className="h-4 w-4" />
                 {saveAction === "schedule-save" ? "Saving..." : enabled ? "Save schedule" : "Save paused state"}
               </Button>
-              <Button variant="outline" onClick={onOpenRun}>
+              <Button variant="outline" onClick={() => navigateToSurface("run")}>
                 <Rocket className="h-4 w-4" />
                 Open Run Center
               </Button>

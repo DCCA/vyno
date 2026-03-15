@@ -1,7 +1,8 @@
 import { useState } from "react"
 import { AlertTriangle, ArrowUpRight, Clock3, ImageOff, Loader2 } from "lucide-react"
 
-import type { Notice, SaveAction, SourceHealthItem, SourceMap, UnifiedSourceRow } from "@/app/types"
+import { useSourceState, useUiState } from "@/app/console-context"
+import type { UnifiedSourceRow } from "@/app/types"
 import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
 import { Badge } from "@/components/ui/badge"
@@ -13,55 +14,15 @@ import { MetricCard } from "@/components/ui/metric-card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { sourceValuePlaceholderForType, truncateText } from "@/lib/console-utils"
 
-export function SourcesPage({
-  notice,
-  onDismissNotice,
-  sources,
-  sourceHealth,
-  sourceType,
-  setSourceType,
-  sourceValue,
-  setSourceValue,
-  sourceTypes,
-  saving,
-  saveAction,
-  onHandleSourceMutation,
-  sourceSearch,
-  setSourceSearch,
-  sourceStatusFilter,
-  setSourceStatusFilter,
-  filteredUnifiedSourceRows,
-  unifiedRowsVisible,
-  showAllUnifiedSources,
-  setShowAllUnifiedSources,
-  onEditUnifiedSourceRow,
-  onDeleteUnifiedSourceRow,
-  onSourceFeedback,
-}: {
-  notice: Notice | null | undefined
-  onDismissNotice: () => void
-  sources: SourceMap
-  sourceHealth: SourceHealthItem[]
-  sourceType: string
-  setSourceType: (value: string) => void
-  sourceValue: string
-  setSourceValue: (value: string) => void
-  sourceTypes: string[]
-  saving: boolean
-  saveAction: SaveAction
-  onHandleSourceMutation: (action: "add" | "remove") => void
-  sourceSearch: string
-  setSourceSearch: (value: string) => void
-  sourceStatusFilter: "all" | "healthy" | "failing"
-  setSourceStatusFilter: (value: "all" | "healthy" | "failing") => void
-  filteredUnifiedSourceRows: UnifiedSourceRow[]
-  unifiedRowsVisible: UnifiedSourceRow[]
-  showAllUnifiedSources: boolean
-  setShowAllUnifiedSources: (value: boolean | ((prev: boolean) => boolean)) => void
-  onEditUnifiedSourceRow: (row: UnifiedSourceRow) => void
-  onDeleteUnifiedSourceRow: (row: UnifiedSourceRow) => void
-  onSourceFeedback: (row: UnifiedSourceRow, label: "prefer_source" | "less_source" | "mute_source") => void
-}) {
+export function SourcesPage() {
+  const { saving, saveAction, localNotices, clearScopedNotice } = useUiState()
+  const {
+    sources, sourceHealth, sourceType, setSourceType, sourceValue, setSourceValue,
+    sourceTypes, sourceSearch, setSourceSearch, sourceStatusFilter, setSourceStatusFilter,
+    filteredUnifiedSourceRows, unifiedRowsVisible, showAllUnifiedSources, setShowAllUnifiedSources,
+    onHandleSourceMutation, onEditUnifiedSourceRow, onDeleteUnifiedSourceRow, onSourceFeedback,
+  } = useSourceState()
+  const notice = localNotices.sources
   const sortedSourceRows = Object.entries(sources).sort((a, b) => a[0].localeCompare(b[0]))
   const totalSourceCount = sortedSourceRows.reduce((sum, [, values]) => sum + values.length, 0)
 
@@ -123,7 +84,7 @@ export function SourcesPage({
                 {saveAction === "source-remove" ? "Removing..." : "Remove"}
               </Button>
             </div>
-            <InlineNotice notice={notice} onDismiss={onDismissNotice} />
+            <InlineNotice notice={notice} onDismiss={() => clearScopedNotice("sources")} />
           </CardContent>
         </Card>
 
@@ -182,7 +143,7 @@ export function SourcesPage({
 
             {filteredUnifiedSourceRows.length > 12 ? (
               <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={() => setShowAllUnifiedSources((prev) => !prev)}>
+                <Button variant="outline" size="sm" onClick={() => setShowAllUnifiedSources(!showAllUnifiedSources)}>
                   {showAllUnifiedSources ? "Show less" : `Show more (${filteredUnifiedSourceRows.length - 12})`}
                 </Button>
               </div>

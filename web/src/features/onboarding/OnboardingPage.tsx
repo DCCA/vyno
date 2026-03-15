@@ -1,6 +1,7 @@
-import type { Dispatch, ReactNode, SetStateAction } from "react"
+import { useMemo, type ReactNode } from "react"
 import { Loader2, Play, ShieldCheck } from "lucide-react"
 
+import { useNavActions, useOnboardingState, useProfileState, useRunState, useScheduleState, useUiState } from "@/app/console-context"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,71 +13,24 @@ import { Textarea } from "@/components/ui/textarea"
 import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
 import { fromLines, toLines } from "@/lib/console-utils"
-import type {
-  Notice,
-  OnboardingStatus,
-  PreviewResult,
-  PreflightReport,
-  RunPolicy,
-  RunStatus,
-  SaveAction,
-  ScheduleStatus,
-  SourcePack,
-} from "@/app/types"
+import type { OnboardingStatus } from "@/app/types"
 
-export function OnboardingPage({
-  notice,
-  onDismissNotice,
-  onboarding,
-  revisitMode,
-  setupPercent,
-  scheduleStatus,
-  preflight,
-  sourcePacks,
-  previewResult,
-  profile,
-  updateProfileField,
-  runPolicy,
-  setRunPolicy,
-  saveAction,
-  activeSourcePackId,
-  previewLoading,
-  activateLoading,
-  saving,
-  runStatus,
-  onSaveProfileWorkspace,
-  onRunPreflight,
-  onApplySourcePack,
-  onRunPreview,
-  onActivate,
-  onOpenSchedule,
-}: {
-  notice: Notice | null | undefined
-  onDismissNotice: () => void
-  onboarding: OnboardingStatus | null
-  revisitMode: boolean
-  setupPercent: number
-  scheduleStatus: ScheduleStatus | null
-  preflight: PreflightReport | null
-  sourcePacks: SourcePack[]
-  previewResult: PreviewResult | null
-  profile: Record<string, unknown> | null
-  updateProfileField: (path: string, value: unknown) => void
-  runPolicy: RunPolicy
-  setRunPolicy: Dispatch<SetStateAction<RunPolicy>>
-  saveAction: SaveAction
-  activeSourcePackId: string
-  previewLoading: boolean
-  activateLoading: boolean
-  saving: boolean
-  runStatus: RunStatus | null
-  onSaveProfileWorkspace: () => void
-  onRunPreflight: () => void
-  onApplySourcePack: (packId: string) => void
-  onRunPreview: () => void
-  onActivate: () => void
-  onOpenSchedule: () => void
-}) {
+export function OnboardingPage() {
+  const { saving, saveAction, localNotices, clearScopedNotice } = useUiState()
+  const { runStatus, runPolicy, setRunPolicy } = useRunState()
+  const { scheduleStatus } = useScheduleState()
+  const { navigateToSurface } = useNavActions()
+  const { profile, updateProfileField, onSaveProfileWorkspace } = useProfileState()
+  const {
+    onboarding, setupPercent, preflight, sourcePacks, previewResult,
+    previewLoading, activateLoading, activeSourcePackId,
+    onRunPreflight, onApplySourcePack, onRunPreview, onActivate,
+  } = useOnboardingState()
+  const notice = localNotices.onboarding
+  const revisitMode = useMemo(
+    () => new URLSearchParams(window.location.search).get("mode") === "revisit",
+    [],
+  )
   const output = asRecord(profile?.output)
   const schedule = asRecord(profile?.schedule)
   const topics = asStringArray(profile?.topics)
@@ -110,7 +64,7 @@ export function OnboardingPage({
         }
       />
 
-      <InlineNotice notice={notice} onDismiss={onDismissNotice} />
+      <InlineNotice notice={notice} onDismiss={() => clearScopedNotice("onboarding")} />
 
       {revisitMode ? (
         <Alert>
@@ -325,7 +279,7 @@ export function OnboardingPage({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={onOpenSchedule} disabled={saving}>
+          <Button onClick={() => navigateToSurface("schedule")} disabled={saving}>
             Open schedule controls
           </Button>
           <div className="text-sm text-muted-foreground">

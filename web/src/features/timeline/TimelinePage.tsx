@@ -1,5 +1,6 @@
 import { Activity, Loader2, RefreshCcw, Save } from "lucide-react"
 
+import { useTimelineState, useUiState } from "@/app/console-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,84 +15,18 @@ import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
 import { formatElapsed } from "@/lib/console-utils"
 import { formatTimestamp } from "@/lib/format"
-import type {
-  Notice,
-  RunArtifact,
-  RunItem,
-  SaveAction,
-  TimelineEvent,
-  TimelineNote,
-  TimelineRun,
-  TimelineSummary,
-} from "@/app/types"
 
-export function TimelinePage({
-  notice,
-  onDismissNotice,
-  timelineRunId,
-  setTimelineRunId,
-  timelineRuns,
-  timelineStageFilter,
-  setTimelineStageFilter,
-  timelineStageOptions,
-  timelineSeverityFilter,
-  setTimelineSeverityFilter,
-  timelineOrder,
-  setTimelineOrder,
-  timelineLivePaused,
-  setTimelineLivePaused,
-  saving,
-  saveAction,
-  onRefreshTimeline,
-  onExportTimeline,
-  timelineSummary,
-  timelineRunItems,
-  timelineRunArtifacts,
-  timelineEvents,
-  timelineSelectedEventId,
-  setTimelineSelectedEventId,
-  selectedTimelineEvent,
-  timelineNoteAuthor,
-  setTimelineNoteAuthor,
-  timelineNoteText,
-  setTimelineNoteText,
-  onAddTimelineNote,
-  timelineNotes,
-  onSubmitItemFeedback,
-}: {
-  notice: Notice | null | undefined
-  onDismissNotice: () => void
-  timelineRunId: string
-  setTimelineRunId: (value: string) => void
-  timelineRuns: TimelineRun[]
-  timelineStageFilter: string
-  setTimelineStageFilter: (value: string) => void
-  timelineStageOptions: string[]
-  timelineSeverityFilter: string
-  setTimelineSeverityFilter: (value: string) => void
-  timelineOrder: "asc" | "desc"
-  setTimelineOrder: (value: "asc" | "desc") => void
-  timelineLivePaused: boolean
-  setTimelineLivePaused: (value: boolean) => void
-  saving: boolean
-  saveAction: SaveAction
-  onRefreshTimeline: () => void
-  onExportTimeline: () => void
-  timelineSummary: TimelineSummary | null
-  timelineRunItems: RunItem[]
-  timelineRunArtifacts: RunArtifact[]
-  timelineEvents: TimelineEvent[]
-  timelineSelectedEventId: number
-  setTimelineSelectedEventId: (value: number) => void
-  selectedTimelineEvent: TimelineEvent | null
-  timelineNoteAuthor: string
-  setTimelineNoteAuthor: (value: string) => void
-  timelineNoteText: string
-  setTimelineNoteText: (value: string) => void
-  onAddTimelineNote: () => void
-  timelineNotes: TimelineNote[]
-  onSubmitItemFeedback: (itemId: string, label: "more_like_this" | "not_relevant" | "too_technical" | "repeat_source") => void
-}) {
+export function TimelinePage() {
+  const { saving, saveAction, localNotices, clearScopedNotice } = useUiState()
+  const {
+    timelineRunId, setTimelineRunId, timelineRuns, timelineStageFilter, setTimelineStageFilter,
+    timelineStageOptions, timelineSeverityFilter, setTimelineSeverityFilter, timelineOrder, setTimelineOrder,
+    timelineLivePaused, setTimelineLivePaused, timelineSummary, timelineRunItems, timelineRunArtifacts,
+    timelineEvents, timelineSelectedEventId, setTimelineSelectedEventId, selectedTimelineEvent,
+    timelineNoteAuthor, setTimelineNoteAuthor, timelineNoteText, setTimelineNoteText,
+    onRefreshTimeline, onExportTimeline, onAddTimelineNote, timelineNotes, onSubmitItemFeedback,
+  } = useTimelineState()
+  const notice = localNotices.timeline
   const telegramArtifact = timelineRunArtifacts.find((row) => row.channel === "telegram")
   const obsidianArtifact = timelineRunArtifacts.find((row) => row.channel === "obsidian")
   return (
@@ -119,7 +54,7 @@ export function TimelinePage({
           <CardDescription>Filter and inspect a run as a structured browser rather than a raw operations log.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <InlineNotice notice={notice} onDismiss={onDismissNotice} />
+          <InlineNotice notice={notice} onDismiss={() => clearScopedNotice("timeline")} />
           <div className="grid gap-3 md:grid-cols-[2fr,1fr,1fr,1fr,auto]">
             <div className="space-y-2">
               <Label>Run</Label>

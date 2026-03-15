@@ -20,6 +20,7 @@ import { InlineNotice } from "@/components/system/notice"
 import { ErrorBoundary } from "@/components/system/error-boundary"
 import { ConfirmDialog, useConfirm } from "@/components/system/confirm-dialog"
 import { Toaster } from "@/components/system/toast"
+import { ConsoleProvider, type ConsoleContextValue } from "@/app/console-context"
 import { api } from "@/lib/api"
 import {
   diffObjects,
@@ -1247,7 +1248,137 @@ function App() {
     navigate(surfacePaths[surface])
   }
 
+  const consoleValue: ConsoleContextValue = {
+    ui: {
+      loading,
+      saving,
+      saveAction,
+      globalNotice,
+      localNotices,
+      clearScopedNotice,
+    },
+    run: {
+      runStatus,
+      runProgress,
+      runPolicy,
+      setRunPolicy,
+      runNowModeOverride,
+      setRunNowModeOverride,
+      runNowLoading,
+      digestBusy,
+      onRunNow: () => void runNow(),
+      onRefreshAll: () => void refreshAll(),
+    },
+    source: {
+      sources,
+      sourceTypes,
+      sourceType,
+      setSourceType,
+      sourceValue,
+      setSourceValue,
+      sourceSearch,
+      setSourceSearch,
+      sourceStatusFilter,
+      setSourceStatusFilter,
+      sourceHealth,
+      filteredUnifiedSourceRows,
+      unifiedRowsVisible,
+      showAllUnifiedSources,
+      setShowAllUnifiedSources,
+      onHandleSourceMutation: (action) => void handleSourceMutation(action),
+      onEditUnifiedSourceRow: editUnifiedSourceRow,
+      onDeleteUnifiedSourceRow: (row) => void deleteUnifiedSourceRow(row),
+      onSourceFeedback: (row, label) => void submitSourceFeedback(row, label),
+    },
+    profile: {
+      profile,
+      profileJson,
+      setProfileJson,
+      updateProfileField,
+      profileJsonParseError,
+      profileWorkspaceChangeCount,
+      localProfileDiff,
+      profileDiff,
+      profileDiffComputedAt,
+      runPolicyDirty,
+      runPolicyChangeCount,
+      seenResetDays,
+      setSeenResetDays,
+      seenResetConfirm,
+      setSeenResetConfirm,
+      seenResetPreviewCount,
+      feedbackSummary,
+      onValidateProfile: () => void validateProfile("profile"),
+      onComputeProfileDiff: () => void computeProfileDiff("profile"),
+      onSaveProfileWorkspace: () => void saveProfileWorkspace(),
+      onPreviewSeenReset: () => void previewSeenReset(),
+      onApplySeenReset: () => void applySeenReset(),
+    },
+    schedule: {
+      scheduleDraft,
+      scheduleDirty,
+      scheduleStatus,
+      onChangeScheduleField: updateScheduleField,
+      onSaveSchedule: () => void saveSchedule(),
+    },
+    onboarding: {
+      onboarding,
+      onboardingLifecycle,
+      setupPercent,
+      preflight,
+      sourcePacks,
+      previewResult,
+      previewLoading,
+      activateLoading,
+      activeSourcePackId,
+      onRunPreflight: () => void runOnboardingPreflight(),
+      onApplySourcePack: (packId) => void applySourcePack(packId),
+      onRunPreview: () => void runOnboardingPreview(),
+      onActivate: () => void activateOnboarding(),
+    },
+    timeline: {
+      timelineRunId,
+      setTimelineRunId,
+      timelineRuns,
+      timelineStageFilter,
+      setTimelineStageFilter,
+      timelineStageOptions,
+      timelineSeverityFilter,
+      setTimelineSeverityFilter,
+      timelineOrder,
+      setTimelineOrder,
+      timelineLivePaused,
+      setTimelineLivePaused,
+      timelineSummary,
+      timelineRunItems,
+      timelineRunArtifacts,
+      timelineEvents,
+      timelineSelectedEventId,
+      setTimelineSelectedEventId,
+      selectedTimelineEvent,
+      timelineNoteAuthor,
+      setTimelineNoteAuthor,
+      timelineNoteText,
+      setTimelineNoteText,
+      onRefreshTimeline: () => void refreshTimeline(),
+      onExportTimeline: () => void exportTimeline(),
+      onAddTimelineNote: () => void addTimelineNote(),
+      timelineNotes,
+      onSubmitItemFeedback: (itemId, label) => void submitItemFeedback(itemId, label),
+    },
+    historyState: {
+      history,
+      activeRollbackId,
+      onRollback: (snapshotId) => void rollback(snapshotId),
+    },
+    nav: {
+      navigateToSurface,
+      onRevisitSetupGuide: () => navigate(`${surfacePaths.onboarding}?mode=revisit`),
+    },
+  }
+
   return (
+    <ConsoleProvider value={consoleValue}>
     <main className="min-h-screen bg-console-canvas pb-10" aria-label="Digest Control Center">
       <div className="mx-auto grid w-full max-w-[1560px] gap-5 px-4 py-5 md:px-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-8 lg:py-7">
         {mobileNavOpen ? (
@@ -1519,19 +1650,7 @@ function App() {
                   path="/"
                   element={
                     onboardingDone ? (
-                      <ErrorBoundary><DashboardPage
-                        runStatus={runStatus}
-                      sourceHealth={sourceHealth}
-                      setupPercent={setupPercent}
-                      timelineRuns={timelineRuns}
-                      scheduleStatus={scheduleStatus}
-                      onboardingDone={onboardingDone}
-                      onOpenSchedule={() => navigateToSurface("schedule")}
-                      onOpenRun={() => navigateToSurface("run")}
-                      onOpenSources={() => navigateToSurface("sources")}
-                      onOpenTimeline={() => navigateToSurface("timeline")}
-                        onOpenOnboarding={() => navigateToSurface("onboarding")}
-                      /></ErrorBoundary>
+                      <ErrorBoundary><DashboardPage /></ErrorBoundary>
                     ) : (
                       <Navigate to={surfacePaths.onboarding} replace />
                     )
@@ -1539,198 +1658,31 @@ function App() {
                 />
                 <Route
                   path="/run"
-                  element={
-                    <ErrorBoundary><RunCenterPage
-                      notice={localNotices.run}
-                      onDismissNotice={() => clearScopedNotice("run")}
-                      runNowModeOverride={runNowModeOverride}
-                      setRunNowModeOverride={setRunNowModeOverride}
-                      runPolicy={runPolicy}
-                      runStatus={runStatus}
-                      saving={saving}
-                      runNowLoading={runNowLoading}
-                      loading={loading}
-                      saveAction={saveAction}
-                      onRefreshAll={() => void refreshAll()}
-                      onRunNow={() => void runNow()}
-                      onOpenTimeline={() => navigateToSurface("timeline")}
-                    /></ErrorBoundary>
-                  }
+                  element={<ErrorBoundary><RunCenterPage /></ErrorBoundary>}
                 />
                 <Route
                   path="/onboarding"
-                  element={
-                    <ErrorBoundary><OnboardingPage
-                      notice={localNotices.onboarding}
-                      onDismissNotice={() => clearScopedNotice("onboarding")}
-                      onboarding={onboarding}
-                      revisitMode={onboardingRevisitMode}
-                      setupPercent={setupPercent}
-                      scheduleStatus={scheduleStatus}
-                      preflight={preflight}
-                      sourcePacks={sourcePacks}
-                      previewResult={previewResult}
-                      profile={profile}
-                      updateProfileField={updateProfileField}
-                      runPolicy={runPolicy}
-                      setRunPolicy={setRunPolicy}
-                      saveAction={saveAction}
-                      activeSourcePackId={activeSourcePackId}
-                      previewLoading={previewLoading}
-                      activateLoading={activateLoading}
-                      saving={saving}
-                      runStatus={runStatus}
-                      onSaveProfileWorkspace={() => void saveProfileWorkspace()}
-                      onRunPreflight={() => void runOnboardingPreflight()}
-                      onApplySourcePack={(packId) => void applySourcePack(packId)}
-                      onRunPreview={() => void runOnboardingPreview()}
-                      onActivate={() => void activateOnboarding()}
-                      onOpenSchedule={() => navigateToSurface("schedule")}
-                    /></ErrorBoundary>
-                  }
+                  element={<ErrorBoundary><OnboardingPage /></ErrorBoundary>}
                 />
                 <Route
                   path="/sources"
-                  element={
-                    <ErrorBoundary><SourcesPage
-                      notice={localNotices.sources}
-                      onDismissNotice={() => clearScopedNotice("sources")}
-                      sources={sources}
-                      sourceHealth={sourceHealth}
-                      sourceType={sourceType}
-                      setSourceType={setSourceType}
-                      sourceValue={sourceValue}
-                      setSourceValue={setSourceValue}
-                      sourceTypes={sourceTypes}
-                      saving={saving}
-                      saveAction={saveAction}
-                      onHandleSourceMutation={(action) => void handleSourceMutation(action)}
-                      sourceSearch={sourceSearch}
-                      setSourceSearch={setSourceSearch}
-                      sourceStatusFilter={sourceStatusFilter}
-                      setSourceStatusFilter={setSourceStatusFilter}
-                      filteredUnifiedSourceRows={filteredUnifiedSourceRows}
-                      unifiedRowsVisible={unifiedRowsVisible}
-                      showAllUnifiedSources={showAllUnifiedSources}
-                      setShowAllUnifiedSources={setShowAllUnifiedSources}
-                      onEditUnifiedSourceRow={editUnifiedSourceRow}
-                      onDeleteUnifiedSourceRow={(row) => void deleteUnifiedSourceRow(row)}
-                      onSourceFeedback={(row, label) => void submitSourceFeedback(row, label)}
-                    /></ErrorBoundary>
-                  }
+                  element={<ErrorBoundary><SourcesPage /></ErrorBoundary>}
                 />
                 <Route
                   path="/profile"
-                  element={
-                    <ErrorBoundary><ProfilePage
-                      notice={localNotices.profile}
-                      onDismissNotice={() => clearScopedNotice("profile")}
-                      profile={profile}
-                      scheduleStatus={scheduleStatus}
-                      onboardingLifecycle={onboardingLifecycle}
-                      profileJson={profileJson}
-                      setProfileJson={setProfileJson}
-                      updateProfileField={updateProfileField}
-                      runPolicy={runPolicy}
-                      setRunPolicy={setRunPolicy}
-                      runPolicyDirty={runPolicyDirty}
-                      runPolicyChangeCount={runPolicyChangeCount}
-                      profileJsonParseError={profileJsonParseError}
-                      profileWorkspaceChangeCount={profileWorkspaceChangeCount}
-                      localProfileDiff={localProfileDiff}
-                      profileDiff={profileDiff}
-                      profileDiffComputedAt={profileDiffComputedAt}
-                      seenResetDays={seenResetDays}
-                      setSeenResetDays={setSeenResetDays}
-                      seenResetConfirm={seenResetConfirm}
-                      setSeenResetConfirm={setSeenResetConfirm}
-                      seenResetPreviewCount={seenResetPreviewCount}
-                      saveAction={saveAction}
-                      saving={saving}
-                      onValidateProfile={() => void validateProfile("profile")}
-                      onComputeProfileDiff={() => void computeProfileDiff("profile")}
-                      onSaveProfileWorkspace={() => void saveProfileWorkspace()}
-                      onRevisitSetupGuide={() => navigate(`${surfacePaths.onboarding}?mode=revisit`)}
-                      onOpenSchedule={() => navigateToSurface("schedule")}
-                      onPreviewSeenReset={() => void previewSeenReset()}
-                      onApplySeenReset={() => void applySeenReset()}
-                      feedbackSummary={feedbackSummary}
-                    /></ErrorBoundary>
-                  }
+                  element={<ErrorBoundary><ProfilePage /></ErrorBoundary>}
                 />
                 <Route
                   path="/schedule"
-                  element={
-                    <ErrorBoundary><SchedulePage
-                      notice={localNotices.schedule}
-                      onDismissNotice={() => clearScopedNotice("schedule")}
-                      lifecycle={onboardingLifecycle}
-                      scheduleDraft={scheduleDraft}
-                      scheduleDirty={scheduleDirty}
-                      scheduleStatus={scheduleStatus}
-                      saveAction={saveAction}
-                      saving={saving}
-                      onChangeScheduleField={updateScheduleField}
-                      onSaveSchedule={() => void saveSchedule()}
-                      onRunNow={() => void runNow()}
-                      onOpenTimeline={() => navigateToSurface("timeline")}
-                      onOpenRun={() => navigateToSurface("run")}
-                      onOpenOnboarding={() => navigateToSurface("onboarding")}
-                    /></ErrorBoundary>
-                  }
+                  element={<ErrorBoundary><SchedulePage /></ErrorBoundary>}
                 />
                 <Route
                   path="/timeline"
-                  element={
-                    <ErrorBoundary><TimelinePage
-                      notice={localNotices.timeline}
-                      onDismissNotice={() => clearScopedNotice("timeline")}
-                      timelineRunId={timelineRunId}
-                      setTimelineRunId={setTimelineRunId}
-                      timelineRuns={timelineRuns}
-                      timelineStageFilter={timelineStageFilter}
-                      setTimelineStageFilter={setTimelineStageFilter}
-                      timelineStageOptions={timelineStageOptions}
-                      timelineSeverityFilter={timelineSeverityFilter}
-                      setTimelineSeverityFilter={setTimelineSeverityFilter}
-                      timelineOrder={timelineOrder}
-                      setTimelineOrder={setTimelineOrder}
-                      timelineLivePaused={timelineLivePaused}
-                      setTimelineLivePaused={setTimelineLivePaused}
-                      saving={saving}
-                      saveAction={saveAction}
-                      onRefreshTimeline={() => void refreshTimeline()}
-                      onExportTimeline={() => void exportTimeline()}
-                      timelineSummary={timelineSummary}
-                      timelineRunItems={timelineRunItems}
-                      timelineRunArtifacts={timelineRunArtifacts}
-                      timelineEvents={timelineEvents}
-                      timelineSelectedEventId={timelineSelectedEventId}
-                      setTimelineSelectedEventId={setTimelineSelectedEventId}
-                      selectedTimelineEvent={selectedTimelineEvent}
-                      timelineNoteAuthor={timelineNoteAuthor}
-                      setTimelineNoteAuthor={setTimelineNoteAuthor}
-                      timelineNoteText={timelineNoteText}
-                      setTimelineNoteText={setTimelineNoteText}
-                      onAddTimelineNote={() => void addTimelineNote()}
-                      timelineNotes={timelineNotes}
-                      onSubmitItemFeedback={(itemId, label) => void submitItemFeedback(itemId, label)}
-                    /></ErrorBoundary>
-                  }
+                  element={<ErrorBoundary><TimelinePage /></ErrorBoundary>}
                 />
                 <Route
                   path="/history"
-                  element={
-                    <ErrorBoundary><HistoryPage
-                      notice={localNotices.history}
-                      onDismissNotice={() => clearScopedNotice("history")}
-                      history={history}
-                      saveAction={saveAction}
-                      activeRollbackId={activeRollbackId}
-                      saving={saving}
-                      onRollback={(snapshotId) => void rollback(snapshotId)}
-                    /></ErrorBoundary>
-                  }
+                  element={<ErrorBoundary><HistoryPage /></ErrorBoundary>}
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
@@ -1741,6 +1693,7 @@ function App() {
       <Toaster />
       <ConfirmDialog state={confirmState} onClose={handleConfirmClose} />
     </main>
+    </ConsoleProvider>
   )
 }
 

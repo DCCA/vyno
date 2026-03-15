@@ -1,5 +1,6 @@
 import { History, Loader2, Undo2 } from "lucide-react"
 
+import { useHistoryState, useUiState } from "@/app/console-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -8,25 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
 import { formatTimestamp } from "@/lib/format"
-import type { HistoryItem, Notice, SaveAction } from "@/app/types"
 
-export function HistoryPage({
-  notice,
-  onDismissNotice,
-  history,
-  saveAction,
-  activeRollbackId,
-  saving,
-  onRollback,
-}: {
-  notice: Notice | null | undefined
-  onDismissNotice: () => void
-  history: HistoryItem[]
-  saveAction: SaveAction
-  activeRollbackId: string
-  saving: boolean
-  onRollback: (snapshotId: string) => void
-}) {
+export function HistoryPage() {
+  const { saving, saveAction, localNotices, clearScopedNotice } = useUiState()
+  const { history, activeRollbackId, onRollback } = useHistoryState()
+  const notice = localNotices.history
+
   return (
     <div className="space-y-4">
       <WorkspaceHeader
@@ -47,7 +35,7 @@ export function HistoryPage({
           <CardDescription>Rollback overlay state to a previous snapshot when needed, without mixing archival data with live editing.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <InlineNotice notice={notice} onDismiss={onDismissNotice} />
+          <InlineNotice notice={notice} onDismiss={() => clearScopedNotice("history")} />
           {history.length === 0 ? (
             <EmptyState
               icon={History}
@@ -90,4 +78,3 @@ export function HistoryPage({
     </div>
   )
 }
-

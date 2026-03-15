@@ -45,9 +45,9 @@ test("profile route receives inline profile workflow handlers", () => {
     "refreshAll preserve options missing",
   )
   expectSource(appSource, /if \(!preserveProfileWorkspace \|\| !profileWorkspaceDirty \|\| !profile\) \{\s*setProfile\(profileData\.profile\)/s, "profile refresh dirty-state guard missing")
-  expectSource(appSource, /onValidateProfile=\{\(\) => void validateProfile\("profile"\)\}/, "profile validate handler missing")
-  expectSource(appSource, /onComputeProfileDiff=\{\(\) => void computeProfileDiff\("profile"\)\}/, "profile diff handler missing")
-  expectSource(appSource, /onSaveProfileWorkspace=\{\(\) => void saveProfileWorkspace\(\)\}/, "profile inline save wiring missing")
+  expectSource(appSource, /onValidateProfile: \(\) => void validateProfile\("profile"\)/, "profile validate handler missing")
+  expectSource(appSource, /onComputeProfileDiff: \(\) => void computeProfileDiff\("profile"\)/, "profile diff handler missing")
+  expectSource(appSource, /onSaveProfileWorkspace: \(\) => void saveProfileWorkspace\(\)/, "profile inline save wiring missing")
   expectSource(profileSource, /This replaces the old standalone Review page/, "review removal migration copy missing")
 })
 

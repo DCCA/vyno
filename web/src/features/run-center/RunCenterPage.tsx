@@ -1,5 +1,6 @@
 import { Loader2, Play, RefreshCcw } from "lucide-react"
 
+import { useNavActions, useRunState, useUiState } from "@/app/console-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,37 +9,13 @@ import { MetricCard } from "@/components/ui/metric-card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
-import type { Notice, RunPolicy, RunStatus, SaveAction } from "@/app/types"
 
-export function RunCenterPage({
-  notice,
-  onDismissNotice,
-  runNowModeOverride,
-  setRunNowModeOverride,
-  runPolicy,
-  runStatus,
-  saving,
-  runNowLoading,
-  loading,
-  saveAction,
-  onRefreshAll,
-  onRunNow,
-  onOpenTimeline,
-}: {
-  notice: Notice | null | undefined
-  onDismissNotice: () => void
-  runNowModeOverride: string
-  setRunNowModeOverride: (value: string) => void
-  runPolicy: RunPolicy
-  runStatus: RunStatus | null
-  saving: boolean
-  runNowLoading: boolean
-  loading: boolean
-  saveAction: SaveAction
-  onRefreshAll: () => void
-  onRunNow: () => void
-  onOpenTimeline: () => void
-}) {
+export function RunCenterPage() {
+  const { loading, saving, saveAction, localNotices, clearScopedNotice } = useUiState()
+  const { runStatus, runPolicy, runNowModeOverride, setRunNowModeOverride, runNowLoading, onRunNow, onRefreshAll } = useRunState()
+  const { navigateToSurface } = useNavActions()
+  const notice = localNotices.run
+
   return (
     <div className="space-y-4">
       <WorkspaceHeader
@@ -50,7 +27,7 @@ export function RunCenterPage({
         ]}
       />
 
-      <InlineNotice notice={notice} onDismiss={onDismissNotice} />
+      <InlineNotice notice={notice} onDismiss={() => clearScopedNotice("run")} />
 
       <div className="grid gap-4 md:grid-cols-3">
         <MetricCard variant="compact" label="Run state" value={runStatus?.active ? "Running" : "Idle"} />
@@ -109,7 +86,7 @@ export function RunCenterPage({
               <Badge variant="outline">source errors {runStatus?.latest_completed?.source_error_count ?? 0}</Badge>
               <Badge variant="outline">summary errors {runStatus?.latest_completed?.summary_error_count ?? 0}</Badge>
             </div>
-            <Button variant="outline" size="sm" onClick={onOpenTimeline}>
+            <Button variant="outline" size="sm" onClick={() => navigateToSurface("timeline")}>
               Open timeline details
             </Button>
           </CardContent>
@@ -118,4 +95,3 @@ export function RunCenterPage({
     </div>
   )
 }
-
