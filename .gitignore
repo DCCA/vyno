@@ -22,6 +22,7 @@ Thumbs.db
 excalidraw.log
 !.env.example
 obsidian-vault/
+vault/
 logs/
 /~/
 
@@ -36,6 +37,8 @@ web/dist/
 web/*.tsbuildinfo
 web/*.d.ts
 web/*.js
+video/node_modules/
+video/out/
 
 # Keep .docs as source-of-truth; ignore only ephemeral paths.
 .docs/tmp/
