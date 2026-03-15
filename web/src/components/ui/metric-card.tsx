@@ -39,7 +39,7 @@ export function MetricCard({
 
   return (
     <Card className={cn(metricVariants({ variant }), className)}>
-      <CardHeader className={cn(variant === "stat" && "bg-gradient-to-br from-white/95 via-white/92 to-secondary/35", "pb-4")}>
+      <CardHeader className={cn(variant === "stat" && "bg-gradient-to-br from-white/95 via-white/92 to-secondary/35 dark:from-card dark:via-card dark:to-secondary/15", "pb-4")}>
         <CardDescription className="text-[11px] uppercase tracking-[0.14em]">{label}</CardDescription>
         <CardTitle className="font-display text-[1.75rem]">{value}</CardTitle>
         {detail ? <p className="text-sm text-muted-foreground">{detail}</p> : null}

@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -44,6 +44,17 @@ export function ConfirmDialog({
   onClose: (confirmed: boolean) => void
 }) {
   const overlayRef = useRef<HTMLDivElement>(null)
+  const confirmRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!state) return
+    confirmRef.current?.focus()
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose(false)
+    }
+    document.addEventListener("keydown", handler)
+    return () => document.removeEventListener("keydown", handler)
+  }, [state, onClose])
 
   if (!state) return null
 
@@ -55,16 +66,17 @@ export function ConfirmDialog({
         if (e.target === overlayRef.current) onClose(false)
       }}
     >
-      <Card className="mx-4 w-full max-w-md animate-surface-enter shadow-panel">
+      <Card className="mx-4 w-full max-w-md animate-surface-enter shadow-panel" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-desc">
         <CardHeader>
-          <CardTitle className="font-display">{state.title}</CardTitle>
-          <CardDescription>{state.description}</CardDescription>
+          <CardTitle id="confirm-title" className="font-display">{state.title}</CardTitle>
+          <CardDescription id="confirm-desc">{state.description}</CardDescription>
         </CardHeader>
         <CardContent className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => onClose(false)}>
             Cancel
           </Button>
           <Button
+            ref={confirmRef}
             variant={state.variant === "destructive" ? "destructive" : "default"}
             onClick={() => onClose(true)}
           >

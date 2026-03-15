@@ -1252,134 +1252,102 @@ function App() {
     navigate(surfacePaths[surface])
   }
 
-  const consoleValue: ConsoleContextValue = {
-    ui: {
-      loading,
-      saving,
-      saveAction,
-      globalNotice,
-      localNotices,
-      clearScopedNotice,
-    },
-    run: {
-      runStatus,
-      runProgress,
-      runPolicy,
-      setRunPolicy,
-      runNowModeOverride,
-      setRunNowModeOverride,
-      runNowLoading,
-      digestBusy,
-      onRunNow: () => void runNow(),
-      onRefreshAll: () => void refreshAll(),
-    },
-    source: {
-      sources,
-      sourceTypes,
-      sourceType,
-      setSourceType,
-      sourceValue,
-      setSourceValue,
-      sourceSearch,
-      setSourceSearch,
-      sourceStatusFilter,
-      setSourceStatusFilter,
-      sourceHealth,
-      filteredUnifiedSourceRows,
-      unifiedRowsVisible,
-      showAllUnifiedSources,
-      setShowAllUnifiedSources,
-      onHandleSourceMutation: (action) => void handleSourceMutation(action),
-      onEditUnifiedSourceRow: editUnifiedSourceRow,
-      onDeleteUnifiedSourceRow: (row) => void deleteUnifiedSourceRow(row),
-      onSourceFeedback: (row, label) => void submitSourceFeedback(row, label),
-    },
-    profile: {
-      profile,
-      profileJson,
-      setProfileJson,
-      updateProfileField,
-      profileJsonParseError,
-      profileWorkspaceChangeCount,
-      localProfileDiff,
-      profileDiff,
-      profileDiffComputedAt,
-      runPolicyDirty,
-      runPolicyChangeCount,
-      seenResetDays,
-      setSeenResetDays,
-      seenResetConfirm,
-      setSeenResetConfirm,
-      seenResetPreviewCount,
-      feedbackSummary,
-      onValidateProfile: () => void validateProfile("profile"),
-      onComputeProfileDiff: () => void computeProfileDiff("profile"),
-      onSaveProfileWorkspace: () => void saveProfileWorkspace(),
-      onPreviewSeenReset: () => void previewSeenReset(),
-      onApplySeenReset: () => void applySeenReset(),
-    },
-    schedule: {
-      scheduleDraft,
-      scheduleDirty,
-      scheduleStatus,
-      onChangeScheduleField: updateScheduleField,
-      onSaveSchedule: () => void saveSchedule(),
-    },
-    onboarding: {
-      onboarding,
-      onboardingLifecycle,
-      setupPercent,
-      preflight,
-      sourcePacks,
-      previewResult,
-      previewLoading,
-      activateLoading,
-      activeSourcePackId,
-      onRunPreflight: () => void runOnboardingPreflight(),
-      onApplySourcePack: (packId) => void applySourcePack(packId),
-      onRunPreview: () => void runOnboardingPreview(),
-      onActivate: () => void activateOnboarding(),
-    },
-    timeline: {
-      timelineRunId,
-      setTimelineRunId,
-      timelineRuns,
-      timelineStageFilter,
-      setTimelineStageFilter,
-      timelineStageOptions,
-      timelineSeverityFilter,
-      setTimelineSeverityFilter,
-      timelineOrder,
-      setTimelineOrder,
-      timelineLivePaused,
-      setTimelineLivePaused,
-      timelineSummary,
-      timelineRunItems,
-      timelineRunArtifacts,
-      timelineEvents,
-      timelineSelectedEventId,
-      setTimelineSelectedEventId,
-      selectedTimelineEvent,
-      timelineNoteAuthor,
-      setTimelineNoteAuthor,
-      timelineNoteText,
-      setTimelineNoteText,
-      onRefreshTimeline: () => void refreshTimeline(),
-      onExportTimeline: () => void exportTimeline(),
-      onAddTimelineNote: () => void addTimelineNote(),
-      timelineNotes,
-      onSubmitItemFeedback: (itemId, label) => void submitItemFeedback(itemId, label),
-    },
-    historyState: {
-      history,
-      activeRollbackId,
-      onRollback: (snapshotId) => void rollback(snapshotId),
-    },
-    nav: {
-      navigateToSurface,
-      onRevisitSetupGuide: () => navigate(`${surfacePaths.onboarding}?mode=revisit`),
-    },
-  }
+  const uiSlice = useMemo(() => ({
+    loading, saving, saveAction, globalNotice, localNotices, clearScopedNotice,
+  }), [loading, saving, saveAction, globalNotice, localNotices])
+
+  const runSlice = useMemo(() => ({
+    runStatus, runProgress, runPolicy, setRunPolicy,
+    runNowModeOverride, setRunNowModeOverride, runNowLoading, digestBusy,
+    onRunNow: () => void runNow(),
+    onRefreshAll: () => void refreshAll(),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [runStatus, runProgress, runPolicy, runNowModeOverride, runNowLoading, digestBusy])
+
+  const sourceSlice = useMemo(() => ({
+    sources, sourceTypes, sourceType, setSourceType, sourceValue, setSourceValue,
+    sourceSearch, setSourceSearch, sourceStatusFilter, setSourceStatusFilter,
+    sourceHealth, filteredUnifiedSourceRows, unifiedRowsVisible,
+    showAllUnifiedSources, setShowAllUnifiedSources,
+    onHandleSourceMutation: (action: "add" | "remove") => void handleSourceMutation(action),
+    onEditUnifiedSourceRow: editUnifiedSourceRow,
+    onDeleteUnifiedSourceRow: (row: UnifiedSourceRow) => void deleteUnifiedSourceRow(row),
+    onSourceFeedback: (row: UnifiedSourceRow, label: string) => void submitSourceFeedback(row, label),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [sources, sourceTypes, sourceType, sourceValue, sourceSearch, sourceStatusFilter, sourceHealth, filteredUnifiedSourceRows, unifiedRowsVisible, showAllUnifiedSources])
+
+  const profileSlice = useMemo(() => ({
+    profile, profileJson, setProfileJson, updateProfileField,
+    profileJsonParseError, profileWorkspaceChangeCount, localProfileDiff,
+    profileDiff, profileDiffComputedAt, runPolicyDirty, runPolicyChangeCount,
+    seenResetDays, setSeenResetDays, seenResetConfirm, setSeenResetConfirm,
+    seenResetPreviewCount, feedbackSummary,
+    onValidateProfile: () => void validateProfile("profile"),
+    onComputeProfileDiff: () => void computeProfileDiff("profile"),
+    onSaveProfileWorkspace: () => void saveProfileWorkspace(),
+    onPreviewSeenReset: () => void previewSeenReset(),
+    onApplySeenReset: () => void applySeenReset(),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [profile, profileJson, profileJsonParseError, profileWorkspaceChangeCount, localProfileDiff, profileDiff, profileDiffComputedAt, runPolicyDirty, runPolicyChangeCount, seenResetDays, seenResetConfirm, seenResetPreviewCount, feedbackSummary])
+
+  const scheduleSlice = useMemo(() => ({
+    scheduleDraft, scheduleDirty, scheduleStatus,
+    onChangeScheduleField: updateScheduleField,
+    onSaveSchedule: () => void saveSchedule(),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [scheduleDraft, scheduleDirty, scheduleStatus])
+
+  const onboardingSlice = useMemo(() => ({
+    onboarding, onboardingLifecycle, setupPercent, preflight, sourcePacks,
+    previewResult, previewLoading, activateLoading, activeSourcePackId,
+    onRunPreflight: () => void runOnboardingPreflight(),
+    onApplySourcePack: (packId: string) => void applySourcePack(packId),
+    onRunPreview: () => void runOnboardingPreview(),
+    onActivate: () => void activateOnboarding(),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [onboarding, onboardingLifecycle, setupPercent, preflight, sourcePacks, previewResult, previewLoading, activateLoading, activeSourcePackId])
+
+  const timelineSlice = useMemo(() => ({
+    timelineRunId, setTimelineRunId, timelineRuns,
+    timelineStageFilter, setTimelineStageFilter, timelineStageOptions,
+    timelineSeverityFilter, setTimelineSeverityFilter,
+    timelineOrder, setTimelineOrder,
+    timelineLivePaused, setTimelineLivePaused,
+    timelineSummary, timelineRunItems, timelineRunArtifacts,
+    timelineEvents, timelineSelectedEventId, setTimelineSelectedEventId,
+    selectedTimelineEvent, timelineNoteAuthor, setTimelineNoteAuthor,
+    timelineNoteText, setTimelineNoteText,
+    onRefreshTimeline: () => void refreshTimeline(),
+    onExportTimeline: () => void exportTimeline(),
+    onAddTimelineNote: () => void addTimelineNote(),
+    timelineNotes,
+    onSubmitItemFeedback: (itemId: string, label: "more_like_this" | "not_relevant" | "too_technical" | "repeat_source") => void submitItemFeedback(itemId, label),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [timelineRunId, timelineRuns, timelineStageFilter, timelineStageOptions, timelineSeverityFilter, timelineOrder, timelineLivePaused, timelineSummary, timelineRunItems, timelineRunArtifacts, timelineEvents, timelineSelectedEventId, selectedTimelineEvent, timelineNoteAuthor, timelineNoteText, timelineNotes])
+
+  const historySlice = useMemo(() => ({
+    history, activeRollbackId,
+    onRollback: (snapshotId: string) => void rollback(snapshotId),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [history, activeRollbackId])
+
+  const navSlice = useMemo(() => ({
+    navigateToSurface,
+    onRevisitSetupGuide: () => navigate(`${surfacePaths.onboarding}?mode=revisit`),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [])
+
+  const consoleValue: ConsoleContextValue = useMemo(() => ({
+    ui: uiSlice,
+    run: runSlice,
+    source: sourceSlice,
+    profile: profileSlice,
+    schedule: scheduleSlice,
+    onboarding: onboardingSlice,
+    timeline: timelineSlice,
+    historyState: historySlice,
+    nav: navSlice,
+  }), [uiSlice, runSlice, sourceSlice, profileSlice, scheduleSlice, onboardingSlice, timelineSlice, historySlice, navSlice])
 
   return (
     <ConsoleProvider value={consoleValue}>

@@ -16,7 +16,7 @@ export function SkeletonCard({
   return (
     <div className="space-y-3">
       {Array.from({ length: rows }, (_, r) => (
-        <div key={r} className={`grid gap-3 md:grid-cols-${columns}`}>
+        <div key={r} className="grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
           {Array.from({ length: columns }, (_, c) => (
             <Skeleton key={c} className={height} />
           ))}

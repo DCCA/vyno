@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from "react"
 import { Loader2, Play, ShieldCheck } from "lucide-react"
+import { useLocation } from "react-router-dom"
 
 import { useNavActions, useOnboardingState, useProfileState, useRunState, useScheduleState, useUiState } from "@/app/console-context"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -16,6 +17,7 @@ import { fromLines, toLines } from "@/lib/console-utils"
 import type { OnboardingStatus } from "@/app/types"
 
 export function OnboardingPage() {
+  const location = useLocation()
   const { saving, saveAction, localNotices, clearScopedNotice } = useUiState()
   const { runStatus, runPolicy, setRunPolicy } = useRunState()
   const { scheduleStatus } = useScheduleState()
@@ -28,8 +30,8 @@ export function OnboardingPage() {
   } = useOnboardingState()
   const notice = localNotices.onboarding
   const revisitMode = useMemo(
-    () => new URLSearchParams(window.location.search).get("mode") === "revisit",
-    [],
+    () => new URLSearchParams(location.search).get("mode") === "revisit",
+    [location.search],
   )
   const output = asRecord(profile?.output)
   const schedule = asRecord(profile?.schedule)
