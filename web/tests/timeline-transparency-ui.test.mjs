@@ -19,11 +19,12 @@ test("timeline summary includes strictness transparency", () => {
 
 test("timeline summary includes filter funnel and restriction reasons", () => {
   expectSource(/Filter funnel/, "filter funnel heading missing")
-  expectSource(/fetched=\{timelineSummary\.filter_funnel\.fetched\}/, "filter funnel fetched count missing")
-  expectSource(/post_window=\{timelineSummary\.filter_funnel\.post_window\}/, "filter funnel window count missing")
-  expectSource(/post_seen=/, "filter funnel seen count missing")
-  expectSource(/post_block=\{timelineSummary\.filter_funnel\.post_block\}/, "filter funnel block count missing")
-  expectSource(/selected=/, "filter funnel selected count missing")
+  expectSource(/funnel\.fetched/, "filter funnel fetched count missing")
+  expectSource(/funnel\.post_window/, "filter funnel window count missing")
+  expectSource(/funnel\.post_seen/, "filter funnel seen count missing")
+  expectSource(/funnel\.post_block/, "filter funnel block count missing")
+  expectSource(/funnel\.selected/, "filter funnel selected count missing")
+  expectSource(/FunnelBar/, "FunnelBar component usage missing")
   expectSource(/Top restriction reasons/, "restriction reason heading missing")
   expectSource(/timelineSummary\.restriction_reasons/, "restriction reason list wiring missing")
 })

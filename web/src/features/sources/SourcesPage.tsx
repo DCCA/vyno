@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowUpRight, Clock3, ImageOff, Loader2 } from "lucide-r
 
 import { useSourceState, useUiState } from "@/app/console-context"
 import type { UnifiedSourceRow } from "@/app/types"
+import { EmptyState } from "@/components/ui/empty-state"
 import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
 import { Badge } from "@/components/ui/badge"
@@ -135,8 +136,11 @@ export function SourcesPage() {
                   />
                 ))
               ) : (
-                <div className="rounded-[1.2rem] border border-dashed border-border/80 bg-muted/10 p-6 text-sm text-muted-foreground md:col-span-2 2xl:col-span-3">
-                  No sources match the current filters.
+                <div className="md:col-span-2 2xl:col-span-3">
+                  <EmptyState
+                    title="No sources match"
+                    description="Try adjusting your search or status filter."
+                  />
                 </div>
               )}
             </div>

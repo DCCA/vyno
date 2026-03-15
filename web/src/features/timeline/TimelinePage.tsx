@@ -171,14 +171,7 @@ export function TimelinePage() {
                   </div>
 
                   {timelineSummary.filter_funnel ? (
-                    <div className="rounded-md border bg-muted/20 p-3 text-xs">
-                      <p className="mb-1 font-semibold text-foreground">Filter funnel</p>
-                      <p className="font-mono text-muted-foreground">
-                        fetched={timelineSummary.filter_funnel.fetched} - post_window={timelineSummary.filter_funnel.post_window} - post_seen=
-                        {timelineSummary.filter_funnel.post_seen} - post_block={timelineSummary.filter_funnel.post_block} - selected=
-                        {timelineSummary.filter_funnel.selected}
-                      </p>
-                    </div>
+                    <FunnelBar funnel={timelineSummary.filter_funnel} />
                   ) : null}
 
                   {(timelineSummary.restriction_reasons ?? []).length > 0 ? (
@@ -420,5 +413,35 @@ function formatAdjustmentLabel(value: string): string {
     default:
       return value.replace(/_/g, " ")
   }
+}
+
+function FunnelBar({ funnel }: { funnel: { fetched: number; post_window: number; post_seen: number; post_block: number; selected: number } }) {
+  const max = funnel.fetched || 1
+  const steps = [
+    { label: "Fetched", value: funnel.fetched, color: "bg-primary/20" },
+    { label: "Window", value: funnel.post_window, color: "bg-primary/35" },
+    { label: "Seen", value: funnel.post_seen, color: "bg-primary/50" },
+    { label: "Block", value: funnel.post_block, color: "bg-primary/65" },
+    { label: "Selected", value: funnel.selected, color: "bg-accent/80" },
+  ]
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3 text-xs">
+      <p className="mb-2 font-semibold text-foreground">Filter funnel</p>
+      <div className="space-y-1.5">
+        {steps.map((step) => (
+          <div key={step.label} className="flex items-center gap-2">
+            <span className="w-16 shrink-0 text-muted-foreground">{step.label}</span>
+            <div className="h-4 flex-1 overflow-hidden rounded-full bg-muted/30">
+              <div
+                className={`h-full rounded-full ${step.color} transition-all duration-300`}
+                style={{ width: `${Math.max(2, (step.value / max) * 100)}%` }}
+              />
+            </div>
+            <span className="w-8 shrink-0 text-right font-mono text-muted-foreground">{step.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 

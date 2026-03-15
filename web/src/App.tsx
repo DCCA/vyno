@@ -1379,6 +1379,9 @@ function App() {
 
   return (
     <ConsoleProvider value={consoleValue}>
+    <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-lg">
+      Skip to content
+    </a>
     <main className="min-h-screen bg-console-canvas pb-10" aria-label="Digest Control Center">
       <div className="mx-auto grid w-full max-w-[1560px] gap-5 px-4 py-5 md:px-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-8 lg:py-7">
         {mobileNavOpen ? (
@@ -1627,7 +1630,7 @@ function App() {
 
         <InlineNotice notice={globalNotice} onDismiss={() => clearScopedNotice("global")} />
 
-          <section className="space-y-4 animate-surface-enter" aria-live="polite" aria-label="Console surface content">
+          <section id="main-content" className="space-y-4 animate-surface-enter" aria-live="polite" aria-label="Console surface content">
             {loading || !profile ? (
               <Card aria-busy>
                 <CardHeader className="pb-2">
