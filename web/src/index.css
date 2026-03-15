@@ -26,6 +26,26 @@
     --radius: 1.15rem;
   }
 
+  .dark {
+    --background: 220 16% 10%;
+    --foreground: 210 10% 90%;
+    --card: 220 14% 13%;
+    --card-foreground: 210 10% 90%;
+    --primary: 210 14% 84%;
+    --primary-foreground: 220 16% 10%;
+    --secondary: 218 14% 18%;
+    --secondary-foreground: 210 12% 82%;
+    --muted: 218 12% 16%;
+    --muted-foreground: 216 8% 56%;
+    --accent: 6 72% 58%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 218 10% 22%;
+    --input: 218 10% 24%;
+    --ring: 6 72% 58%;
+  }
+
   * {
     @apply border-border;
   }
@@ -38,6 +58,14 @@
       radial-gradient(circle at 52% 118%, rgba(232, 106, 91, 0.1), transparent 34%),
       linear-gradient(135deg, rgba(251, 248, 244, 0.98) 0%, rgba(247, 241, 235, 0.98) 48%, rgba(243, 243, 241, 1) 100%);
     background-attachment: fixed;
+  }
+
+  .dark body {
+    background-image:
+      radial-gradient(circle at 12% -4%, rgba(232, 106, 91, 0.06), transparent 30%),
+      radial-gradient(circle at 100% 4%, rgba(35, 43, 56, 0.12), transparent 28%),
+      radial-gradient(circle at 52% 118%, rgba(232, 106, 91, 0.04), transparent 34%),
+      linear-gradient(135deg, hsl(220 16% 10%) 0%, hsl(220 14% 11%) 48%, hsl(220 14% 12%) 100%);
   }
 }
 
@@ -70,6 +98,14 @@
       linear-gradient(180deg, rgba(255, 252, 248, 0.38), rgba(255, 255, 255, 0.08));
   }
 
+  .dark .bg-console-canvas {
+    background-image:
+      radial-gradient(circle at 10% 0%, rgba(232, 106, 91, 0.05), transparent 24%),
+      radial-gradient(circle at 88% 12%, rgba(35, 43, 56, 0.08), transparent 26%),
+      radial-gradient(circle at 48% 100%, rgba(232, 106, 91, 0.03), transparent 30%),
+      none;
+  }
+
   .animate-surface-enter {
     animation: surface-enter 320ms ease both;
   }
@@ -91,6 +127,11 @@
       linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(251, 248, 244, 0.92));
   }
 
+  .dark .bg-panel-subtle {
+    background:
+      linear-gradient(180deg, hsl(220 14% 14% / 0.95), hsl(220 14% 12% / 0.92));
+  }
+
   .skeleton-shimmer {
     background-image: linear-gradient(
       105deg,
@@ -107,6 +148,12 @@
     background:
       linear-gradient(100deg, hsl(var(--primary) / 0.06), hsl(var(--accent) / 0.12), transparent 80%),
       rgba(255, 255, 255, 0.76);
+  }
+
+  .dark .console-status-ribbon {
+    background:
+      linear-gradient(100deg, hsl(var(--primary) / 0.06), hsl(var(--accent) / 0.1), transparent 80%),
+      hsl(220 14% 14% / 0.76);
   }
 
   .source-card-media {

@@ -4,8 +4,10 @@ import {
   Clock3,
   Loader2,
   Menu,
+  Moon,
   Play,
   RefreshCcw,
+  Sun,
   X,
 } from "lucide-react"
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom"
@@ -21,6 +23,7 @@ import { ErrorBoundary } from "@/components/system/error-boundary"
 import { ConfirmDialog, useConfirm } from "@/components/system/confirm-dialog"
 import { Toaster } from "@/components/system/toast"
 import { ConsoleProvider, type ConsoleContextValue } from "@/app/console-context"
+import { useTheme } from "@/hooks/use-theme"
 import { api } from "@/lib/api"
 import {
   diffObjects,
@@ -70,6 +73,7 @@ function App() {
   const location = useLocation()
   const uiStateHydratedRef = useRef(false)
   const { confirmState, confirm, handleClose: handleConfirmClose } = useConfirm()
+  const { theme, toggle: toggleTheme } = useTheme()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [sourceTypes, setSourceTypes] = useState<string[]>([])
@@ -1488,6 +1492,22 @@ function App() {
                 </div>
               </div>
             </div>
+
+            <button
+              onClick={toggleTheme}
+              className="flex w-full items-center justify-between rounded-[1.2rem] border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+              aria-label="Toggle dark mode"
+            >
+              <span className="flex items-center gap-2">
+                {theme === "dark" || (theme === "system" && document.documentElement.classList.contains("dark")) ? (
+                  <Sun className="h-4 w-4" />
+                ) : (
+                  <Moon className="h-4 w-4" />
+                )}
+                <span>Theme</span>
+              </span>
+              <span className="text-xs text-white/45">{theme}</span>
+            </button>
           </div>
         </aside>
 
