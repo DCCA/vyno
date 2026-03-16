@@ -20,8 +20,11 @@ from digest.ops.onboarding import OnboardingSettings, run_preflight
 from digest.ops.profile_registry import load_effective_profile
 from digest.delivery.telegram import (
     answer_telegram_callback,
+    edit_telegram_message,
     get_telegram_updates,
     send_telegram_message,
+    set_telegram_commands,
+    set_telegram_menu_button,
 )
 from digest.logging_utils import setup_logging
 from digest.ops.run_lock import RunLock
@@ -292,6 +295,8 @@ def _cmd_bot(args: argparse.Namespace) -> int:
             "TELEGRAM_ADMIN_CHAT_IDS and TELEGRAM_ADMIN_USER_IDS are required for bot mode"
         )
 
+    web_public_url = os.getenv("DIGEST_WEB_PUBLIC_URL", "").strip().rstrip("/")
+
     lock = RunLock(args.run_lock_path, stale_seconds=args.run_lock_stale_seconds)
     ctx = CommandContext(
         sources_path=args.sources,
@@ -308,7 +313,30 @@ def _cmd_bot(args: argparse.Namespace) -> int:
         answer_callback=lambda callback_id, text="": answer_telegram_callback(
             bot_token, callback_id, text
         ),
+        web_public_url=web_public_url,
     )
+
+    # Register commands in Telegram's autocomplete menu
+    from digest.ops.telegram_commands import BOT_COMMANDS
+
+    try:
+        set_telegram_commands(bot_token, BOT_COMMANDS)
+    except Exception as exc:
+        print(f"bot_warning: failed to register commands: {exc}")
+
+    # Set menu button to Mini App if public URL is configured
+    if web_public_url:
+        try:
+            set_telegram_menu_button(
+                bot_token,
+                menu_button={
+                    "type": "web_app",
+                    "text": "Open Console",
+                    "web_app": {"url": web_public_url},
+                },
+            )
+        except Exception as exc:
+            print(f"bot_warning: failed to set menu button: {exc}")
 
     offset: int | None = None
     last_ok_at = ""
@@ -334,12 +362,21 @@ def _cmd_bot(args: argparse.Namespace) -> int:
                 if not response:
                     continue
                 if response.chat_id and response.text:
-                    send_telegram_message(
-                        bot_token,
-                        response.chat_id,
-                        response.text,
-                        reply_markup=response.reply_markup,
-                    )
+                    if response.edit_message_id:
+                        edit_telegram_message(
+                            bot_token,
+                            response.chat_id,
+                            response.edit_message_id,
+                            response.text,
+                            reply_markup=response.reply_markup,
+                        )
+                    else:
+                        send_telegram_message(
+                            bot_token,
+                            response.chat_id,
+                            response.text,
+                            reply_markup=response.reply_markup,
+                        )
                 if response.callback_query_id:
                     answer_telegram_callback(
                         bot_token,

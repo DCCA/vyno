@@ -204,5 +204,224 @@ class TestTelegramCommands(unittest.TestCase):
             self.assertIn("Added github_org", resp5.text or "")
 
 
+    # ── Schedule tests ──────────────────────────────────────────────
+
+    def test_schedule_status_shows_current(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            upd = _msg("/schedule")
+            resp = handle_update(upd, ctx)
+            self.assertIsNotNone(resp)
+            assert resp is not None
+            self.assertIn("Schedule", resp.text or "")
+            self.assertIn("Cadence", resp.text or "")
+            self.assertIsNotNone(resp.reply_markup)
+
+    def test_schedule_on_enables(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/schedule on"), ctx)
+            self.assertIn("enabled", resp.text or "")
+            # Verify persisted
+            overlay = Path(tmp) / "profile.local.yaml"
+            self.assertTrue(overlay.exists())
+            content = overlay.read_text(encoding="utf-8")
+            self.assertIn("enabled", content)
+
+    def test_schedule_off_disables(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            handle_update(_msg("/schedule on"), ctx)
+            resp = handle_update(_msg("/schedule off"), ctx)
+            self.assertIn("disabled", resp.text or "")
+
+    def test_schedule_time_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/schedule time 14:30"), ctx)
+            self.assertIn("14:30", resp.text or "")
+
+    def test_schedule_time_invalid_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/schedule time 25:00"), ctx)
+            self.assertIn("Invalid time", resp.text or "")
+
+    def test_schedule_cadence_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/schedule cadence hourly"), ctx)
+            self.assertIn("hourly", resp.text or "")
+
+    def test_schedule_toggle_callback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            cb = _callback("sch:toggle")
+            resp = handle_update(cb, ctx)
+            self.assertIn("enabled", resp.text or "")
+            self.assertIsNotNone(resp.edit_message_id)
+
+    # ── History tests ────────────────────────────────────────────────
+
+    def test_history_empty_db(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/history"), ctx)
+            self.assertIn("No runs", resp.text or "")
+
+    def test_history_last_no_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/history last"), ctx)
+            self.assertIn("No completed runs", resp.text or "")
+
+    # ── Doctor tests ─────────────────────────────────────────────────
+
+    def test_doctor_runs_preflight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/doctor"), ctx)
+            self.assertIn("System Health", resp.text or "")
+            self.assertIn("Result", resp.text or "")
+
+    # ── Settings tests ───────────────────────────────────────────────
+
+    def test_settings_shows_current(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/settings"), ctx)
+            self.assertIn("Content depth", resp.text or "")
+            self.assertIsNotNone(resp.reply_markup)
+
+    def test_settings_depth_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/settings depth practical"), ctx)
+            self.assertIn("practical", resp.text or "")
+            overlay = Path(tmp) / "profile.local.yaml"
+            self.assertTrue(overlay.exists())
+            content = overlay.read_text(encoding="utf-8")
+            self.assertIn("practical", content)
+
+    def test_settings_depth_invalid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/settings depth foo"), ctx)
+            self.assertIn("Invalid depth", resp.text or "")
+
+    def test_settings_depth_callback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            cb = _callback("cfg:d:practical")
+            resp = handle_update(cb, ctx)
+            self.assertIn("practical", resp.text or "")
+            self.assertIsNotNone(resp.edit_message_id)
+
+    # ── Feedback tests ───────────────────────────────────────────────
+
+    def test_feedback_mute_adds_to_blocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(
+                _msg("/feedback mute rss https://example.com/rss"), ctx
+            )
+            self.assertIn("muted", resp.text or "")
+            overlay = Path(tmp) / "profile.local.yaml"
+            self.assertTrue(overlay.exists())
+            content = overlay.read_text(encoding="utf-8")
+            self.assertIn("blocked_sources", content)
+
+    def test_feedback_trust_adds_to_trusted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(
+                _msg("/feedback trust github_org vercel-labs"), ctx
+            )
+            self.assertIn("trusted", resp.text or "")
+            overlay = Path(tmp) / "profile.local.yaml"
+            content = overlay.read_text(encoding="utf-8")
+            self.assertIn("trusted_orgs_github", content)
+
+    def test_feedback_summary_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/feedback summary"), ctx)
+            self.assertIn("No feedback", resp.text or "")
+
+    # ── Help tests ───────────────────────────────────────────────────
+
+    def test_help_text_includes_new_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/help"), ctx)
+            text = resp.text or ""
+            for cmd in ["/schedule", "/history", "/doctor", "/settings", "/feedback"]:
+                self.assertIn(cmd, text, f"Missing {cmd} in help text")
+
+    # ── Multi-wizard state test ──────────────────────────────────────
+
+    def test_starting_new_wizard_clears_previous(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            # Start source wizard
+            handle_update(_msg("/source wizard"), ctx)
+            handle_update(_callback("sw:add"), ctx)
+            # Now start schedule — should clear source state
+            resp = handle_update(_msg("/schedule"), ctx)
+            self.assertIn("Schedule", resp.text or "")
+            # Source wizard state should not intercept text
+            resp2 = handle_update(_msg("some text"), ctx)
+            self.assertIn("Unknown command", resp2.text or "")
+
+    # ── Mini App button test ─────────────────────────────────────────
+
+    def test_web_public_url_adds_console_button(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            ctx.web_public_url = "https://digest.example.com"
+            resp = handle_update(_msg("/status"), ctx)
+            markup = resp.reply_markup or {}
+            rows = markup.get("inline_keyboard", [])
+            texts = [btn.get("text", "") for row in rows for btn in row]
+            self.assertTrue(
+                any("Console" in t for t in texts),
+                "Expected 'Open Console' button when web_public_url is set",
+            )
+
+    def test_no_console_button_without_url(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            ctx.web_public_url = ""
+            resp = handle_update(_msg("/status"), ctx)
+            markup = resp.reply_markup or {}
+            rows = markup.get("inline_keyboard", [])
+            texts = [btn.get("text", "") for row in rows for btn in row]
+            self.assertFalse(
+                any("Console" in t for t in texts),
+                "Should not have 'Open Console' button when web_public_url is empty",
+            )
+
+
+def _msg(text: str) -> dict:
+    """Shortcut to build a Telegram message update."""
+    return {
+        "update_id": 1,
+        "message": {"text": text, "chat": {"id": 1}, "from": {"id": 2}},
+    }
+
+
+def _callback(data: str, message_id: int = 100) -> dict:
+    """Shortcut to build a Telegram callback query update."""
+    return {
+        "update_id": 1,
+        "callback_query": {
+            "id": "cb_test",
+            "data": data,
+            "from": {"id": 2},
+            "message": {"chat": {"id": 1}, "message_id": message_id},
+        },
+    }
+
+
 if __name__ == "__main__":
     unittest.main()

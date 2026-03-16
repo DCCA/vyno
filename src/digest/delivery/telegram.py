@@ -389,7 +389,8 @@ def _chunk_blocks(blocks: list[str], *, max_len: int) -> list[str]:
 
 def send_telegram_message(
     bot_token: str, chat_id: str, message: str, reply_markup: dict | None = None
-) -> None:
+) -> int:
+    """Send a message and return the message_id."""
     if not bot_token or not chat_id:
         raise ValueError("Telegram bot token and chat id are required")
     payload = {
@@ -400,9 +401,75 @@ def send_telegram_message(
     }
     if reply_markup is not None:
         payload["reply_markup"] = json.dumps(reply_markup, separators=(",", ":"))
+    result = _tg_post(bot_token, "sendMessage", payload)
+    msg = result.get("result") or {}
+    return int(msg.get("message_id") or 0)
+
+
+def edit_telegram_message(
+    bot_token: str,
+    chat_id: str,
+    message_id: int,
+    text: str,
+    reply_markup: dict | None = None,
+) -> None:
+    """Edit an existing message's text and optional inline keyboard."""
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "message_id": str(message_id),
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": "true",
+    }
+    if reply_markup is not None:
+        payload["reply_markup"] = json.dumps(reply_markup, separators=(",", ":"))
+    _tg_post(bot_token, "editMessageText", payload)
+
+
+def edit_telegram_reply_markup(
+    bot_token: str,
+    chat_id: str,
+    message_id: int,
+    reply_markup: dict | None = None,
+) -> None:
+    """Edit only the inline keyboard on an existing message."""
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "message_id": str(message_id),
+    }
+    if reply_markup is not None:
+        payload["reply_markup"] = json.dumps(reply_markup, separators=(",", ":"))
+    _tg_post(bot_token, "editMessageReplyMarkup", payload)
+
+
+def set_telegram_commands(
+    bot_token: str, commands: list[dict[str, str]]
+) -> None:
+    """Register bot commands in Telegram's autocomplete menu."""
+    payload = {"commands": json.dumps(commands, separators=(",", ":"))}
+    _tg_post(bot_token, "setMyCommands", payload)
+
+
+def set_telegram_menu_button(
+    bot_token: str,
+    *,
+    chat_id: str | None = None,
+    menu_button: dict | None = None,
+) -> None:
+    """Set the bot's menu button (e.g. to launch a Mini App)."""
+    payload: dict[str, Any] = {}
+    if chat_id:
+        payload["chat_id"] = chat_id
+    if menu_button is not None:
+        payload["menu_button"] = json.dumps(menu_button, separators=(",", ":"))
+    _tg_post(bot_token, "setChatMenuButton", payload)
+
+
+def _tg_post(bot_token: str, method: str, payload: dict[str, Any]) -> dict:
+    """Low-level POST to Telegram Bot API."""
     body = urllib.parse.urlencode(payload).encode("utf-8")
     req = urllib.request.Request(
-        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+        f"https://api.telegram.org/bot{bot_token}/{method}",
         data=body,
         method="POST",
         headers={"Content-Type": "application/x-www-form-urlencoded"},
@@ -410,7 +477,8 @@ def send_telegram_message(
     with urllib.request.urlopen(req, timeout=20) as resp:
         result = json.loads(resp.read().decode("utf-8"))
     if not result.get("ok"):
-        raise RuntimeError("Telegram send failed")
+        raise RuntimeError(f"Telegram {method} failed")
+    return result
 
 
 def get_telegram_updates(
@@ -436,17 +504,7 @@ def answer_telegram_callback(
 ) -> None:
     if not bot_token or not callback_query_id:
         raise ValueError("Telegram bot token and callback_query_id are required")
-    payload = {"callback_query_id": callback_query_id}
+    payload: dict[str, Any] = {"callback_query_id": callback_query_id}
     if text:
         payload["text"] = text[:180]
-    body = urllib.parse.urlencode(payload).encode("utf-8")
-    req = urllib.request.Request(
-        f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery",
-        data=body,
-        method="POST",
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        result = json.loads(resp.read().decode("utf-8"))
-    if not result.get("ok"):
-        raise RuntimeError("Telegram answerCallbackQuery failed")
+    _tg_post(bot_token, "answerCallbackQuery", payload)
