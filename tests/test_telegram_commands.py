@@ -577,6 +577,28 @@ class TestTelegramCommands(unittest.TestCase):
             self.assertTrue(any("Quiet" in t for t in texts))
             self.assertTrue(any("TZ" in t for t in texts))
 
+    # ── HTML injection tests ────────────────────────────────────────
+
+    def test_html_in_topic_is_escaped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(
+                _msg("/settings exclusion add <script>alert(1)</script>"), ctx
+            )
+            text = resp.text or ""
+            self.assertNotIn("<script>", text)
+            self.assertIn("&lt;script&gt;", text)
+
+    def test_html_in_source_value_is_escaped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(
+                _msg("/feedback mute rss <b>bold</b>"), ctx
+            )
+            text = resp.text or ""
+            self.assertNotIn("<b>bold</b>", text.replace("<b>muted", ""))
+            self.assertIn("&lt;b&gt;", text)
+
     def test_no_console_button_without_url(self):
         with tempfile.TemporaryDirectory() as tmp:
             ctx, _, _ = self._ctx(tmp)

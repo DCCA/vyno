@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html as _html
 import re
 import threading
 import uuid
@@ -28,6 +29,11 @@ from digest.runtime import run_digest
 from digest.storage.sqlite_store import SQLiteStore
 
 from zoneinfo import ZoneInfo
+
+def _esc(value: Any) -> str:
+    """Escape user-supplied values for safe embedding in HTML parse_mode messages."""
+    return _html.escape(str(value))
+
 
 WIZARD_TTL_SECONDS = 15 * 60
 VALID_DEPTHS = {"practical", "balanced", "deep_technical"}
@@ -263,7 +269,7 @@ def _handle_source_callback(
         return BotResponse(
             chat_id=chat_id,
             text=(
-                f"Send value for <code>{source_type}</code> now.\n"
+                f"Send value for <code>{_esc(source_type)}</code> now.\n"
                 "Examples:\n"
                 "- github_org: https://github.com/vercel-labs\n"
                 "- github_repo: openai/openai-cookbook"
@@ -287,21 +293,21 @@ def _handle_source_callback(
                     ctx.sources_path, ctx.overlay_path, source_type, draft_value
                 )
                 msg = (
-                    f"Added {source_type}: {canonical}"
+                    f"Added {_esc(source_type)}: {_esc(canonical)}"
                     if created
-                    else f"Already tracked: {canonical}"
+                    else f"Already tracked: {_esc(canonical)}"
                 )
             else:
                 removed, canonical = remove_source(
                     ctx.sources_path, ctx.overlay_path, source_type, draft_value
                 )
                 msg = (
-                    f"Removed {source_type}: {canonical}"
+                    f"Removed {_esc(source_type)}: {_esc(canonical)}"
                     if removed
-                    else f"Not found: {canonical}"
+                    else f"Not found: {_esc(canonical)}"
                 )
         except Exception as exc:
-            msg = f"Source command failed: {exc}"
+            msg = f"Source command failed: {_esc(exc)}"
         _clear_state(ctx, chat_id, user_id)
         return BotResponse(
             chat_id=chat_id,
@@ -345,14 +351,14 @@ def _handle_wizard_value_input(
     except Exception as exc:
         return BotResponse(
             chat_id=chat_id,
-            text=f"Invalid value: {exc}",
+            text=f"Invalid value: {_esc(exc)}",
             reply_markup=_wizard_cancel_keyboard(),
         )
     state["draft_value"] = canonical
     state["awaiting_value"] = False
     return BotResponse(
         chat_id=chat_id,
-        text=f"Confirm {action} for {source_type}:\n<code>{canonical}</code>",
+        text=f"Confirm {_esc(action)} for {_esc(source_type)}:\n<code>{_esc(canonical)}</code>",
         reply_markup=_wizard_confirm_keyboard(),
     )
 
@@ -441,12 +447,12 @@ def _handle_schedule_command(
         except (KeyError, Exception):
             return BotResponse(
                 chat_id=chat_id,
-                text=f"Invalid timezone: <code>{tz_name}</code>\nUse IANA format (e.g. America/Sao_Paulo).",
+                text=f"Invalid timezone: <code>{_esc(tz_name)}</code>\nUse IANA format (e.g. America/Sao_Paulo).",
             )
         _save_schedule_field(ctx, "timezone", tz_name)
         return BotResponse(
             chat_id=chat_id,
-            text=f"Timezone set to <b>{tz_name}</b>.\n\n" + _schedule_status_text(ctx),
+            text=f"Timezone set to <b>{_esc(tz_name)}</b>.\n\n" + _schedule_status_text(ctx),
             reply_markup=_schedule_keyboard(ctx),
         )
     return BotResponse(
@@ -592,7 +598,7 @@ def _handle_schedule_value_input(
         _clear_state(ctx, chat_id, user_id)
         return BotResponse(
             chat_id=chat_id,
-            text=f"Schedule time set to <b>{value}</b>.\n\n"
+            text=f"Schedule time set to <b>{_esc(value)}</b>.\n\n"
             + _schedule_status_text(ctx),
             reply_markup=_schedule_keyboard(ctx),
         )
@@ -603,14 +609,14 @@ def _handle_schedule_value_input(
         except (KeyError, Exception):
             return BotResponse(
                 chat_id=chat_id,
-                text=f"Invalid timezone: <code>{value}</code>\nUse IANA format (e.g. America/Sao_Paulo).",
+                text=f"Invalid timezone: <code>{_esc(value)}</code>\nUse IANA format (e.g. America/Sao_Paulo).",
                 reply_markup=_cancel_keyboard("sch:cancel"),
             )
         _save_schedule_field(ctx, "timezone", value)
         _clear_state(ctx, chat_id, user_id)
         return BotResponse(
             chat_id=chat_id,
-            text=f"Timezone set to <b>{value}</b>.\n\n" + _schedule_status_text(ctx),
+            text=f"Timezone set to <b>{_esc(value)}</b>.\n\n" + _schedule_status_text(ctx),
             reply_markup=_schedule_keyboard(ctx),
         )
 
@@ -754,13 +760,13 @@ def _run_detail_text(store: SQLiteStore, run_id: str | None = None) -> str:
     if src_errs:
         lines.append(f"<b>Source errors</b> ({len(src_errs)}):")
         for e in src_errs[:10]:
-            lines.append(f"  - {e[:80]}")
+            lines.append(f"  - {_esc(e[:80])}")
         if len(src_errs) > 10:
             lines.append(f"  ... +{len(src_errs) - 10} more")
     if sum_errs:
         lines.append(f"<b>Summary errors</b> ({len(sum_errs)}):")
         for e in sum_errs[:5]:
-            lines.append(f"  - {e[:80]}")
+            lines.append(f"  - {_esc(e[:80])}")
     return "\n".join(lines)
 
 
@@ -888,7 +894,7 @@ def _handle_settings_command(
                 save_profile_overlay(ctx.profile_path, ctx.profile_overlay_path, profile)
             return BotResponse(
                 chat_id=chat_id,
-                text=f"Exclusion <b>{value}</b> added.",
+                text=f"Exclusion <b>{_esc(value)}</b> added.",
                 reply_markup=_settings_keyboard(ctx),
             )
         if sub == "remove" and value:
@@ -898,8 +904,8 @@ def _handle_settings_command(
                 exclusions.remove(value)
                 profile["exclusions"] = exclusions
                 save_profile_overlay(ctx.profile_path, ctx.profile_overlay_path, profile)
-                return BotResponse(chat_id=chat_id, text=f"Exclusion <b>{value}</b> removed.", reply_markup=_settings_keyboard(ctx))
-            return BotResponse(chat_id=chat_id, text=f"Exclusion '{value}' not found.")
+                return BotResponse(chat_id=chat_id, text=f"Exclusion <b>{_esc(value)}</b> removed.", reply_markup=_settings_keyboard(ctx))
+            return BotResponse(chat_id=chat_id, text=f"Exclusion '{_esc(value)}' not found.")
     return BotResponse(
         chat_id=chat_id,
         text=(
@@ -1086,7 +1092,7 @@ def _handle_settings_value_input(
         _clear_state(ctx, chat_id, user_id)
         return BotResponse(
             chat_id=chat_id,
-            text=f"Topic <b>{value}</b> added.\n\n" + _settings_status_text(ctx),
+            text=f"Topic <b>{_esc(value)}</b> added.\n\n" + _settings_status_text(ctx),
             reply_markup=_settings_keyboard(ctx),
         )
 
@@ -1156,12 +1162,12 @@ def _settings_status_text(ctx: CommandContext) -> str:
     min_items = int(profile.get("min_items_for_delivery", 0) or 0)
     topics = profile.get("topics") or []
     exclusions = profile.get("exclusions") or []
-    topics_str = ", ".join(topics[:10]) if topics else "none"
-    excl_str = ", ".join(exclusions[:10]) if exclusions else "none"
+    topics_str = ", ".join(_esc(t) for t in topics[:10]) if topics else "none"
+    excl_str = ", ".join(_esc(e) for e in exclusions[:10]) if exclusions else "none"
     llm_label = "enabled" if llm else "disabled"
     return (
-        f"<b>Content depth</b>: {depth}\n"
-        f"<b>Default run mode</b>: {default_mode}\n"
+        f"<b>Content depth</b>: {_esc(depth)}\n"
+        f"<b>Default run mode</b>: {_esc(default_mode)}\n"
         f"<b>LLM scoring</b>: {llm_label}\n"
         f"<b>Accumulation</b>: {accum}h max \u00b7 {min_items} min items\n"
         f"<b>Topics</b>: {topics_str}\n"
@@ -1260,11 +1266,11 @@ def _handle_feedback_command(
         try:
             _apply_source_preference(ctx, action, source_type, source_value)
         except Exception as exc:
-            return BotResponse(chat_id=chat_id, text=f"Failed: {exc}")
+            return BotResponse(chat_id=chat_id, text=f"Failed: {_esc(exc)}")
         verb = "muted (blocked)" if action == "mute" else "trusted"
         return BotResponse(
             chat_id=chat_id,
-            text=f"Source <b>{verb}</b>: {source_type} / {source_value}",
+            text=f"Source <b>{verb}</b>: {_esc(source_type)} / {_esc(source_value)}",
         )
 
     return BotResponse(
@@ -1451,16 +1457,16 @@ def _handle_source(
                     ctx.sources_path, ctx.overlay_path, source_type, source_value
                 )
                 if created:
-                    return f"Added {source_type}: {canonical}"
-                return f"Already tracked: {canonical}"
+                    return f"Added {_esc(source_type)}: {_esc(canonical)}"
+                return f"Already tracked: {_esc(canonical)}"
             removed, canonical = remove_source(
                 ctx.sources_path, ctx.overlay_path, source_type, source_value
             )
             if removed:
-                return f"Removed {source_type}: {canonical}"
-            return f"Not found: {canonical}"
+                return f"Removed {_esc(source_type)}: {_esc(canonical)}"
+            return f"Not found: {_esc(canonical)}"
         except Exception as exc:
-            return f"Source command failed: {exc}"
+            return f"Source command failed: {_esc(exc)}"
 
     return "Usage: /source &lt;add|remove|list|wizard&gt; ..."
 
@@ -1471,7 +1477,7 @@ def _render_source_list(rows: dict[str, list[str]]) -> str:
         vals = rows[st]
         lines.append(f"<b>{st}</b>: {len(vals)}")
         for v in vals[:10]:
-            lines.append(f"  - {v}")
+            lines.append(f"  - {_esc(v)}")
         if len(vals) > 10:
             lines.append(f"  - ... (+{len(vals) - 10} more)")
     return "\n".join(lines)
@@ -1516,7 +1522,7 @@ def _trigger_run(ctx: CommandContext, chat_id: str, *, mode: str | None = None) 
                 None,
             )
         except Exception as exc:
-            ctx.send_message(chat_id, f"Run failed: {exc}", None)
+            ctx.send_message(chat_id, f"Run failed: {_esc(exc)}", None)
         finally:
             ctx.lock.release(run_id)
 
