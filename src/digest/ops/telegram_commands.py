@@ -27,8 +27,17 @@ from digest.ops.source_registry import (
 from digest.runtime import run_digest
 from digest.storage.sqlite_store import SQLiteStore
 
+from zoneinfo import ZoneInfo
+
 WIZARD_TTL_SECONDS = 15 * 60
 VALID_DEPTHS = {"practical", "balanced", "deep_technical"}
+VALID_RUN_MODES = {"fresh_only", "balanced", "replay_recent", "backfill"}
+RUN_MODE_OPTIONS: dict[str, dict[str, bool]] = {
+    "fresh_only": dict(use_last_completed_window=True, only_new=True, allow_seen_fallback=False),
+    "balanced": dict(use_last_completed_window=True, only_new=True, allow_seen_fallback=True),
+    "replay_recent": dict(use_last_completed_window=True, only_new=False, allow_seen_fallback=True),
+    "backfill": dict(use_last_completed_window=False, only_new=False, allow_seen_fallback=True),
+}
 HH_MM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 BOT_COMMANDS = [
@@ -107,9 +116,18 @@ def handle_update(update: dict, ctx: CommandContext) -> BotResponse | None:
             reply_markup=_status_keyboard(ctx),
         )
     if cmd == "/digest":
-        if len(args) == 1 and args[0] == "run":
-            return BotResponse(chat_id=chat_id, text=_trigger_run(ctx, chat_id))
-        return BotResponse(chat_id=chat_id, text="Usage: /digest run")
+        if args and args[0] == "run":
+            mode = args[1] if len(args) >= 2 else ""
+            if mode and mode not in VALID_RUN_MODES:
+                return BotResponse(
+                    chat_id=chat_id,
+                    text=f"Invalid mode. Choose: {', '.join(sorted(VALID_RUN_MODES))}",
+                )
+            return BotResponse(chat_id=chat_id, text=_trigger_run(ctx, chat_id, mode=mode or None))
+        return BotResponse(
+            chat_id=chat_id,
+            text="Usage: /digest run [mode]\nModes: fresh_only, balanced, replay_recent, backfill",
+        )
     if cmd == "/source":
         return BotResponse(
             chat_id=chat_id,
@@ -393,6 +411,44 @@ def _handle_schedule_command(
             + _schedule_status_text(ctx),
             reply_markup=_schedule_keyboard(ctx),
         )
+    if action == "quiet":
+        if len(args) >= 2 and args[1] in {"on", "off"}:
+            _save_schedule_field(ctx, "quiet_hours_enabled", args[1] == "on")
+            label = "enabled" if args[1] == "on" else "disabled"
+            return BotResponse(
+                chat_id=chat_id,
+                text=f"Quiet hours <b>{label}</b>.\n\n" + _schedule_status_text(ctx),
+                reply_markup=_schedule_keyboard(ctx),
+            )
+        if len(args) >= 3 and HH_MM_RE.match(args[1]) and HH_MM_RE.match(args[2]):
+            _save_schedule_field(ctx, "quiet_hours_enabled", True)
+            _save_schedule_field(ctx, "quiet_start_local", args[1])
+            _save_schedule_field(ctx, "quiet_end_local", args[2])
+            return BotResponse(
+                chat_id=chat_id,
+                text=f"Quiet hours set to <b>{args[1]}–{args[2]}</b>.\n\n"
+                + _schedule_status_text(ctx),
+                reply_markup=_schedule_keyboard(ctx),
+            )
+        return BotResponse(
+            chat_id=chat_id,
+            text="Usage: /schedule quiet on|off\nOr: /schedule quiet HH:MM HH:MM",
+        )
+    if action == "timezone" and len(args) >= 2:
+        tz_name = args[1].strip()
+        try:
+            ZoneInfo(tz_name)
+        except (KeyError, Exception):
+            return BotResponse(
+                chat_id=chat_id,
+                text=f"Invalid timezone: <code>{tz_name}</code>\nUse IANA format (e.g. America/Sao_Paulo).",
+            )
+        _save_schedule_field(ctx, "timezone", tz_name)
+        return BotResponse(
+            chat_id=chat_id,
+            text=f"Timezone set to <b>{tz_name}</b>.\n\n" + _schedule_status_text(ctx),
+            reply_markup=_schedule_keyboard(ctx),
+        )
     return BotResponse(
         chat_id=chat_id,
         text=(
@@ -400,7 +456,10 @@ def _handle_schedule_command(
             "/schedule — view status\n"
             "/schedule on|off — toggle\n"
             "/schedule time HH:MM\n"
-            "/schedule cadence daily|hourly"
+            "/schedule cadence daily|hourly\n"
+            "/schedule quiet on|off\n"
+            "/schedule quiet HH:MM HH:MM\n"
+            "/schedule timezone &lt;IANA&gt;"
         ),
     )
 
@@ -473,6 +532,34 @@ def _handle_schedule_callback(
             callback_text="Choose cadence",
         )
 
+    if key == "quiet":
+        profile = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
+        schedule = profile.get("schedule") or {}
+        new_val = not bool(schedule.get("quiet_hours_enabled", False))
+        _save_schedule_field(ctx, "quiet_hours_enabled", new_val)
+        label = "enabled" if new_val else "disabled"
+        return BotResponse(
+            chat_id=chat_id,
+            text=f"Quiet hours <b>{label}</b>.\n\n" + _schedule_status_text(ctx),
+            reply_markup=_schedule_keyboard(ctx),
+            edit_message_id=message_id,
+            callback_query_id=callback_id,
+            callback_text=f"Quiet hours {label}",
+        )
+
+    if key == "tz":
+        state = _get_state(ctx, chat_id, user_id)
+        state["wizard"] = "schedule"
+        state["action"] = "timezone"
+        state["awaiting_value"] = True
+        return BotResponse(
+            chat_id=chat_id,
+            text="Send timezone in IANA format.\nExample: America/Sao_Paulo, Europe/London, UTC",
+            reply_markup=_cancel_keyboard("sch:cancel"),
+            callback_query_id=callback_id,
+            callback_text="Enter timezone",
+        )
+
     if key in {"back", "cancel"}:
         _clear_state(ctx, chat_id, user_id)
         return BotResponse(
@@ -507,6 +594,23 @@ def _handle_schedule_value_input(
             chat_id=chat_id,
             text=f"Schedule time set to <b>{value}</b>.\n\n"
             + _schedule_status_text(ctx),
+            reply_markup=_schedule_keyboard(ctx),
+        )
+
+    if action == "timezone":
+        try:
+            ZoneInfo(value)
+        except (KeyError, Exception):
+            return BotResponse(
+                chat_id=chat_id,
+                text=f"Invalid timezone: <code>{value}</code>\nUse IANA format (e.g. America/Sao_Paulo).",
+                reply_markup=_cancel_keyboard("sch:cancel"),
+            )
+        _save_schedule_field(ctx, "timezone", value)
+        _clear_state(ctx, chat_id, user_id)
+        return BotResponse(
+            chat_id=chat_id,
+            text=f"Timezone set to <b>{value}</b>.\n\n" + _schedule_status_text(ctx),
             reply_markup=_schedule_keyboard(ctx),
         )
 
@@ -551,12 +655,21 @@ def _schedule_keyboard(ctx: CommandContext) -> dict:
     schedule = profile.get("schedule") or {}
     enabled = bool(schedule.get("enabled", False))
     toggle_text = "Disable" if enabled else "Enable"
+    quiet = bool(schedule.get("quiet_hours_enabled", False))
+    quiet_start = str(schedule.get("quiet_start_local", "22:00") or "22:00")
+    quiet_end = str(schedule.get("quiet_end_local", "07:00") or "07:00")
+    tz = str(schedule.get("timezone", "UTC") or "UTC")
+    quiet_label = f"Quiet: {quiet_start}\u2013{quiet_end}" if quiet else "Quiet: off"
 
     rows: list[list[dict]] = [
         [
             {"text": toggle_text, "callback_data": "sch:toggle"},
             {"text": "Change Time", "callback_data": "sch:time"},
             {"text": "Cadence", "callback_data": "sch:cadence"},
+        ],
+        [
+            {"text": quiet_label, "callback_data": "sch:quiet"},
+            {"text": f"TZ: {tz}", "callback_data": "sch:tz"},
         ],
     ]
     if ctx.web_public_url:
@@ -695,7 +808,8 @@ def _handle_settings_command(
             text=_settings_status_text(ctx),
             reply_markup=_settings_keyboard(ctx),
         )
-    if args[0] == "depth" and len(args) >= 2:
+    action = args[0]
+    if action == "depth" and len(args) >= 2:
         depth = args[1].strip()
         if depth not in VALID_DEPTHS:
             return BotResponse(
@@ -708,12 +822,95 @@ def _handle_settings_command(
             text=f"Content depth set to <b>{depth}</b>.",
             reply_markup=_settings_keyboard(ctx),
         )
+    if action == "mode" and len(args) >= 2:
+        mode = args[1].strip()
+        if mode not in VALID_RUN_MODES:
+            return BotResponse(
+                chat_id=chat_id,
+                text=f"Invalid mode. Choose: {', '.join(sorted(VALID_RUN_MODES))}",
+            )
+        _save_run_policy_field(ctx, "default_mode", mode)
+        return BotResponse(
+            chat_id=chat_id,
+            text=f"Default run mode set to <b>{mode}</b>.",
+            reply_markup=_settings_keyboard(ctx),
+        )
+    if action == "llm" and len(args) >= 2:
+        toggle = args[1].strip()
+        if toggle not in {"on", "off"}:
+            return BotResponse(chat_id=chat_id, text="Usage: /settings llm on|off")
+        enabled = toggle == "on"
+        profile = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
+        profile["llm_enabled"] = enabled
+        profile["agent_scoring_enabled"] = enabled
+        save_profile_overlay(ctx.profile_path, ctx.profile_overlay_path, profile)
+        label = "enabled" if enabled else "disabled"
+        return BotResponse(
+            chat_id=chat_id,
+            text=f"LLM scoring <b>{label}</b>.",
+            reply_markup=_settings_keyboard(ctx),
+        )
+    if action == "accumulation" and len(args) >= 2:
+        try:
+            hours = int(args[1].strip())
+            if hours < 1:
+                raise ValueError
+        except ValueError:
+            return BotResponse(chat_id=chat_id, text="Must be a positive integer (hours).")
+        _save_profile_field(ctx, "max_accumulation_hours", hours)
+        return BotResponse(
+            chat_id=chat_id,
+            text=f"Max accumulation set to <b>{hours}h</b>.",
+            reply_markup=_settings_keyboard(ctx),
+        )
+    if action == "min-items" and len(args) >= 2:
+        try:
+            n = int(args[1].strip())
+            if n < 0:
+                raise ValueError
+        except ValueError:
+            return BotResponse(chat_id=chat_id, text="Must be a non-negative integer.")
+        _save_profile_field(ctx, "min_items_for_delivery", n)
+        return BotResponse(
+            chat_id=chat_id,
+            text=f"Min items for delivery set to <b>{n}</b>.",
+            reply_markup=_settings_keyboard(ctx),
+        )
+    if action == "exclusion" and len(args) >= 3:
+        sub = args[1].strip()
+        value = " ".join(args[2:]).strip()
+        if sub == "add" and value:
+            profile = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
+            exclusions = list(profile.get("exclusions") or [])
+            if value not in exclusions:
+                exclusions.append(value)
+                profile["exclusions"] = exclusions
+                save_profile_overlay(ctx.profile_path, ctx.profile_overlay_path, profile)
+            return BotResponse(
+                chat_id=chat_id,
+                text=f"Exclusion <b>{value}</b> added.",
+                reply_markup=_settings_keyboard(ctx),
+            )
+        if sub == "remove" and value:
+            profile = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
+            exclusions = list(profile.get("exclusions") or [])
+            if value in exclusions:
+                exclusions.remove(value)
+                profile["exclusions"] = exclusions
+                save_profile_overlay(ctx.profile_path, ctx.profile_overlay_path, profile)
+                return BotResponse(chat_id=chat_id, text=f"Exclusion <b>{value}</b> removed.", reply_markup=_settings_keyboard(ctx))
+            return BotResponse(chat_id=chat_id, text=f"Exclusion '{value}' not found.")
     return BotResponse(
         chat_id=chat_id,
         text=(
             "Usage:\n"
             "/settings — view current\n"
-            "/settings depth practical|balanced|deep_technical"
+            "/settings depth practical|balanced|deep_technical\n"
+            "/settings mode fresh_only|balanced|replay_recent|backfill\n"
+            "/settings llm on|off\n"
+            "/settings accumulation &lt;hours&gt;\n"
+            "/settings min-items &lt;n&gt;\n"
+            "/settings exclusion add|remove &lt;value&gt;"
         ),
     )
 
@@ -740,6 +937,88 @@ def _handle_settings_callback(
                 callback_text=f"Depth: {depth}",
             )
 
+    if key == "mode":
+        profile = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
+        run_policy = profile.get("run_policy") or {}
+        current_mode = str(run_policy.get("default_mode", "fresh_only") or "fresh_only")
+        mode_buttons: list[list[dict]] = []
+        row: list[dict] = []
+        for m in ["fresh_only", "balanced", "replay_recent", "backfill"]:
+            label = m.replace("_", " ").title()
+            if m == current_mode:
+                label = f"\u2713 {label}"
+            row.append({"text": label, "callback_data": f"cfg:m:{m}"})
+            if len(row) == 2:
+                mode_buttons.append(row)
+                row = []
+        if row:
+            mode_buttons.append(row)
+        mode_buttons.append([{"text": "Back", "callback_data": "cfg:back"}])
+        return BotResponse(
+            chat_id=chat_id,
+            text="Choose default run mode:",
+            reply_markup={"inline_keyboard": mode_buttons},
+            edit_message_id=message_id,
+            callback_query_id=callback_id,
+            callback_text="Choose mode",
+        )
+
+    if key.startswith("m:"):
+        mode = key[2:]
+        if mode in VALID_RUN_MODES:
+            _save_run_policy_field(ctx, "default_mode", mode)
+            return BotResponse(
+                chat_id=chat_id,
+                text=f"Default run mode set to <b>{mode}</b>.\n\n"
+                + _settings_status_text(ctx),
+                reply_markup=_settings_keyboard(ctx),
+                edit_message_id=message_id,
+                callback_query_id=callback_id,
+                callback_text=f"Mode: {mode}",
+            )
+
+    if key == "llm":
+        profile = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
+        new_val = not bool(profile.get("llm_enabled", False))
+        profile["llm_enabled"] = new_val
+        profile["agent_scoring_enabled"] = new_val
+        save_profile_overlay(ctx.profile_path, ctx.profile_overlay_path, profile)
+        label = "enabled" if new_val else "disabled"
+        return BotResponse(
+            chat_id=chat_id,
+            text=f"LLM scoring <b>{label}</b>.\n\n" + _settings_status_text(ctx),
+            reply_markup=_settings_keyboard(ctx),
+            edit_message_id=message_id,
+            callback_query_id=callback_id,
+            callback_text=f"LLM {label}",
+        )
+
+    if key == "accum":
+        state = _get_state(ctx, chat_id, user_id)
+        state["wizard"] = "settings"
+        state["action"] = "set_accumulation"
+        state["awaiting_value"] = True
+        return BotResponse(
+            chat_id=chat_id,
+            text="Send max accumulation hours (integer, e.g. 6):",
+            reply_markup=_cancel_keyboard("cfg:cancel"),
+            callback_query_id=callback_id,
+            callback_text="Set accumulation",
+        )
+
+    if key == "minitems":
+        state = _get_state(ctx, chat_id, user_id)
+        state["wizard"] = "settings"
+        state["action"] = "set_min_items"
+        state["awaiting_value"] = True
+        return BotResponse(
+            chat_id=chat_id,
+            text="Send minimum items for delivery (integer, e.g. 0):",
+            reply_markup=_cancel_keyboard("cfg:cancel"),
+            callback_query_id=callback_id,
+            callback_text="Set min items",
+        )
+
     if key == "topics":
         state = _get_state(ctx, chat_id, user_id)
         state["wizard"] = "settings"
@@ -759,7 +1038,24 @@ def _handle_settings_callback(
             callback_text="Add topic",
         )
 
-    if key == "cancel":
+    if key == "excl":
+        profile = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
+        exclusions = profile.get("exclusions") or []
+        current = ", ".join(exclusions) if exclusions else "none"
+        state = _get_state(ctx, chat_id, user_id)
+        state["wizard"] = "settings"
+        state["action"] = "add_exclusion"
+        state["awaiting_value"] = True
+        return BotResponse(
+            chat_id=chat_id,
+            text=f"Current exclusions: <i>{current}</i>\n\nSend an exclusion to add\n(or use /settings exclusion remove &lt;value&gt;):",
+            reply_markup=_cancel_keyboard("cfg:cancel"),
+            edit_message_id=message_id,
+            callback_query_id=callback_id,
+            callback_text="Exclusions",
+        )
+
+    if key in {"back", "cancel"}:
         _clear_state(ctx, chat_id, user_id)
         return BotResponse(
             chat_id=chat_id,
@@ -781,20 +1077,68 @@ def _handle_settings_value_input(
     value = raw_value.strip()
 
     if action == "add_topic" and value:
-        profile = load_effective_profile_dict(
-            ctx.profile_path, ctx.profile_overlay_path
-        )
+        profile = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
         topics = list(profile.get("topics") or [])
         if value not in topics:
             topics.append(value)
             profile["topics"] = topics
-            save_profile_overlay(
-                ctx.profile_path, ctx.profile_overlay_path, profile
-            )
+            save_profile_overlay(ctx.profile_path, ctx.profile_overlay_path, profile)
         _clear_state(ctx, chat_id, user_id)
         return BotResponse(
             chat_id=chat_id,
             text=f"Topic <b>{value}</b> added.\n\n" + _settings_status_text(ctx),
+            reply_markup=_settings_keyboard(ctx),
+        )
+
+    if action == "add_exclusion" and value:
+        profile = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
+        exclusions = list(profile.get("exclusions") or [])
+        if value not in exclusions:
+            exclusions.append(value)
+            profile["exclusions"] = exclusions
+            save_profile_overlay(ctx.profile_path, ctx.profile_overlay_path, profile)
+        _clear_state(ctx, chat_id, user_id)
+        return BotResponse(
+            chat_id=chat_id,
+            text=f"Exclusion <b>{value}</b> added.\n\n" + _settings_status_text(ctx),
+            reply_markup=_settings_keyboard(ctx),
+        )
+
+    if action == "set_accumulation":
+        try:
+            hours = int(value)
+            if hours < 1:
+                raise ValueError
+        except ValueError:
+            return BotResponse(
+                chat_id=chat_id,
+                text="Must be a positive integer.",
+                reply_markup=_cancel_keyboard("cfg:cancel"),
+            )
+        _save_profile_field(ctx, "max_accumulation_hours", hours)
+        _clear_state(ctx, chat_id, user_id)
+        return BotResponse(
+            chat_id=chat_id,
+            text=f"Max accumulation set to <b>{hours}h</b>.\n\n" + _settings_status_text(ctx),
+            reply_markup=_settings_keyboard(ctx),
+        )
+
+    if action == "set_min_items":
+        try:
+            n = int(value)
+            if n < 0:
+                raise ValueError
+        except ValueError:
+            return BotResponse(
+                chat_id=chat_id,
+                text="Must be a non-negative integer.",
+                reply_markup=_cancel_keyboard("cfg:cancel"),
+            )
+        _save_profile_field(ctx, "min_items_for_delivery", n)
+        _clear_state(ctx, chat_id, user_id)
+        return BotResponse(
+            chat_id=chat_id,
+            text=f"Min items for delivery set to <b>{n}</b>.\n\n" + _settings_status_text(ctx),
             reply_markup=_settings_keyboard(ctx),
         )
 
@@ -805,12 +1149,21 @@ def _handle_settings_value_input(
 def _settings_status_text(ctx: CommandContext) -> str:
     profile = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
     depth = str(profile.get("content_depth_preference", "balanced") or "balanced")
+    run_policy = profile.get("run_policy") or {}
+    default_mode = str(run_policy.get("default_mode", "fresh_only") or "fresh_only")
+    llm = bool(profile.get("llm_enabled", False))
+    accum = int(profile.get("max_accumulation_hours", 6) or 6)
+    min_items = int(profile.get("min_items_for_delivery", 0) or 0)
     topics = profile.get("topics") or []
     exclusions = profile.get("exclusions") or []
     topics_str = ", ".join(topics[:10]) if topics else "none"
     excl_str = ", ".join(exclusions[:10]) if exclusions else "none"
+    llm_label = "enabled" if llm else "disabled"
     return (
         f"<b>Content depth</b>: {depth}\n"
+        f"<b>Default run mode</b>: {default_mode}\n"
+        f"<b>LLM scoring</b>: {llm_label}\n"
+        f"<b>Accumulation</b>: {accum}h max \u00b7 {min_items} min items\n"
         f"<b>Topics</b>: {topics_str}\n"
         f"<b>Exclusions</b>: {excl_str}"
     )
@@ -818,16 +1171,37 @@ def _settings_status_text(ctx: CommandContext) -> str:
 
 def _settings_keyboard(ctx: CommandContext) -> dict:
     profile = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
-    current = str(profile.get("content_depth_preference", "balanced") or "balanced")
+    current_depth = str(profile.get("content_depth_preference", "balanced") or "balanced")
+    run_policy = profile.get("run_policy") or {}
+    current_mode = str(run_policy.get("default_mode", "fresh_only") or "fresh_only")
+    llm = bool(profile.get("llm_enabled", False))
+    accum = int(profile.get("max_accumulation_hours", 6) or 6)
+    min_items = int(profile.get("min_items_for_delivery", 0) or 0)
+    topics = profile.get("topics") or []
+    exclusions = profile.get("exclusions") or []
+
     depth_buttons = []
     for d in ["practical", "balanced", "deep_technical"]:
         label = d.replace("_", " ").title()
-        if d == current:
+        if d == current_depth:
             label = f"\u2713 {label}"
         depth_buttons.append({"text": label, "callback_data": f"cfg:d:{d}"})
+
+    llm_label = "LLM: On" if llm else "LLM: Off"
+    mode_label = f"Mode: {current_mode}"
+
     rows: list[list[dict]] = [
         depth_buttons,
-        [{"text": "Add Topic", "callback_data": "cfg:topics"}],
+        [{"text": mode_label, "callback_data": "cfg:mode"}],
+        [
+            {"text": llm_label, "callback_data": "cfg:llm"},
+            {"text": f"Accum: {accum}h", "callback_data": "cfg:accum"},
+            {"text": f"Min: {min_items}", "callback_data": "cfg:minitems"},
+        ],
+        [
+            {"text": f"Exclusions ({len(exclusions)})", "callback_data": "cfg:excl"},
+            {"text": f"Topics ({len(topics)})", "callback_data": "cfg:topics"},
+        ],
     ]
     if ctx.web_public_url:
         rows.append(
@@ -839,6 +1213,14 @@ def _settings_keyboard(ctx: CommandContext) -> dict:
 def _save_profile_field(ctx: CommandContext, field: str, value: Any) -> None:
     profile = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
     profile[field] = value
+    save_profile_overlay(ctx.profile_path, ctx.profile_overlay_path, profile)
+
+
+def _save_run_policy_field(ctx: CommandContext, field: str, value: Any) -> None:
+    profile = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
+    run_policy = dict(profile.get("run_policy") or {})
+    run_policy[field] = value
+    profile["run_policy"] = run_policy
     save_profile_overlay(ctx.profile_path, ctx.profile_overlay_path, profile)
 
 
@@ -1095,11 +1477,23 @@ def _render_source_list(rows: dict[str, list[str]]) -> str:
     return "\n".join(lines)
 
 
-def _trigger_run(ctx: CommandContext, chat_id: str) -> str:
+def _trigger_run(ctx: CommandContext, chat_id: str, *, mode: str | None = None) -> str:
     run_id = uuid.uuid4().hex[:DEFAULT_RUN_ID_LENGTH]
     acquired, current = ctx.lock.acquire(run_id)
     if not acquired and current is not None:
         return f"Run already active: {current.run_id} (started {current.started_at})"
+
+    # Resolve run mode flags
+    if mode and mode in RUN_MODE_OPTIONS:
+        flags = RUN_MODE_OPTIONS[mode]
+    else:
+        profile_dict = load_effective_profile_dict(ctx.profile_path, ctx.profile_overlay_path)
+        run_policy = profile_dict.get("run_policy") or {}
+        default_mode = str(run_policy.get("default_mode", "fresh_only") or "fresh_only")
+        flags = RUN_MODE_OPTIONS.get(default_mode, RUN_MODE_OPTIONS["fresh_only"])
+        mode = default_mode
+
+    run_flags = dict(flags)
 
     def worker() -> None:
         try:
@@ -1110,9 +1504,7 @@ def _trigger_run(ctx: CommandContext, chat_id: str) -> str:
                 sources,
                 profile,
                 store,
-                use_last_completed_window=True,
-                only_new=True,
-                allow_seen_fallback=False,
+                **run_flags,
                 logger=get_run_logger(run_id),
             )
             ctx.send_message(
@@ -1130,7 +1522,7 @@ def _trigger_run(ctx: CommandContext, chat_id: str) -> str:
 
     t = threading.Thread(target=worker, daemon=True)
     t.start()
-    return f"Run started: <code>{run_id}</code>"
+    return f"Run started: <code>{run_id}</code> (mode: {mode})"
 
 
 def _help_text() -> str:
@@ -1138,13 +1530,11 @@ def _help_text() -> str:
     return (
         "<b>Commands</b>\n\n"
         "/status — run status, schedule, sources\n"
-        "/digest run — trigger a digest run\n"
-        "/schedule [on|off] — view/toggle schedule\n"
-        "/schedule time HH:MM — set run time\n"
+        "/digest run [mode] — trigger run (backfill, balanced, ...)\n"
+        "/schedule — view/toggle schedule, quiet hours, timezone\n"
         "/history [last|run_id] — run history\n"
         "/doctor — system health check\n"
-        "/settings — content preferences\n"
-        "/settings depth practical|balanced|deep_technical\n"
+        "/settings — content depth, run mode, LLM, exclusions\n"
         "/source wizard — manage sources\n"
         "/source list [type] — list sources\n"
         "/source add|remove &lt;type&gt; &lt;value&gt;\n"

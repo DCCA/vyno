@@ -388,6 +388,195 @@ class TestTelegramCommands(unittest.TestCase):
                 "Expected 'Open Console' button when web_public_url is set",
             )
 
+    # ── Run mode tests ─────────────────────────────────────────────
+
+    def test_digest_run_with_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, sent, _ = self._ctx(tmp)
+
+            class Report:
+                run_id = "abc123"
+                status = "success"
+                source_errors = []
+                summary_errors = []
+
+            with (
+                patch("digest.ops.telegram_commands.load_effective_profile"),
+                patch("digest.ops.telegram_commands.load_effective_sources"),
+                patch(
+                    "digest.ops.telegram_commands.run_digest", return_value=Report()
+                ) as run_mock,
+            ):
+                resp = handle_update(_msg("/digest run backfill"), ctx)
+                self.assertIn("backfill", resp.text or "")
+                for _ in range(50):
+                    if run_mock.called:
+                        break
+                    time.sleep(0.01)
+                self.assertTrue(run_mock.called)
+                kwargs = run_mock.call_args.kwargs
+                self.assertFalse(kwargs.get("use_last_completed_window"))
+                self.assertFalse(kwargs.get("only_new"))
+
+    def test_digest_run_invalid_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/digest run nonsense"), ctx)
+            self.assertIn("Invalid mode", resp.text or "")
+
+    def test_digest_run_default_mode_from_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, sent, _ = self._ctx(tmp)
+            # Set default mode to balanced
+            handle_update(_msg("/settings mode balanced"), ctx)
+
+            class Report:
+                run_id = "abc123"
+                status = "success"
+                source_errors = []
+                summary_errors = []
+
+            with (
+                patch("digest.ops.telegram_commands.load_effective_profile"),
+                patch("digest.ops.telegram_commands.load_effective_sources"),
+                patch(
+                    "digest.ops.telegram_commands.run_digest", return_value=Report()
+                ) as run_mock,
+            ):
+                resp = handle_update(_msg("/digest run"), ctx)
+                self.assertIn("balanced", resp.text or "")
+                for _ in range(50):
+                    if run_mock.called:
+                        break
+                    time.sleep(0.01)
+                kwargs = run_mock.call_args.kwargs
+                self.assertTrue(kwargs.get("allow_seen_fallback"))
+
+    # ── Settings mode/llm/accumulation/exclusion tests ───────────
+
+    def test_settings_mode_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/settings mode backfill"), ctx)
+            self.assertIn("backfill", resp.text or "")
+            overlay = Path(tmp) / "profile.local.yaml"
+            content = overlay.read_text(encoding="utf-8")
+            self.assertIn("backfill", content)
+
+    def test_settings_mode_invalid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/settings mode nonsense"), ctx)
+            self.assertIn("Invalid mode", resp.text or "")
+
+    def test_settings_mode_callback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            cb = _callback("cfg:m:replay_recent")
+            resp = handle_update(cb, ctx)
+            self.assertIn("replay_recent", resp.text or "")
+            self.assertIsNotNone(resp.edit_message_id)
+
+    def test_settings_llm_toggle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/settings llm on"), ctx)
+            self.assertIn("enabled", resp.text or "")
+            overlay = Path(tmp) / "profile.local.yaml"
+            content = overlay.read_text(encoding="utf-8")
+            self.assertIn("llm_enabled", content)
+
+    def test_settings_llm_callback_toggle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            cb = _callback("cfg:llm")
+            resp = handle_update(cb, ctx)
+            # Default is off, so toggle should enable
+            self.assertIn("enabled", resp.text or "")
+
+    def test_settings_accumulation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/settings accumulation 12"), ctx)
+            self.assertIn("12h", resp.text or "")
+
+    def test_settings_min_items(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/settings min-items 5"), ctx)
+            self.assertIn("5", resp.text or "")
+
+    def test_settings_exclusion_add(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/settings exclusion add crypto"), ctx)
+            self.assertIn("crypto", resp.text or "")
+            overlay = Path(tmp) / "profile.local.yaml"
+            content = overlay.read_text(encoding="utf-8")
+            self.assertIn("crypto", content)
+
+    def test_settings_exclusion_remove(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            handle_update(_msg("/settings exclusion add crypto"), ctx)
+            resp = handle_update(_msg("/settings exclusion remove crypto"), ctx)
+            self.assertIn("removed", resp.text or "")
+
+    def test_settings_status_shows_all(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/settings"), ctx)
+            text = resp.text or ""
+            self.assertIn("Content depth", text)
+            self.assertIn("Default run mode", text)
+            self.assertIn("LLM scoring", text)
+            self.assertIn("Accumulation", text)
+
+    # ── Schedule quiet hours + timezone tests ────────────────────
+
+    def test_schedule_quiet_on(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/schedule quiet on"), ctx)
+            self.assertIn("enabled", resp.text or "")
+
+    def test_schedule_quiet_times(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/schedule quiet 23:00 08:00"), ctx)
+            self.assertIn("23:00", resp.text or "")
+            self.assertIn("08:00", resp.text or "")
+
+    def test_schedule_timezone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/schedule timezone America/New_York"), ctx)
+            self.assertIn("America/New_York", resp.text or "")
+
+    def test_schedule_timezone_invalid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/schedule timezone Fake/Zone"), ctx)
+            self.assertIn("Invalid timezone", resp.text or "")
+
+    def test_schedule_quiet_callback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            cb = _callback("sch:quiet")
+            resp = handle_update(cb, ctx)
+            self.assertIn("Quiet hours", resp.text or "")
+            self.assertIsNotNone(resp.edit_message_id)
+
+    def test_schedule_keyboard_shows_quiet_and_tz(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, _, _ = self._ctx(tmp)
+            resp = handle_update(_msg("/schedule"), ctx)
+            markup = resp.reply_markup or {}
+            rows = markup.get("inline_keyboard", [])
+            texts = [btn.get("text", "") for row in rows for btn in row]
+            self.assertTrue(any("Quiet" in t for t in texts))
+            self.assertTrue(any("TZ" in t for t in texts))
+
     def test_no_console_button_without_url(self):
         with tempfile.TemporaryDirectory() as tmp:
             ctx, _, _ = self._ctx(tmp)
