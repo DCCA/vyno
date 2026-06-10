@@ -2,6 +2,15 @@
 
 AI Daily Digest is a local-first Python application and web console for turning noisy AI-source inputs into a curated daily brief. It ingests configured sources, scores and selects the highest-signal items, delivers a digest to Telegram, and archives Markdown notes to Obsidian.
 
+## Project Status
+
+Current as of 2026-06-10:
+- backend test suite passes with `254` tests
+- frontend source-shape suite passes with `24` tests
+- production web dependency audit reports `0` vulnerabilities
+- the Security GitHub Actions workflow passes on the default `master` branch
+- the remaining full `npm audit` item is a dev-server-only Vite/esbuild advisory that requires a breaking upgrade and is deferred for a dedicated dependency PR
+
 ## What The Project Does
 - Ingests content from RSS feeds, YouTube channels and queries, X inbox links, optional X selectors, and GitHub selectors.
 - Normalizes, deduplicates, scores, and selects items into `Must-read`, `Skim`, and `Videos`.
@@ -40,8 +49,9 @@ git clone <repo-url> && cd vyno
 make setup
 ```
 
-The setup wizard checks your system, installs dependencies, and starts the app.
-No API keys required for your first run — add them later for AI-powered features.
+The setup wizard checks your system, installs dependencies, creates local overlay files, and starts the app. The first-run path is designed to work without API keys; add them later for AI-powered scoring, Telegram delivery, GitHub API quota, or optional X selector features.
+
+`make doctor` is a preflight for an already prepared local profile. If you run it before `make setup`, it may report missing local overlays or keys that setup would normally create or keep optional for preview mode.
 
 <details>
 <summary>Manual setup (advanced)</summary>
@@ -338,11 +348,14 @@ Most commonly used:
 - `DIGEST_LOG_LEVEL`
 
 ## Verification Status
-Verified against the current working tree on 2026-03-08:
-Verified against the current working tree on 2026-03-14:
-- `make test` passed (`201` backend tests)
-- `npm --prefix web run test` passed (`7` frontend tests)
-- `npm --prefix web run build` passed
+Verified against the current working tree on 2026-06-10:
+- `make test` passed (`254` backend tests)
+- `npm --prefix web run test --silent` passed (`24` frontend tests)
+- `npm --prefix web run build --silent` passed
+- `make security-check` passed
+- `npm --prefix web audit --audit-level=moderate --omit=dev` passed with `0` vulnerabilities
+
+The full development dependency audit still reports a Vite/esbuild development-server advisory that requires a breaking Vite upgrade. That work is intentionally deferred to a separate dependency-upgrade PR so the production-audit cleanup stays low risk.
 
 ## Known Limitations
 - External API/network conditions can still produce `partial` or `failed` runs.
