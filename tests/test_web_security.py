@@ -4,6 +4,7 @@ from unittest.mock import patch
 from digest.web.app import (
     REDACTED_SECRET,
     _api_auth_decision,
+    _feedback_rating_for_label,
     _redact_secrets,
     _rehydrate_redacted_value,
     _web_api_auth_mode,
@@ -125,6 +126,11 @@ class TestWebSecurityHelpers(unittest.TestCase):
         self.assertEqual(hydrated["api_key"], "test-key")
         self.assertEqual(hydrated["llm_enabled"], False)
         self.assertEqual(hydrated["output"]["obsidian_folder"], "New Folder")
+
+    def test_feedback_rating_rejects_unsupported_labels(self):
+        self.assertEqual(_feedback_rating_for_label("more_like_this"), 5)
+        with self.assertRaisesRegex(ValueError, "unsupported feedback label"):
+            _feedback_rating_for_label("unknown_label")
 
 
 if __name__ == "__main__":

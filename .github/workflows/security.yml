@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - master
 
 jobs:
   security:
@@ -24,7 +25,7 @@ jobs:
           pip install detect-secrets bandit semgrep ruff
 
       - name: Detect new secrets
-        run: detect-secrets-hook --baseline .secrets.baseline $(git ls-files)
+        run: git ls-files | grep -v '^\.secrets\.baseline$' | xargs detect-secrets-hook --baseline .secrets.baseline
 
       - name: Bandit high-severity scan
         run: bandit -q -r src -lll

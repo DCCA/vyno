@@ -1701,7 +1701,10 @@ def create_app(settings: WebSettings):
         item_row = next((row for row in item_rows if str(row.get("item_id") or "") == item_id), None)
         if item_row is None:
             raise HTTPException(status_code=404, detail="run item not found")
-        rating = _feedback_rating_for_label(label)
+        try:
+            rating = _feedback_rating_for_label(label)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         features = _feedback_features_for_item_feedback(item_row, label=label)
         timeline_store.add_feedback(
             run_id=run_id,
@@ -1731,7 +1734,10 @@ def create_app(settings: WebSettings):
         actor = str(payload.get("actor", "web-admin") or "").strip() or "web-admin"
         if not source_type or not source_value or not label:
             raise HTTPException(status_code=400, detail="source_type, source_value, and label are required")
-        rating = _feedback_rating_for_label(label)
+        try:
+            rating = _feedback_rating_for_label(label)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         canonical = canonicalize_source_value(source_type, source_value)
         if label == "mute_source":
             updated_profile = _apply_blocked_source_preference(
@@ -2233,7 +2239,7 @@ def _feedback_rating_for_label(label: str) -> int:
         "mute_source": 1,
     }
     if normalized not in mapping:
-        raise HTTPException(status_code=400, detail="unsupported feedback label")
+        raise ValueError("unsupported feedback label")
     return mapping[normalized]
 
 
