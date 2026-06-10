@@ -18,8 +18,9 @@ run_detect_secrets() {
   fi
 
   printf "[security] detect-secrets baseline check...\n"
-  # shellcheck disable=SC2046
-  uvx --from detect-secrets detect-secrets-hook --baseline "${ROOT_DIR}/.secrets.baseline" $(git ls-files)
+  git ls-files \
+    | grep -v '^\.secrets\.baseline$' \
+    | xargs uvx --from detect-secrets detect-secrets-hook --baseline .secrets.baseline
 }
 
 run_bandit() {
