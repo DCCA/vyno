@@ -50,6 +50,7 @@ from digest.quality.online_repair import (
     validate_repaired_must_read,
 )
 from digest.ops.source_registry import source_key_for
+from digest.runtime_support import RunProgressEmitter, SourceLinkRecorder
 from digest.storage.sqlite_store import SQLiteStore
 from digest.logging_utils import get_run_logger, log_event
 from digest.summarizers.extractive import ExtractiveSummarizer
@@ -78,23 +79,12 @@ def run_digest(
     now = datetime.now(tz=timezone.utc)
     run_started_at = now
 
-    def emit_progress(stage: str, message: str, **fields: Any) -> None:
-        if progress_cb is None:
-            return
-        payload: dict[str, Any] = {
-            "run_id": run_id,
-            "stage": stage,
-            "message": message,
-            "elapsed_s": round(
-                (datetime.now(tz=timezone.utc) - run_started_at).total_seconds(),
-                1,
-            ),
-        }
-        payload.update(fields)
-        try:
-            progress_cb(payload)
-        except Exception:
-            return
+    progress = RunProgressEmitter(
+        run_id=run_id,
+        started_at=run_started_at,
+        progress_cb=progress_cb,
+    )
+    emit_progress = progress.emit
 
     window_start = (now - timedelta(hours=DEFAULT_WINDOW_HOURS)).isoformat()
     if use_last_completed_window:
@@ -131,21 +121,9 @@ def run_digest(
     github_fetched_items = 0
 
     raw_items = []
-    source_links: list[dict[str, str]] = []
-
-    def record_source_links(source_type: str, source_value: str, items: list[Item]) -> None:
-        if not items:
-            return
-        source_key = source_key_for(source_type, source_value)
-        for item in items:
-            source_links.append(
-                {
-                    "source_key": source_key,
-                    "source_type": source_type,
-                    "source_value": source_value,
-                    "item_id": item.id,
-                }
-            )
+    source_link_recorder = SourceLinkRecorder()
+    source_links = source_link_recorder.links
+    record_source_links = source_link_recorder.record
 
     for feed_url in sources.rss_feeds:
         try:
