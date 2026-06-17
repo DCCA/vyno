@@ -2,6 +2,12 @@
 
 AI Daily Digest is a local-first Python application and web console for turning noisy AI-source inputs into a curated daily brief. It ingests configured sources, scores and selects the highest-signal items, delivers a digest to Telegram, and archives Markdown notes to Obsidian.
 
+## Product Thesis
+
+AI Daily Digest is a personal AI signal desk: it helps a user decide what to read, skim, try, or ignore by combining source curation, scoring, delivery, feedback, and archive workflows in one local-first system.
+
+The product bet is that AI information overload is not solved by another feed. It is solved by an operator workflow that preserves source context, ranks signal, supports feedback, and sends the right summary to the right place.
+
 ## Project Status
 
 Current as of 2026-06-10:
