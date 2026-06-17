@@ -133,7 +133,7 @@ class TestConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "profile.yaml"
             path.write_text("output:\n  obsidian_vault_path: ~/vault\n", encoding="utf-8")
-            with patch.dict("os.environ", {"HOME": tmp}, clear=False):
+            with patch.dict("os.environ", {"HOME": tmp, "OBSIDIAN_VAULT_PATH": ""}, clear=False):
                 profile = load_profile(path)
             self.assertEqual(profile.output.obsidian_vault_path, str(Path(tmp) / "vault"))
 
