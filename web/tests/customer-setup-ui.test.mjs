@@ -39,8 +39,8 @@ test("app routes incomplete setups into onboarding", () => {
 })
 
 test("dashboard and profile expose automation status after setup", () => {
-  expectSource(dashboardSource, /Automation Control/, "dashboard automation control module missing")
-  expectSource(dashboardSource, /Current Posture/, "dashboard posture module missing")
+  expectSource(dashboardSource, /Automation control/, "dashboard automation control module missing")
+  expectSource(dashboardSource, /Current posture/, "dashboard posture module missing")
   expectSource(dashboardSource, /Automation enabled|Automation not enabled/, "dashboard automation messaging missing")
   expectSource(dashboardSource, /Manage Schedule/, "dashboard schedule quick action missing")
   expectSource(profileSource, /title="Automation"/, "profile automation section missing")

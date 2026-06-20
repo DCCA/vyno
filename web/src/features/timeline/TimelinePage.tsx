@@ -59,7 +59,7 @@ export function TimelinePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-display">Run Browser</CardTitle>
+          <CardTitle className="font-display">Run browser</CardTitle>
           <CardDescription>Filter and inspect a run as a structured browser rather than a raw operations log.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -154,7 +154,7 @@ export function TimelinePage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="font-display">Timeline Summary</CardTitle>
+              <CardTitle className="font-display">Timeline summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {timelineSummary ? (
@@ -213,7 +213,7 @@ export function TimelinePage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="font-display">Delivered Digest Review</CardTitle>
+              <CardTitle className="font-display">Delivered digest review</CardTitle>
               <CardDescription>Review the archived digest exactly as rendered and capture item-level feedback for future runs.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -294,7 +294,7 @@ export function TimelinePage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="font-display">Timeline Events</CardTitle>
+              <CardTitle className="font-display">Timeline events</CardTitle>
             </CardHeader>
             <CardContent>
               {timelineEvents.length === 0 ? (
@@ -354,7 +354,7 @@ export function TimelinePage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="font-display">Event Details</CardTitle>
+              <CardTitle className="font-display">Event details</CardTitle>
             </CardHeader>
             <CardContent>
               {selectedTimelineEvent ? (
@@ -374,7 +374,7 @@ export function TimelinePage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="font-display">Review Notes</CardTitle>
+              <CardTitle className="font-display">Review notes</CardTitle>
               <CardDescription>Capture run observations and follow-up actions for future improvements.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -394,7 +394,7 @@ export function TimelinePage() {
                 </div>
                 <Button onClick={onAddTimelineNote} disabled={saving || !timelineRunId || !timelineNoteText.trim()}>
                   {saveAction === "timeline-note" ? <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" /> : <Save className="h-4 w-4" />}
-                  {saveAction === "timeline-note" ? "Saving..." : "Add Note"}
+                  {saveAction === "timeline-note" ? "Saving..." : "Add note"}
                 </Button>
               </div>
               <div className="space-y-2">

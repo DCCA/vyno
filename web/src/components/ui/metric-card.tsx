@@ -32,7 +32,7 @@ export function MetricCard({
     return (
       <div className={cn("flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3", className)}>
         <span className="text-sm text-muted-foreground">{label}</span>
-        <span className="text-sm font-semibold text-foreground">{value}</span>
+        <span className="text-sm font-semibold tabular-nums text-foreground">{value}</span>
       </div>
     )
   }
@@ -41,7 +41,7 @@ export function MetricCard({
     <Card className={cn(metricVariants({ variant }), className)}>
       <CardHeader className="pb-4">
         <CardDescription className="text-[11px] uppercase tracking-[0.06em]">{label}</CardDescription>
-        <CardTitle className="font-display text-2xl">{value}</CardTitle>
+        <CardTitle className="font-display text-2xl tabular-nums">{value}</CardTitle>
         {detail ? <p className="text-sm text-muted-foreground">{detail}</p> : null}
       </CardHeader>
     </Card>
