@@ -20,7 +20,7 @@ test("profile setup uses guided sections and inline apply actions", () => {
   expectSource(profileSource, /X cost per post \(USD\)/, "x cost control missing")
   expectSource(profileSource, /X max spend per run \(USD\)/, "x spend cap control missing")
   expectSource(profileSource, /Output/, "output section missing")
-  expectSource(profileSource, /Apply Changes/, "compact apply panel missing")
+  expectSource(profileSource, /Apply changes/, "compact apply panel missing")
   expectSource(profileSource, /Maintenance tools/, "maintenance utility section missing")
   expectSource(profileSource, /Expert mode/, "expert mode utility section missing")
   expectSource(profileSource, /Fresh only/, "fresh_only guided label missing")

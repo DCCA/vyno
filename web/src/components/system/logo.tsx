@@ -11,8 +11,8 @@ interface VynoMarkProps {
 const gradientDef = (id: string) => (
   <defs>
     <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stopColor="#6366F1" />
-      <stop offset="100%" stopColor="#8B5CF6" />
+      <stop offset="0%" stopColor="#10B981" />
+      <stop offset="100%" stopColor="#047857" />
     </linearGradient>
   </defs>
 )

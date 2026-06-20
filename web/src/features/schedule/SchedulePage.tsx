@@ -87,7 +87,7 @@ export function SchedulePage() {
       <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <Card>
           <CardHeader>
-            <CardTitle className="font-display">Automation Status</CardTitle>
+            <CardTitle className="font-display">Automation status</CardTitle>
             <CardDescription>High-signal readout for the current automation posture before you change anything.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
@@ -116,7 +116,7 @@ export function SchedulePage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="font-display">Schedule Controls</CardTitle>
+            <CardTitle className="font-display">Schedule controls</CardTitle>
             <CardDescription>Save, pause, or resume the cadence used by the background scheduler service.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -253,7 +253,7 @@ export function SchedulePage() {
       <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <Card>
           <CardHeader>
-            <CardTitle className="font-display">What Happens Next</CardTitle>
+            <CardTitle className="font-display">What happens next</CardTitle>
             <CardDescription>Explain the current schedule in plain language before the user leaves the page.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
@@ -273,7 +273,7 @@ export function SchedulePage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="font-display">Issues And Recovery</CardTitle>
+            <CardTitle className="font-display">Issues and recovery</CardTitle>
             <CardDescription>Keep scheduler problems and next-step guidance visible near the controls.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">

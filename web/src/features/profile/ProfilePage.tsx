@@ -656,7 +656,7 @@ export function ProfilePage() {
         <div className="xl:sticky xl:top-4 xl:self-start">
           <Card>
             <CardHeader>
-              <CardTitle className="font-display">Apply Changes</CardTitle>
+              <CardTitle className="font-display">Apply changes</CardTitle>
               <CardDescription>Keep this panel small: save, validate, and open diff tools only when needed.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

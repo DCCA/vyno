@@ -33,7 +33,7 @@ export function HistoryPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-display">Snapshot Ledger</CardTitle>
+          <CardTitle className="font-display">Snapshot ledger</CardTitle>
           <CardDescription>Rollback overlay state to a previous snapshot when needed, without mixing archival data with live editing.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

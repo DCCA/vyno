@@ -24,10 +24,10 @@ test("schedule is a dedicated workspace with its own route and save flow", () =>
   expectSource(scheduleSource, /title="Schedule"/, "schedule page header missing")
   expectSource(scheduleSource, /cadence: \${scheduleDraft\.cadence}/, "schedule header should show cadence")
   expectSource(scheduleSource, /formatTimestampBadge/, "schedule header should use a compact next-run label")
-  expectSource(scheduleSource, /Schedule Controls/, "schedule controls section missing")
+  expectSource(scheduleSource, /Schedule controls/, "schedule controls section missing")
   expectSource(scheduleSource, /Quiet hours/, "schedule quiet-hours controls missing")
-  expectSource(scheduleSource, /What Happens Next/, "schedule preview section missing")
-  expectSource(scheduleSource, /Issues And Recovery/, "schedule recovery section missing")
+  expectSource(scheduleSource, /What happens next/, "schedule preview section missing")
+  expectSource(scheduleSource, /Issues and recovery/, "schedule recovery section missing")
 })
 
 test("setup and profile link into schedule controls instead of duplicating the full editor", () => {
