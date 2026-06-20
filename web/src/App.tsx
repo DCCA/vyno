@@ -87,6 +87,8 @@ function App() {
   const [sources, setSources] = useState<SourceMap>({})
   const [sourceType, setSourceType] = useState("rss")
   const [sourceValue, setSourceValue] = useState("")
+  const [sourceStudioOpen, setSourceStudioOpen] = useState(false)
+  const [sourceEditOriginal, setSourceEditOriginal] = useState<{ type: string; value: string } | null>(null)
   const [sourceSearch, setSourceSearch] = useState("")
   const [showAllUnifiedSources, setShowAllUnifiedSources] = useState(false)
   const [sourceStatusFilter, setSourceStatusFilter] = useState<"all" | "healthy" | "failing">("all")
@@ -745,7 +747,51 @@ function App() {
     if (!row.can_edit) return
     setSourceType(row.type)
     setSourceValue(row.source)
-    setScopedNotice("sources", "ok", `Loaded ${row.type} source for editing.`)
+    setSourceEditOriginal({ type: row.type, value: row.source })
+    setSourceStudioOpen(true)
+    setScopedNotice("sources", "ok", `Editing ${row.type} source. Update the value, then Save changes.`)
+  }
+
+  function cancelSourceEdit() {
+    setSourceEditOriginal(null)
+    setSourceValue("")
+    clearScopedNotice("sources")
+  }
+
+  async function saveSourceEdit() {
+    if (!sourceEditOriginal) return
+    if (!sourceType || !sourceValue.trim()) {
+      setScopedNotice("sources", "error", "Enter a value before saving.")
+      return
+    }
+    const unchanged =
+      sourceEditOriginal.type === sourceType && sourceEditOriginal.value === sourceValue.trim()
+    if (unchanged) {
+      cancelSourceEdit()
+      setScopedNotice("sources", "ok", "No changes to save.")
+      return
+    }
+    setSaveAction("source-add")
+    setSaving(true)
+    try {
+      await api("/api/config/sources/add", {
+        method: "POST",
+        body: JSON.stringify({ source_type: sourceType, value: sourceValue.trim() }),
+      })
+      await api("/api/config/sources/remove", {
+        method: "POST",
+        body: JSON.stringify({ source_type: sourceEditOriginal.type, value: sourceEditOriginal.value }),
+      })
+      await refreshAll({ preserveProfileWorkspace: false, preserveRunPolicyWorkspace: false })
+      setSourceValue("")
+      setSourceEditOriginal(null)
+      setScopedNotice("sources", "ok", "Source updated.")
+    } catch (error) {
+      setScopedNotice("sources", "error", String(error))
+    } finally {
+      setSaveAction("")
+      setSaving(false)
+    }
   }
 
   async function deleteUnifiedSourceRow(row: UnifiedSourceRow) {
@@ -1153,6 +1199,13 @@ function App() {
   }
 
   async function rollback(snapshotId: string) {
+    const confirmed = await confirm({
+      title: "Roll back to this snapshot?",
+      description: "This replaces your current source and profile overlays with the snapshot's contents. A new snapshot of the current state is kept so you can undo.",
+      confirmLabel: "Roll back",
+      variant: "destructive",
+    })
+    if (!confirmed) return
     setSaveAction("rollback")
     setActiveRollbackId(snapshotId)
     setSaving(true)
@@ -1373,12 +1426,16 @@ function App() {
     sourceSearch, setSourceSearch, sourceStatusFilter, setSourceStatusFilter,
     sourceHealth, filteredUnifiedSourceRows, unifiedRowsVisible,
     showAllUnifiedSources, setShowAllUnifiedSources,
+    sourceStudioOpen, setSourceStudioOpen,
+    sourceEditing: Boolean(sourceEditOriginal),
     onHandleSourceMutation: (action: "add" | "remove") => void handleSourceMutation(action),
     onEditUnifiedSourceRow: editUnifiedSourceRow,
+    onSaveSourceEdit: () => void saveSourceEdit(),
+    onCancelSourceEdit: cancelSourceEdit,
     onDeleteUnifiedSourceRow: (row: UnifiedSourceRow) => void deleteUnifiedSourceRow(row),
     onSourceFeedback: (row: UnifiedSourceRow, label: string) => void submitSourceFeedback(row, label),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [sources, sourceTypes, sourceType, sourceValue, sourceSearch, sourceStatusFilter, sourceHealth, filteredUnifiedSourceRows, unifiedRowsVisible, showAllUnifiedSources])
+  }), [sources, sourceTypes, sourceType, sourceValue, sourceSearch, sourceStatusFilter, sourceHealth, filteredUnifiedSourceRows, unifiedRowsVisible, showAllUnifiedSources, sourceStudioOpen, sourceEditOriginal])
 
   const profileSlice = useMemo(() => ({
     profile, profileJson, setProfileJson, updateProfileField,

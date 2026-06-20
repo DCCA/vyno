@@ -102,6 +102,20 @@ export function sourceValuePlaceholderForType(sourceType: string): string {
   return "Enter source value"
 }
 
+export function sourceValueHelpForType(sourceType: string): string {
+  const st = (sourceType || "").trim().toLowerCase()
+  if (st === "rss") return "Paste the feed URL (ends in /rss, /feed, or .xml)."
+  if (st === "youtube_channel") return "The channel ID (starts with UC…), or paste the channel URL."
+  if (st === "youtube_query") return "A search phrase — videos matching it are pulled in."
+  if (st === "x_author") return "An X handle (@name) or profile URL."
+  if (st === "x_theme") return "A topic phrase to track across X."
+  if (st === "github_repo") return "owner/repo, or paste the repository URL."
+  if (st === "github_topic") return "A GitHub topic tag (e.g. llm-evals)."
+  if (st === "github_query") return "A GitHub search query."
+  if (st === "github_org") return "An org name, or paste the org URL."
+  return "Enter the source value for the selected type."
+}
+
 export function sourceHealthMatches(type: string, source: string, item: SourceHealthItem): boolean {
   const t = (type || "").trim().toLowerCase()
   const s = (source || "").trim().toLowerCase()

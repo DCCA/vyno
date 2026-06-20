@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Activity, Loader2, RefreshCcw, Save } from "lucide-react"
 
 import { useTimelineState, useUiState } from "@/app/console-context"
@@ -30,6 +30,13 @@ export function TimelinePage() {
   const notice = localNotices.timeline
   const [feedbackGiven, setFeedbackGiven] = useState<Record<string, string>>({})
   const [eventsVisible, setEventsVisible] = useState(50)
+  const eventDetailRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (timelineSelectedEventId && eventDetailRef.current) {
+      eventDetailRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    }
+  }, [timelineSelectedEventId])
 
   function handleItemFeedback(itemId: string, label: "more_like_this" | "not_relevant" | "too_technical" | "repeat_source") {
     onSubmitItemFeedback(itemId, label)
@@ -164,8 +171,8 @@ export function TimelinePage() {
                       status: {timelineSummary.status}
                     </Badge>
                     <Badge variant="secondary">events: {timelineSummary.event_count}</Badge>
-                    <Badge variant="secondary">errors: {timelineSummary.error_event_count}</Badge>
-                    <Badge variant="secondary">warnings: {timelineSummary.warn_event_count}</Badge>
+                    <Badge variant={timelineSummary.error_event_count > 0 ? "destructive" : "secondary"}>errors: {timelineSummary.error_event_count}</Badge>
+                    <Badge variant={timelineSummary.warn_event_count > 0 ? "warning" : "secondary"}>warnings: {timelineSummary.warn_event_count}</Badge>
                     <Badge variant="secondary">duration: {formatElapsed(timelineSummary.duration_s)}</Badge>
                     <Badge variant="secondary">
                       M/S/V: {timelineSummary.must_read_count}/{timelineSummary.skim_count}/{timelineSummary.video_count}
@@ -320,15 +327,25 @@ export function TimelinePage() {
                   {timelineEvents.slice(0, eventsVisible).map((row) => (
                     <TableRow
                       key={`${row.run_id}:${row.id}`}
-                      className="cursor-pointer"
+                      className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                       data-state={row.id === timelineSelectedEventId ? "selected" : undefined}
+                      tabIndex={0}
+                      role="button"
+                      aria-pressed={row.id === timelineSelectedEventId}
+                      aria-label={`Event ${row.event_index}: ${row.stage} ${row.severity}`}
                       onClick={() => setTimelineSelectedEventId(row.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault()
+                          setTimelineSelectedEventId(row.id)
+                        }
+                      }}
                     >
                       <TableCell>{row.event_index}</TableCell>
                       <TableCell className="font-mono text-xs">{formatTimestamp(row.ts_utc)}</TableCell>
                       <TableCell className="font-mono text-xs">{row.stage}</TableCell>
                       <TableCell>
-                        <Badge variant={row.severity === "error" ? "warning" : row.severity === "warn" ? "outline" : "secondary"}>
+                        <Badge variant={row.severity === "error" ? "destructive" : row.severity === "warn" ? "warning" : "secondary"}>
                           {row.severity}
                         </Badge>
                       </TableCell>
@@ -352,7 +369,7 @@ export function TimelinePage() {
         </div>
 
         <div className="space-y-4">
-          <Card>
+          <Card ref={eventDetailRef}>
             <CardHeader>
               <CardTitle className="font-display">Event details</CardTitle>
             </CardHeader>

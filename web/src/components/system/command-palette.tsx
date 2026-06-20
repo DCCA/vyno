@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 
 import { useTheme } from "@/hooks/use-theme"
+import { useRunState } from "@/app/console-context"
 
 const pages = [
   { id: "dashboard", label: "Dashboard", hint: "Status and alerts", path: "/", icon: LayoutDashboard },
@@ -34,6 +35,7 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
   const { theme, toggle } = useTheme()
+  const { onRunNow, runNowLoading } = useRunState()
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -64,8 +66,12 @@ export function CommandPalette() {
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50 animate-fade-in" />
         <Dialog.Content
           className="fixed left-1/2 top-[20%] z-50 w-full max-w-[540px] -translate-x-1/2 rounded-xl border border-border bg-card shadow-lg animate-scale-in overflow-hidden"
-          aria-label="Command palette"
+          aria-describedby="command-palette-description"
         >
+          <Dialog.Title className="sr-only">Command palette</Dialog.Title>
+          <Dialog.Description id="command-palette-description" className="sr-only">
+            Search pages and run actions. Use arrow keys to navigate and Enter to select.
+          </Dialog.Description>
           <Command loop>
             <div className="flex items-center gap-2 border-b border-border px-4">
               <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -95,12 +101,21 @@ export function CommandPalette() {
               <Command.Group heading="Actions">
                 <Command.Item
                   value="Run digest now"
+                  disabled={runNowLoading}
                   onSelect={() => {
-                    goTo("/run")
+                    onRunNow()
+                    setOpen(false)
                   }}
                 >
                   <Play className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="font-medium">Run digest now</span>
+                  <span className="font-medium">{runNowLoading ? "Starting run…" : "Run digest now"}</span>
+                </Command.Item>
+                <Command.Item
+                  value="Open Run Center manual run"
+                  onSelect={() => goTo("/run")}
+                >
+                  <Rocket className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="font-medium">Open Run Center</span>
                 </Command.Item>
                 <Command.Item
                   value="Toggle theme dark light"
