@@ -21,7 +21,7 @@ def clean_youtube_text(raw: str) -> str:
     if not text:
         return ""
 
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     out: list[str] = []
     seen_urls: set[str] = set()
     skipping_sources = False
