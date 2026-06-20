@@ -1,10 +1,10 @@
 import unittest
 from unittest.mock import patch
 
-from digest.web.app import (
+from digest.web.app import _feedback_rating_for_label
+from digest.web.security import (
     REDACTED_SECRET,
     _api_auth_decision,
-    _feedback_rating_for_label,
     _redact_secrets,
     _rehydrate_redacted_value,
     _web_api_auth_mode,

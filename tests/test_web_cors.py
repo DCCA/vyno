@@ -4,12 +4,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from digest.web.app import (
+from digest.web.app import WebSettings, create_app
+from digest.web.security import (
     DEFAULT_WEB_CORS_ORIGINS,
-    WebSettings,
     _cors_allow_origin_regex,
     _cors_allowed_origins,
-    create_app,
 )
 
 
