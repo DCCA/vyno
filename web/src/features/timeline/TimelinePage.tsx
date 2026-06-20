@@ -73,9 +73,9 @@ export function TimelinePage() {
           <InlineNotice notice={notice} onDismiss={() => clearScopedNotice("timeline")} />
           <div className="grid gap-3 md:grid-cols-[2fr,1fr,1fr,1fr,auto]">
             <div className="space-y-2">
-              <Label>Run</Label>
+              <Label htmlFor="timeline-run-select">Run</Label>
               <Select value={timelineRunId} onValueChange={setTimelineRunId}>
-                <SelectTrigger>
+                <SelectTrigger id="timeline-run-select">
                   <SelectValue placeholder="Select run" />
                 </SelectTrigger>
                 <SelectContent>
@@ -88,9 +88,9 @@ export function TimelinePage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Stage</Label>
+              <Label htmlFor="timeline-stage-select">Stage</Label>
               <Select value={timelineStageFilter} onValueChange={setTimelineStageFilter}>
-                <SelectTrigger>
+                <SelectTrigger id="timeline-stage-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -104,9 +104,9 @@ export function TimelinePage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Severity</Label>
+              <Label htmlFor="timeline-severity-select">Severity</Label>
               <Select value={timelineSeverityFilter} onValueChange={setTimelineSeverityFilter}>
-                <SelectTrigger>
+                <SelectTrigger id="timeline-severity-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -118,9 +118,9 @@ export function TimelinePage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Order</Label>
+              <Label htmlFor="timeline-order-select">Order</Label>
               <Select value={timelineOrder} onValueChange={(value) => setTimelineOrder(value === "asc" ? "asc" : "desc")}>
-                <SelectTrigger>
+                <SelectTrigger id="timeline-order-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
