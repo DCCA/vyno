@@ -6,54 +6,56 @@
 
 @layer base {
   :root {
-    --background: 0 0% 99%;
-    --foreground: 0 0% 9%;
+    /* Neutral family: one cool-slate tint (hue 200), applied consistently. */
+    --background: 200 16% 99%;
+    --foreground: 200 12% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
-    --primary: 0 0% 9%;
+    --card-foreground: 200 12% 10%;
+    --primary: 200 12% 11%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 20%;
-    --muted: 0 0% 95.5%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 243 75% 59%;
-    --accent-end: 271 91% 65%;
+    --secondary: 200 14% 96%;
+    --secondary-foreground: 200 10% 22%;
+    --muted: 200 12% 95.5%;
+    --muted-foreground: 200 7% 44%;
+    /* Single considered accent: emerald. No gradient. */
+    --accent: 162 84% 28%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 51%;
+    --destructive: 0 72% 47%;
     --destructive-foreground: 0 0% 100%;
-    --success: 142 71% 45%;
+    --success: 158 74% 34%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 9%;
-    --border: 0 0% 90%;
-    --input: 0 0% 88%;
-    --ring: 243 75% 59%;
+    --warning: 32 92% 44%;
+    --warning-foreground: 0 0% 100%;
+    --border: 200 12% 90%;
+    --input: 200 12% 88%;
+    --ring: 162 84% 28%;
     --radius: 0.75rem;
   }
 
   .dark {
-    --background: 0 0% 7%;
-    --foreground: 0 0% 95%;
-    --card: 0 0% 10%;
-    --card-foreground: 0 0% 95%;
-    --primary: 0 0% 95%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14%;
-    --secondary-foreground: 0 0% 80%;
-    --muted: 0 0% 13%;
-    --muted-foreground: 0 0% 55%;
-    --accent: 243 75% 59%;
-    --accent-end: 271 91% 65%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 65% 55%;
+    /* Cool-slate neutrals, off-black (not pure #000). */
+    --background: 200 14% 7%;
+    --foreground: 200 10% 95%;
+    --card: 200 12% 10%;
+    --card-foreground: 200 10% 95%;
+    --primary: 200 10% 95%;
+    --primary-foreground: 200 14% 9%;
+    --secondary: 200 10% 14%;
+    --secondary-foreground: 200 8% 80%;
+    --muted: 200 10% 13%;
+    --muted-foreground: 200 7% 56%;
+    /* Brighter emerald for dark surfaces; dark foreground keeps button text legible (CR 5.27). */
+    --accent: 158 64% 45%;
+    --accent-foreground: 160 90% 12%;
+    --destructive: 0 65% 58%;
     --destructive-foreground: 0 0% 100%;
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 9%;
-    --border: 0 0% 18%;
-    --input: 0 0% 20%;
-    --ring: 243 75% 59%;
+    --success: 156 60% 46%;
+    --success-foreground: 160 90% 10%;
+    --warning: 35 90% 55%;
+    --warning-foreground: 35 90% 10%;
+    --border: 200 10% 18%;
+    --input: 200 10% 20%;
+    --ring: 158 64% 45%;
   }
 
   * {
@@ -62,6 +64,11 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  /* Data-dense console: monospace numbers align in columns. */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -202,34 +209,33 @@
   }
 
   .bg-console-rail {
-    background: linear-gradient(180deg, hsl(243 75% 59% / 0.06) 0%, hsl(0 0% 7%) 120px);
+    background: linear-gradient(180deg, hsl(162 84% 28% / 0.06) 0%, hsl(200 14% 7%) 120px);
   }
 
   .dark .bg-console-rail {
-    background: linear-gradient(180deg, hsl(243 75% 59% / 0.04) 0%, hsl(0 0% 5%) 120px);
+    background: linear-gradient(180deg, hsl(158 64% 45% / 0.05) 0%, hsl(200 16% 5%) 120px);
   }
 
+  /* Single accent, no gradient. Class names kept so existing call sites stay valid. */
   .gradient-accent {
-    background: linear-gradient(135deg, hsl(var(--accent)), hsl(var(--accent-end)));
+    background: hsl(var(--accent));
   }
 
   .gradient-accent-text {
-    background: linear-gradient(135deg, hsl(var(--accent)), hsl(var(--accent-end)));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: hsl(var(--accent));
   }
 
+  /* Shadows tinted to the cool-slate neutral hue, single light source (top-down). */
   .shadow-panel {
     box-shadow:
-      0 1px 3px 0 rgba(0, 0, 0, 0.08),
-      0 1px 2px -1px rgba(0, 0, 0, 0.08);
+      0 1px 3px 0 hsl(200 30% 12% / 0.08),
+      0 1px 2px -1px hsl(200 30% 12% / 0.08);
   }
 
   .shadow-panel-lg {
     box-shadow:
-      0 4px 6px -1px rgba(0, 0, 0, 0.07),
-      0 2px 4px -2px rgba(0, 0, 0, 0.07);
+      0 4px 6px -1px hsl(200 30% 12% / 0.07),
+      0 2px 4px -2px hsl(200 30% 12% / 0.07);
   }
 
   .bg-panel-subtle {

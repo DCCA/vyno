@@ -1470,7 +1470,7 @@ function App() {
           <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMobileNavOpen(false)} />
         ) : null}
         <aside className={`${mobileNavOpen ? "fixed inset-y-0 left-0 z-50 w-[240px]" : "hidden"} lg:sticky lg:top-0 lg:block lg:h-screen lg:self-start`}>
-          <div className="flex h-full flex-col border-r border-border bg-card" style={{ backgroundImage: "linear-gradient(180deg, hsl(243 75% 59% / 0.04) 0%, transparent 120px)" }}>
+          <div className="flex h-full flex-col border-r border-border bg-card" style={{ backgroundImage: "linear-gradient(180deg, hsl(162 84% 28% / 0.04) 0%, transparent 120px)" }}>
             <div className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
