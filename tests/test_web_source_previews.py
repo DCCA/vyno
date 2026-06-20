@@ -66,7 +66,7 @@ class TestWebSourcePreviews(unittest.TestCase):
             )
 
         with patch(
-            "digest.web.app.fetch_link_preview_metadata",
+            "digest.web.sources.fetch_link_preview_metadata",
             return_value={
                 "url": "https://example.com/article",
                 "resolved_url": "https://example.com/article",
