@@ -33,11 +33,12 @@ import { api } from "@/lib/api"
 import {
   diffObjects,
   formatElapsed,
+  formatModeLabel,
   parseProfilePayload,
   surfaceFromLegacyQuery,
   toInt,
 } from "@/lib/console-utils"
-import { navItemsForLifecycle, surfaceForPathname, surfacePaths } from "@/app/navigation"
+import { navItemsForLifecycle, surfaceForPathname, surfaceLabels, surfacePaths } from "@/app/navigation"
 import type {
   ConsoleSurface,
   FeedbackSummary,
@@ -87,6 +88,8 @@ function App() {
   const [sources, setSources] = useState<SourceMap>({})
   const [sourceType, setSourceType] = useState("rss")
   const [sourceValue, setSourceValue] = useState("")
+  const [sourceStudioOpen, setSourceStudioOpen] = useState(false)
+  const [sourceEditOriginal, setSourceEditOriginal] = useState<{ type: string; value: string } | null>(null)
   const [sourceSearch, setSourceSearch] = useState("")
   const [showAllUnifiedSources, setShowAllUnifiedSources] = useState(false)
   const [sourceStatusFilter, setSourceStatusFilter] = useState<"all" | "healthy" | "failing">("all")
@@ -745,7 +748,51 @@ function App() {
     if (!row.can_edit) return
     setSourceType(row.type)
     setSourceValue(row.source)
-    setScopedNotice("sources", "ok", `Loaded ${row.type} source for editing.`)
+    setSourceEditOriginal({ type: row.type, value: row.source })
+    setSourceStudioOpen(true)
+    setScopedNotice("sources", "ok", `Editing ${row.type} source. Update the value, then Save changes.`)
+  }
+
+  function cancelSourceEdit() {
+    setSourceEditOriginal(null)
+    setSourceValue("")
+    clearScopedNotice("sources")
+  }
+
+  async function saveSourceEdit() {
+    if (!sourceEditOriginal) return
+    if (!sourceType || !sourceValue.trim()) {
+      setScopedNotice("sources", "error", "Enter a value before saving.")
+      return
+    }
+    const unchanged =
+      sourceEditOriginal.type === sourceType && sourceEditOriginal.value === sourceValue.trim()
+    if (unchanged) {
+      cancelSourceEdit()
+      setScopedNotice("sources", "ok", "No changes to save.")
+      return
+    }
+    setSaveAction("source-add")
+    setSaving(true)
+    try {
+      await api("/api/config/sources/add", {
+        method: "POST",
+        body: JSON.stringify({ source_type: sourceType, value: sourceValue.trim() }),
+      })
+      await api("/api/config/sources/remove", {
+        method: "POST",
+        body: JSON.stringify({ source_type: sourceEditOriginal.type, value: sourceEditOriginal.value }),
+      })
+      await refreshAll({ preserveProfileWorkspace: false, preserveRunPolicyWorkspace: false })
+      setSourceValue("")
+      setSourceEditOriginal(null)
+      setScopedNotice("sources", "ok", "Source updated.")
+    } catch (error) {
+      setScopedNotice("sources", "error", String(error))
+    } finally {
+      setSaveAction("")
+      setSaving(false)
+    }
   }
 
   async function deleteUnifiedSourceRow(row: UnifiedSourceRow) {
@@ -1094,7 +1141,7 @@ function App() {
         savedParts.push("profile changes")
         await refreshAll({ preserveProfileWorkspace: false, preserveRunPolicyWorkspace: false })
       }
-      setScopedNotice("profile", "ok", `Saved ${savedParts.join(" and ")}.`)
+      setScopedNotice("profile", "ok", `Saved ${savedParts.join(" and ")}. Changes apply on your next run.`)
     } catch (error) {
       if (savedParts.length > 0) {
         setScopedNotice("profile", "error", `Saved ${savedParts.join(" and ")}, but a later step failed: ${String(error)}`)
@@ -1153,6 +1200,13 @@ function App() {
   }
 
   async function rollback(snapshotId: string) {
+    const confirmed = await confirm({
+      title: "Roll back to this snapshot?",
+      description: "This replaces your current source and profile overlays with the snapshot's contents. A new snapshot of the current state is kept so you can undo.",
+      confirmLabel: "Roll back",
+      variant: "destructive",
+    })
+    if (!confirmed) return
     setSaveAction("rollback")
     setActiveRollbackId(snapshotId)
     setSaving(true)
@@ -1373,12 +1427,16 @@ function App() {
     sourceSearch, setSourceSearch, sourceStatusFilter, setSourceStatusFilter,
     sourceHealth, filteredUnifiedSourceRows, unifiedRowsVisible,
     showAllUnifiedSources, setShowAllUnifiedSources,
+    sourceStudioOpen, setSourceStudioOpen,
+    sourceEditing: Boolean(sourceEditOriginal),
     onHandleSourceMutation: (action: "add" | "remove") => void handleSourceMutation(action),
     onEditUnifiedSourceRow: editUnifiedSourceRow,
+    onSaveSourceEdit: () => void saveSourceEdit(),
+    onCancelSourceEdit: cancelSourceEdit,
     onDeleteUnifiedSourceRow: (row: UnifiedSourceRow) => void deleteUnifiedSourceRow(row),
     onSourceFeedback: (row: UnifiedSourceRow, label: string) => void submitSourceFeedback(row, label),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [sources, sourceTypes, sourceType, sourceValue, sourceSearch, sourceStatusFilter, sourceHealth, filteredUnifiedSourceRows, unifiedRowsVisible, showAllUnifiedSources])
+  }), [sources, sourceTypes, sourceType, sourceValue, sourceSearch, sourceStatusFilter, sourceHealth, filteredUnifiedSourceRows, unifiedRowsVisible, showAllUnifiedSources, sourceStudioOpen, sourceEditOriginal])
 
   const profileSlice = useMemo(() => ({
     profile, profileJson, setProfileJson, updateProfileField,
@@ -1574,7 +1632,7 @@ function App() {
             >
               <Menu className="h-4 w-4" />
             </Button>
-            <h1 className="font-display text-sm font-semibold capitalize">{currentSurface === "dashboard" ? "Overview" : currentSurface.replace(/-/g, " ")}</h1>
+            <h1 className="font-display text-sm font-semibold">{surfaceLabels[currentSurface] ?? "Vyno"}</h1>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1592,7 +1650,16 @@ function App() {
             <Button variant="ghost" size="sm" onClick={() => void refreshAll()} disabled={loading || saving}>
               {loading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" /> : <RefreshCcw className="h-4 w-4" />}
             </Button>
-            <div className="hidden min-w-[200px] sm:block">
+            <div
+              className="hidden min-w-[200px] sm:block"
+              title={
+                !runPolicy.allow_run_override
+                  ? "Mode override is locked by run policy."
+                  : runStatus?.active?.run_id
+                    ? "A run is in progress — controls re-enable when it finishes."
+                    : undefined
+              }
+            >
               <Select
                 value={runNowModeOverride}
                 onValueChange={setRunNowModeOverride}
@@ -1602,15 +1669,20 @@ function App() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">default ({runPolicy.default_mode})</SelectItem>
-                  <SelectItem value="fresh_only">fresh_only</SelectItem>
-                  <SelectItem value="balanced">balanced</SelectItem>
-                  <SelectItem value="replay_recent">replay_recent</SelectItem>
-                  <SelectItem value="backfill">backfill</SelectItem>
+                  <SelectItem value="default">Default ({formatModeLabel(runPolicy.default_mode)})</SelectItem>
+                  <SelectItem value="fresh_only">{formatModeLabel("fresh_only")}</SelectItem>
+                  <SelectItem value="balanced">{formatModeLabel("balanced")}</SelectItem>
+                  <SelectItem value="replay_recent">{formatModeLabel("replay_recent")}</SelectItem>
+                  <SelectItem value="backfill">{formatModeLabel("backfill")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <Button size="sm" onClick={() => void runNow()} disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}>
+            <Button
+              size="sm"
+              onClick={() => void runNow()}
+              disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}
+              title={runStatus?.active?.run_id ? "A run is already in progress." : undefined}
+            >
               {runNowLoading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" /> : <Play className="h-3.5 w-3.5" />}
               {runNowLoading ? "Starting..." : "Run now"}
             </Button>

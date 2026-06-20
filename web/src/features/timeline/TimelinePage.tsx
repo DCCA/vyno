@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Activity, Loader2, RefreshCcw, Save } from "lucide-react"
 
 import { useTimelineState, useUiState } from "@/app/console-context"
@@ -30,6 +30,13 @@ export function TimelinePage() {
   const notice = localNotices.timeline
   const [feedbackGiven, setFeedbackGiven] = useState<Record<string, string>>({})
   const [eventsVisible, setEventsVisible] = useState(50)
+  const eventDetailRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (timelineSelectedEventId && eventDetailRef.current) {
+      eventDetailRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    }
+  }, [timelineSelectedEventId])
 
   function handleItemFeedback(itemId: string, label: "more_like_this" | "not_relevant" | "too_technical" | "repeat_source") {
     onSubmitItemFeedback(itemId, label)
@@ -66,9 +73,9 @@ export function TimelinePage() {
           <InlineNotice notice={notice} onDismiss={() => clearScopedNotice("timeline")} />
           <div className="grid gap-3 md:grid-cols-[2fr,1fr,1fr,1fr,auto]">
             <div className="space-y-2">
-              <Label>Run</Label>
+              <Label htmlFor="timeline-run-select">Run</Label>
               <Select value={timelineRunId} onValueChange={setTimelineRunId}>
-                <SelectTrigger>
+                <SelectTrigger id="timeline-run-select">
                   <SelectValue placeholder="Select run" />
                 </SelectTrigger>
                 <SelectContent>
@@ -81,9 +88,9 @@ export function TimelinePage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Stage</Label>
+              <Label htmlFor="timeline-stage-select">Stage</Label>
               <Select value={timelineStageFilter} onValueChange={setTimelineStageFilter}>
-                <SelectTrigger>
+                <SelectTrigger id="timeline-stage-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -97,9 +104,9 @@ export function TimelinePage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Severity</Label>
+              <Label htmlFor="timeline-severity-select">Severity</Label>
               <Select value={timelineSeverityFilter} onValueChange={setTimelineSeverityFilter}>
-                <SelectTrigger>
+                <SelectTrigger id="timeline-severity-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -111,9 +118,9 @@ export function TimelinePage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Order</Label>
+              <Label htmlFor="timeline-order-select">Order</Label>
               <Select value={timelineOrder} onValueChange={(value) => setTimelineOrder(value === "asc" ? "asc" : "desc")}>
-                <SelectTrigger>
+                <SelectTrigger id="timeline-order-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -164,8 +171,8 @@ export function TimelinePage() {
                       status: {timelineSummary.status}
                     </Badge>
                     <Badge variant="secondary">events: {timelineSummary.event_count}</Badge>
-                    <Badge variant="secondary">errors: {timelineSummary.error_event_count}</Badge>
-                    <Badge variant="secondary">warnings: {timelineSummary.warn_event_count}</Badge>
+                    <Badge variant={timelineSummary.error_event_count > 0 ? "destructive" : "secondary"}>errors: {timelineSummary.error_event_count}</Badge>
+                    <Badge variant={timelineSummary.warn_event_count > 0 ? "warning" : "secondary"}>warnings: {timelineSummary.warn_event_count}</Badge>
                     <Badge variant="secondary">duration: {formatElapsed(timelineSummary.duration_s)}</Badge>
                     <Badge variant="secondary">
                       M/S/V: {timelineSummary.must_read_count}/{timelineSummary.skim_count}/{timelineSummary.video_count}
@@ -278,7 +285,7 @@ export function TimelinePage() {
                               onClick={() => handleItemFeedback(row.item_id, label)}
                               className={isDimmed ? "opacity-40" : ""}
                             >
-                              {label === "more_like_this" ? "More like this" : label === "not_relevant" ? "Not relevant" : label === "too_technical" ? "Too technical" : "Repeat source"}
+                              {label === "more_like_this" ? "More like this" : label === "not_relevant" ? "Not relevant" : label === "too_technical" ? "Too technical" : "Fewer from this source"}
                             </Button>
                           )
                         })}
@@ -305,7 +312,7 @@ export function TimelinePage() {
                 />
               ) : (
               <>
-              <Table>
+              <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>#</TableHead>
@@ -320,15 +327,25 @@ export function TimelinePage() {
                   {timelineEvents.slice(0, eventsVisible).map((row) => (
                     <TableRow
                       key={`${row.run_id}:${row.id}`}
-                      className="cursor-pointer"
+                      className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                       data-state={row.id === timelineSelectedEventId ? "selected" : undefined}
+                      tabIndex={0}
+                      role="button"
+                      aria-pressed={row.id === timelineSelectedEventId}
+                      aria-label={`Event ${row.event_index}: ${row.stage} ${row.severity}`}
                       onClick={() => setTimelineSelectedEventId(row.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault()
+                          setTimelineSelectedEventId(row.id)
+                        }
+                      }}
                     >
                       <TableCell>{row.event_index}</TableCell>
                       <TableCell className="font-mono text-xs">{formatTimestamp(row.ts_utc)}</TableCell>
                       <TableCell className="font-mono text-xs">{row.stage}</TableCell>
                       <TableCell>
-                        <Badge variant={row.severity === "error" ? "warning" : row.severity === "warn" ? "outline" : "secondary"}>
+                        <Badge variant={row.severity === "error" ? "destructive" : row.severity === "warn" ? "warning" : "secondary"}>
                           {row.severity}
                         </Badge>
                       </TableCell>
@@ -352,7 +369,7 @@ export function TimelinePage() {
         </div>
 
         <div className="space-y-4">
-          <Card>
+          <Card ref={eventDetailRef}>
             <CardHeader>
               <CardTitle className="font-display">Event details</CardTitle>
             </CardHeader>

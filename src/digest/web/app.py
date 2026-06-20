@@ -873,6 +873,10 @@ def create_app(settings: WebSettings):
             profile_overlay,
             current_profile_overlay,
         )
+        # Snapshot the current state BEFORE overwriting so a rollback is undoable.
+        _save_snapshot(
+            settings, action="pre_rollback", details={"target_snapshot_id": snapshot_id}
+        )
         _write_yaml_dict(settings.sources_overlay_path, sources_overlay)
         _write_yaml_dict(settings.profile_overlay_path, profile_overlay)
         _save_snapshot(

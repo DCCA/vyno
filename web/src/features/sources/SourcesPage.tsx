@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { sourceValuePlaceholderForType, truncateText } from "@/lib/console-utils"
+import { sourceValueHelpForType, sourceValuePlaceholderForType, truncateText } from "@/lib/console-utils"
 
 export function SourcesPage() {
   const { saving, saveAction, localNotices, clearScopedNotice } = useUiState()
@@ -20,11 +20,11 @@ export function SourcesPage() {
     sources, sourceHealth, sourceType, setSourceType, sourceValue, setSourceValue,
     sourceTypes, sourceSearch, setSourceSearch, sourceStatusFilter, setSourceStatusFilter,
     filteredUnifiedSourceRows, unifiedRowsVisible, showAllUnifiedSources, setShowAllUnifiedSources,
+    sourceStudioOpen, setSourceStudioOpen, sourceEditing, onSaveSourceEdit, onCancelSourceEdit,
     onHandleSourceMutation, onEditUnifiedSourceRow, onDeleteUnifiedSourceRow, onSourceFeedback,
   } = useSourceState()
   const notice = localNotices.sources
   const [lastFeedbackKey, setLastFeedbackKey] = useState("")
-  const [studioOpen, setStudioOpen] = useState(false)
   const sortedSourceRows = Object.entries(sources).sort((a, b) => a[0].localeCompare(b[0]))
   const totalSourceCount = sortedSourceRows.reduce((sum, [, values]) => sum + values.length, 0)
 
@@ -79,22 +79,28 @@ export function SourcesPage() {
         <Badge variant="outline">{filteredUnifiedSourceRows.length} cards</Badge>
       </div>
 
-      {/* Source Studio — collapsible */}
-      {studioOpen ? (
+      {/* Source Studio — collapsible (also hosts inline editing) */}
+      {sourceStudioOpen || sourceEditing ? (
         <Card>
           <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 pb-3">
             <div>
-              <CardTitle className="font-display text-base">Add or remove source</CardTitle>
-              <CardDescription>One source at a time without leaving the library.</CardDescription>
+              <CardTitle className="font-display text-base">{sourceEditing ? "Edit source" : "Add or remove source"}</CardTitle>
+              <CardDescription>
+                {sourceEditing
+                  ? "Update the value below, then Save changes. The original entry is replaced."
+                  : "One source at a time without leaving the library."}
+              </CardDescription>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setStudioOpen(false)}>
-              <ChevronUp className="h-4 w-4" />
-              Close
-            </Button>
+            {!sourceEditing ? (
+              <Button variant="ghost" size="sm" onClick={() => setSourceStudioOpen(false)}>
+                <ChevronUp className="h-4 w-4" />
+                Close
+              </Button>
+            ) : null}
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid gap-3 md:grid-cols-[200px_1fr_auto]">
-              <Select value={sourceType} onValueChange={setSourceType}>
+              <Select value={sourceType} onValueChange={setSourceType} disabled={sourceEditing}>
                 <SelectTrigger>
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
@@ -109,21 +115,34 @@ export function SourcesPage() {
                 value={sourceValue}
                 onChange={(event) => setSourceValue(event.target.value)}
               />
-              <div className="flex gap-2">
-                <Button onClick={() => onHandleSourceMutation("add")} disabled={saving}>
-                  {saveAction === "source-add" ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" /> : null}
-                  {saveAction === "source-add" ? "Adding..." : "Add"}
-                </Button>
-                <Button variant="outline" onClick={() => onHandleSourceMutation("remove")} disabled={saving}>
-                  {saveAction === "source-remove" ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" /> : null}
-                  {saveAction === "source-remove" ? "Removing..." : "Remove"}
-                </Button>
-              </div>
+              {sourceEditing ? (
+                <div className="flex gap-2">
+                  <Button onClick={onSaveSourceEdit} disabled={saving}>
+                    {saveAction === "source-add" ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" /> : null}
+                    {saveAction === "source-add" ? "Saving..." : "Save changes"}
+                  </Button>
+                  <Button variant="ghost" onClick={onCancelSourceEdit} disabled={saving}>Cancel</Button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Button onClick={() => onHandleSourceMutation("add")} disabled={saving}>
+                    {saveAction === "source-add" ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" /> : null}
+                    {saveAction === "source-add" ? "Adding..." : "Add"}
+                  </Button>
+                  <Button variant="outline" onClick={() => onHandleSourceMutation("remove")} disabled={saving}>
+                    {saveAction === "source-remove" ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" /> : null}
+                    {saveAction === "source-remove" ? "Removing..." : "Remove"}
+                  </Button>
+                </div>
+              )}
             </div>
+            {sourceEditing ? null : (
+              <p className="text-xs text-muted-foreground">{sourceValueHelpForType(sourceType)}</p>
+            )}
           </CardContent>
         </Card>
       ) : (
-        <Button variant="outline" onClick={() => setStudioOpen(true)}>
+        <Button variant="outline" onClick={() => setSourceStudioOpen(true)}>
           <Plus className="h-4 w-4" />
           Add or remove source
         </Button>
@@ -136,7 +155,7 @@ export function SourcesPage() {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Waiting for items
+              No items yet
             </p>
             <Badge variant="secondary" className="text-[10px]">{compactRows.length}</Badge>
           </div>
@@ -161,7 +180,7 @@ export function SourcesPage() {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Preview ready
+              Active
             </p>
             <Badge variant="success" className="text-[10px]">{previewRows.length}</Badge>
           </div>
@@ -230,7 +249,7 @@ function CompactSourceCard({
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-[10px]">{row.type_label}</Badge>
           <Badge variant={isFailing ? "warning" : "secondary"} className="text-[10px]">
-            {isFailing ? "failing" : "waiting"}
+            {isFailing ? "failing" : "no items yet"}
           </Badge>
         </div>
         <Button variant="ghost" size="sm" className="h-6 w-6 shrink-0 rounded-full p-0 text-muted-foreground hover:text-foreground" onClick={() => setExpanded(!expanded)} aria-label="More actions">
@@ -263,7 +282,7 @@ function CompactSourceCard({
         <div className="flex-1" />
         {expanded ? (
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs text-destructive" onClick={() => onSourceFeedback(row, "mute_source")} disabled={saving}>Mute</Button>
+            <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs text-muted-foreground" onClick={() => onSourceFeedback(row, "mute_source")} disabled={saving}>Mute</Button>
             {row.can_edit ? <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs" onClick={() => onEditUnifiedSourceRow(row)} disabled={saving}>Edit</Button> : null}
             {row.can_delete ? <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs text-destructive" onClick={() => onDeleteUnifiedSourceRow(row)} disabled={saving}>Delete</Button> : null}
           </div>
@@ -349,7 +368,7 @@ function SourcePreviewCard({
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="outline" className="text-[10px]">{row.type_label}</Badge>
             <Badge variant={isFailing ? "warning" : "success"} className="text-[10px]">
-              {isFailing ? `failing (${row.count})` : "ready"}
+              {isFailing ? `failing (${row.count})` : "active"}
             </Badge>
           </div>
           <div className="min-w-0 space-y-1">
@@ -393,7 +412,7 @@ function SourcePreviewCard({
           <div className="flex-1" />
           {expanded ? (
             <>
-              <Button variant="ghost" size="sm" className="h-7 text-xs border-destructive/40 text-destructive" onClick={() => onSourceFeedback(row, "mute_source")} disabled={saving}>Mute</Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => onSourceFeedback(row, "mute_source")} disabled={saving}>Mute</Button>
               {row.can_edit ? <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => onEditUnifiedSourceRow(row)} disabled={saving}>Edit</Button> : null}
               {row.can_delete ? <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => onDeleteUnifiedSourceRow(row)} disabled={saving}>Delete</Button> : null}
             </>

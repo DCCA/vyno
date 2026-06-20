@@ -72,8 +72,13 @@ export type SourceState = {
   unifiedRowsVisible: UnifiedSourceRow[]
   showAllUnifiedSources: boolean
   setShowAllUnifiedSources: (value: boolean) => void
+  sourceStudioOpen: boolean
+  setSourceStudioOpen: (value: boolean) => void
+  sourceEditing: boolean
   onHandleSourceMutation: (action: "add" | "remove") => void
   onEditUnifiedSourceRow: (row: UnifiedSourceRow) => void
+  onSaveSourceEdit: () => void
+  onCancelSourceEdit: () => void
   onDeleteUnifiedSourceRow: (row: UnifiedSourceRow) => void
   onSourceFeedback: (row: UnifiedSourceRow, label: string) => void
 }

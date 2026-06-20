@@ -11,6 +11,17 @@ import {
 
 import type { ConsoleSurface } from "@/app/types"
 
+export const surfaceLabels: Record<ConsoleSurface, string> = {
+  dashboard: "Dashboard",
+  run: "Run Center",
+  onboarding: "Setup",
+  sources: "Sources",
+  profile: "Profile",
+  schedule: "Schedule",
+  timeline: "Timeline",
+  history: "History",
+}
+
 export const surfacePaths: Record<ConsoleSurface, string> = {
   dashboard: "/",
   run: "/run",
