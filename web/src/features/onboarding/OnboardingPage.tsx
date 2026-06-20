@@ -112,8 +112,8 @@ export function OnboardingPage() {
 
       <StepCard
         number={1}
-        title="Run preflight checks"
-        detail="Verify keys, writable paths, and runtime prerequisites before continuing."
+        title="Check your setup is ready"
+        detail="Confirms your API keys and folders are in place. Run it — green means you're good to continue."
         status={stepStatus(onboarding, "preflight")}
       >
         <div className="flex flex-wrap items-center gap-3">
@@ -128,12 +128,17 @@ export function OnboardingPage() {
           {preflight ? (
             <div className="flex flex-wrap gap-2">
               <Badge variant={preflight.ok ? "success" : "warning"}>{preflight.ok ? "Ready" : "Needs fixes"}</Badge>
-              <Badge variant="secondary">pass: {preflight.pass_count}</Badge>
-              <Badge variant="secondary">warn: {preflight.warn_count}</Badge>
-              <Badge variant={preflight.fail_count > 0 ? "warning" : "secondary"}>fail: {preflight.fail_count}</Badge>
+              <Badge variant="secondary">passed: {preflight.pass_count}</Badge>
+              {preflight.warn_count > 0 ? <Badge variant="warning">warnings: {preflight.warn_count}</Badge> : null}
+              {preflight.fail_count > 0 ? <Badge variant="destructive">failing: {preflight.fail_count}</Badge> : null}
             </div>
           ) : null}
         </div>
+        {preflight && !preflight.ok ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Most failures mean a required API key (such as <code className="rounded bg-muted px-1">OPENAI_API_KEY</code>) is missing from your <code className="rounded bg-muted px-1">.env</code> file. Add it, then run the check again.
+          </p>
+        ) : null}
       </StepCard>
 
       <StepCard
@@ -146,6 +151,11 @@ export function OnboardingPage() {
           <div className="space-y-2 rounded-xl border p-4">
             <p className="text-sm font-semibold">Telegram delivery</p>
             <p className="text-xs text-muted-foreground">Use Telegram if you want the digest pushed to a chat automatically.</p>
+            <p className="text-xs text-muted-foreground">
+              New to this? Open{" "}
+              <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">@BotFather</a>{" "}
+              in Telegram, send <code className="rounded bg-muted px-1">/newbot</code> to get a token, then message your bot and paste its numeric chat id below.
+            </p>
             <div className="space-y-2">
               <Label htmlFor="telegram-bot-token">Bot token</Label>
               <Input
@@ -168,6 +178,7 @@ export function OnboardingPage() {
           <div className="space-y-2 rounded-xl border p-4">
             <p className="text-sm font-semibold">Obsidian delivery</p>
             <p className="text-xs text-muted-foreground">Use Obsidian if you want each digest saved as a note for later retrieval.</p>
+            <p className="text-xs text-muted-foreground">Vault path is the absolute folder path to your Obsidian vault on this machine (e.g. <code className="rounded bg-muted px-1">/Users/you/Vault</code>).</p>
             <div className="space-y-2">
               <Label htmlFor="obsidian-vault-path">Vault path</Label>
               <Input

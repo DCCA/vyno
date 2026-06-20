@@ -24,6 +24,7 @@ export function SchedulePage() {
   const enabled = scheduleDraft.enabled
   const schedulerState = schedulerStateMeta(scheduleStatus)
   const cadenceSummary = describeSchedule(scheduleDraft)
+  const verdict = runVerdict(scheduleStatus, scheduleDirty, cadenceSummary)
   const timezoneOptions = useMemo(() => {
     const intlWithSupportedValues = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] }
     if (typeof Intl === "undefined" || typeof intlWithSupportedValues.supportedValuesOf !== "function") return []
@@ -67,6 +68,19 @@ export function SchedulePage() {
       />
 
       <InlineNotice notice={notice} onDismiss={() => clearScopedNotice("schedule")} />
+
+      <div
+        className={
+          verdict.tone === "ok"
+            ? "rounded-xl border border-success/30 bg-success/10 p-4"
+            : verdict.tone === "warning"
+              ? "rounded-xl border border-warning/40 bg-warning/10 p-4"
+              : "rounded-xl border border-border bg-muted/30 p-4"
+        }
+      >
+        <p className="text-sm font-semibold text-foreground">{verdict.title}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{verdict.detail}</p>
+      </div>
 
       {lifecycle === "needs_setup" ? (
         <Card>
@@ -264,7 +278,7 @@ export function SchedulePage() {
             </p>
             <p>
               {scheduleStatus?.next_run_at
-                ? `Next allowed run: ${scheduleStatus.next_run_at}`
+                ? `Next allowed run: ${formatTimestamp(scheduleStatus.next_run_at)}`
                 : "No next run is currently scheduled."}
             </p>
             <p>If the scheduler is stopped, no digest will run until the background service is started again.</p>
@@ -305,6 +319,32 @@ export function SchedulePage() {
   )
 }
 
+
+function runVerdict(
+  status: ScheduleStatus | null,
+  dirty: boolean,
+  cadenceSummary: string,
+): { tone: "ok" | "warning" | "neutral"; title: string; detail: string } {
+  if (dirty) {
+    return { tone: "warning", title: "Unsaved changes", detail: "Save the schedule below to apply your changes — nothing takes effect until you do." }
+  }
+  const state = status?.scheduler_status || "disabled"
+  const serviceLive = state === "running" || state === "quiet_hours" || state === "run_active" || state === "waiting_for_run_lock"
+  if (!status?.enabled) {
+    return { tone: "neutral", title: "Automation is paused", detail: "Digests run only when you trigger them manually with Run now." }
+  }
+  if (state === "error") {
+    return { tone: "warning", title: "Automation is on, but the scheduler reported an error", detail: "See “Issues and recovery” below before relying on automatic runs." }
+  }
+  if (serviceLive && status?.next_run_at) {
+    return { tone: "ok", title: "Automation is live", detail: `Next digest ${formatTimestamp(status.next_run_at)} · ${cadenceSummary}.` }
+  }
+  return {
+    tone: "warning",
+    title: "Automation is enabled, but the scheduler service isn’t running",
+    detail: "No digest will run until the background scheduler service is started (run “make docker-scheduler-deploy”, or start the scheduler process).",
+  }
+}
 
 function schedulerStateMeta(status: ScheduleStatus | null): {
   label: string

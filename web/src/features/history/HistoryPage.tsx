@@ -46,7 +46,7 @@ export function HistoryPage() {
             />
           ) : (
             <>
-            <Table>
+            <Table className="min-w-[560px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Created</TableHead>

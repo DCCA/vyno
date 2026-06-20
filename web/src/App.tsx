@@ -37,7 +37,7 @@ import {
   surfaceFromLegacyQuery,
   toInt,
 } from "@/lib/console-utils"
-import { navItemsForLifecycle, surfaceForPathname, surfacePaths } from "@/app/navigation"
+import { navItemsForLifecycle, surfaceForPathname, surfaceLabels, surfacePaths } from "@/app/navigation"
 import type {
   ConsoleSurface,
   FeedbackSummary,
@@ -1140,7 +1140,7 @@ function App() {
         savedParts.push("profile changes")
         await refreshAll({ preserveProfileWorkspace: false, preserveRunPolicyWorkspace: false })
       }
-      setScopedNotice("profile", "ok", `Saved ${savedParts.join(" and ")}.`)
+      setScopedNotice("profile", "ok", `Saved ${savedParts.join(" and ")}. Changes apply on your next run.`)
     } catch (error) {
       if (savedParts.length > 0) {
         setScopedNotice("profile", "error", `Saved ${savedParts.join(" and ")}, but a later step failed: ${String(error)}`)
@@ -1631,7 +1631,7 @@ function App() {
             >
               <Menu className="h-4 w-4" />
             </Button>
-            <h1 className="font-display text-sm font-semibold capitalize">{currentSurface === "dashboard" ? "Overview" : currentSurface.replace(/-/g, " ")}</h1>
+            <h1 className="font-display text-sm font-semibold">{surfaceLabels[currentSurface] ?? "Vyno"}</h1>
           </div>
 
           <div className="flex items-center gap-2">

@@ -312,7 +312,7 @@ export function TimelinePage() {
                 />
               ) : (
               <>
-              <Table>
+              <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>#</TableHead>
