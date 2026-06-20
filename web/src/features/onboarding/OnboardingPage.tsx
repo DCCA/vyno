@@ -82,7 +82,7 @@ export function OnboardingPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-display">Activation Milestones</CardTitle>
+          <CardTitle className="font-display">Activation milestones</CardTitle>
           <CardDescription>
             Keep setup focused on the few actions that unlock a useful recurring digest. Detailed controls stay below.
           </CardDescription>

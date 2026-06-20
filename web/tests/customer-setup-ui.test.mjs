@@ -20,7 +20,7 @@ function expectSource(source, pattern, message) {
 
 test("onboarding is a guided first-run setup flow", () => {
   expectSource(onboardingSource, /title=\{revisitMode \? "Setup Guide" : "Guided Setup"\}/, "guided setup header missing")
-  expectSource(onboardingSource, /Activation Milestones/, "activation milestone summary missing")
+  expectSource(onboardingSource, /Activation milestones/, "activation milestone summary missing")
   expectSource(onboardingSource, /Connect at least one output/, "output step missing")
   expectSource(onboardingSource, /Choose starter sources/, "source pack step missing")
   expectSource(onboardingSource, /Set digest preferences/, "preferences step missing")
@@ -47,8 +47,8 @@ test("dashboard and profile expose automation status after setup", () => {
   expectSource(profileSource, /Open schedule controls/, "profile schedule workspace link missing")
   expectSource(profileSource, /Revisit setup guide/, "profile revisit setup action missing")
   expectSource(scheduleSource, /title="Schedule"/, "schedule workspace header missing")
-  expectSource(scheduleSource, /Schedule Controls/, "schedule controls card missing")
-  expectSource(scheduleSource, /Automation Status/, "schedule status card missing")
+  expectSource(scheduleSource, /Schedule controls/, "schedule controls card missing")
+  expectSource(scheduleSource, /Automation status/, "schedule status card missing")
   expectSource(onboardingSource, /Active workspace/, "onboarding revisit banner missing")
 })
 

@@ -38,7 +38,7 @@ export function RunCenterPage() {
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <Card>
           <CardHeader>
-            <CardTitle className="font-display">Launch Deck</CardTitle>
+            <CardTitle className="font-display">Launch deck</CardTitle>
             <CardDescription>Pick a temporary mode when allowed, then trigger or refresh operational state.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -76,7 +76,7 @@ export function RunCenterPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="font-display">Latest Completion Snapshot</CardTitle>
+            <CardTitle className="font-display">Latest completion snapshot</CardTitle>
             <CardDescription>Use this as the fast operational summary before opening deeper run diagnostics.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
