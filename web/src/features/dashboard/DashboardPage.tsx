@@ -141,12 +141,12 @@ export function DashboardPage() {
             {sourceHealth.slice(0, 6).map((item) => (
               <div key={`${item.kind}:${item.source}`} className="rounded-lg border border-amber-300/40 bg-amber-50/40 p-4 dark:border-amber-700/30 dark:bg-amber-950/20">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="truncate font-mono text-[11px]">{item.source}</p>
+                  <div className="min-w-0 space-y-1">
+                    <p className="truncate font-mono text-[11px]" title={item.source}>{item.source}</p>
                     <p className="text-xs text-muted-foreground">{item.count} failures in recent runs</p>
                     <p className="text-xs text-muted-foreground">{item.hint || "No hint available"}</p>
                   </div>
-                  <Badge variant="warning">{item.kind}</Badge>
+                  <Badge variant="warning" className="shrink-0">{item.kind}</Badge>
                 </div>
                 <Button
                   variant="outline"
