@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 import re
-from typing import Callable
 import urllib.parse
 
 import yaml
@@ -254,7 +253,9 @@ def _sanitize_overlay_map(raw: object) -> dict[str, list[str]]:
 
 
 def _merge_field(source_type: str, base_values: list[str], overlay: OverlayData) -> list[str]:
-    cv: Callable[[str], str] = lambda v: canonicalize_source_value(source_type, v)
+    def cv(v: str) -> str:
+        return canonicalize_source_value(source_type, v)
+
     removed = {cv(v) for v in overlay.removed.get(source_type, [])}
     merged: list[str] = []
     seen: set[str] = set()

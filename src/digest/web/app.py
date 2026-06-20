@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -43,7 +44,6 @@ from digest.ops.source_registry import (
     list_sources,
     load_effective_sources,
     remove_source,
-    source_key_for,
     supported_source_types,
     visible_source_entries,
 )
@@ -481,7 +481,23 @@ def create_app(settings: WebSettings):
             "FastAPI and pydantic are required for web mode. Install optional web deps."
         ) from exc
 
-    app = FastAPI(title="Digest Config Console API", version="0.1.0")
+    @asynccontextmanager
+    async def _lifespan(app: FastAPI):
+        start = getattr(app.state, "start_scheduler", None)
+        if start is not None:
+            start()
+        try:
+            yield
+        finally:
+            stop = getattr(app.state, "stop_scheduler", None)
+            if stop is not None:
+                stop()
+
+    app = FastAPI(
+        title="Digest Config Console API",
+        version="0.1.0",
+        lifespan=_lifespan,
+    )
     auth_mode = _web_api_auth_mode()
     auth_token = _web_api_token()
     auth_header = _web_api_token_header()
@@ -1365,16 +1381,17 @@ def create_app(settings: WebSettings):
                 )
             schedule_stop_event.wait(15)
 
-    @app.on_event("startup")
     def _start_scheduler() -> None:
         schedule_stop_event.clear()
         thread = threading.Thread(target=_scheduler_loop, daemon=True)
         thread.start()
         app.state.schedule_thread = thread
 
-    @app.on_event("shutdown")
     def _stop_scheduler() -> None:
         schedule_stop_event.set()
+
+    app.state.start_scheduler = _start_scheduler
+    app.state.stop_scheduler = _stop_scheduler
 
     @app.post("/api/run-now")
     def post_run_now(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
@@ -1916,7 +1933,6 @@ def create_app(settings: WebSettings):
     if not _static_dir.is_dir():
         _static_dir = Path(__file__).resolve().parent.parent.parent.parent / "web" / "dist"
     if _static_dir.is_dir():
-        from fastapi.staticfiles import StaticFiles
         from fastapi.responses import FileResponse
 
         _index_html = _static_dir / "index.html"
