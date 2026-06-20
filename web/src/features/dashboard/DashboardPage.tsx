@@ -65,7 +65,7 @@ export function DashboardPage() {
       <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <Card>
           <CardHeader>
-            <CardTitle className="font-display">{onboardingDone ? "Automation Control" : "Activation Focus"}</CardTitle>
+            <CardTitle className="font-display">{onboardingDone ? "Automation control" : "Activation focus"}</CardTitle>
             <CardDescription>
               {onboardingDone
                 ? "The digest is now a recurring product workflow. Use this module to jump into interventions."
@@ -119,7 +119,7 @@ export function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="font-display">Current Posture</CardTitle>
+            <CardTitle className="font-display">Current posture</CardTitle>
             <CardDescription>High-signal readout for the workspace without opening deeper diagnostic screens.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
