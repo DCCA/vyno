@@ -33,6 +33,7 @@ import { api } from "@/lib/api"
 import {
   diffObjects,
   formatElapsed,
+  formatModeLabel,
   parseProfilePayload,
   surfaceFromLegacyQuery,
   toInt,
@@ -1649,7 +1650,16 @@ function App() {
             <Button variant="ghost" size="sm" onClick={() => void refreshAll()} disabled={loading || saving}>
               {loading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" /> : <RefreshCcw className="h-4 w-4" />}
             </Button>
-            <div className="hidden min-w-[200px] sm:block">
+            <div
+              className="hidden min-w-[200px] sm:block"
+              title={
+                !runPolicy.allow_run_override
+                  ? "Mode override is locked by run policy."
+                  : runStatus?.active?.run_id
+                    ? "A run is in progress — controls re-enable when it finishes."
+                    : undefined
+              }
+            >
               <Select
                 value={runNowModeOverride}
                 onValueChange={setRunNowModeOverride}
@@ -1659,15 +1669,20 @@ function App() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">default ({runPolicy.default_mode})</SelectItem>
-                  <SelectItem value="fresh_only">fresh_only</SelectItem>
-                  <SelectItem value="balanced">balanced</SelectItem>
-                  <SelectItem value="replay_recent">replay_recent</SelectItem>
-                  <SelectItem value="backfill">backfill</SelectItem>
+                  <SelectItem value="default">Default ({formatModeLabel(runPolicy.default_mode)})</SelectItem>
+                  <SelectItem value="fresh_only">{formatModeLabel("fresh_only")}</SelectItem>
+                  <SelectItem value="balanced">{formatModeLabel("balanced")}</SelectItem>
+                  <SelectItem value="replay_recent">{formatModeLabel("replay_recent")}</SelectItem>
+                  <SelectItem value="backfill">{formatModeLabel("backfill")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <Button size="sm" onClick={() => void runNow()} disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}>
+            <Button
+              size="sm"
+              onClick={() => void runNow()}
+              disabled={saving || runNowLoading || Boolean(runStatus?.active?.run_id)}
+              title={runStatus?.active?.run_id ? "A run is already in progress." : undefined}
+            >
               {runNowLoading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin motion-reduce:animate-none" /> : <Play className="h-3.5 w-3.5" />}
               {runNowLoading ? "Starting..." : "Run now"}
             </Button>

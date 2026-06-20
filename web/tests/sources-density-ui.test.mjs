@@ -19,8 +19,8 @@ test("sources workspace merges management and triage into one surface", () => {
   expectSource(sourcesSource, /Add or remove source/, "source studio module missing")
   expectSource(sourcesSource, /Search sources/, "unified source search missing")
   expectSource(sourcesSource, /unified-source-search/, "unified source search input id missing")
-  expectSource(sourcesSource, /Waiting for items/, "compact card section heading missing")
-  expectSource(sourcesSource, /Preview ready/, "preview card section heading missing")
+  expectSource(sourcesSource, /No items yet/, "compact card section heading missing")
+  expectSource(sourcesSource, /Active/, "preview card section heading missing")
 })
 
 test("unified sources view is card-first with preview metadata", () => {

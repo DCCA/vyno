@@ -285,7 +285,7 @@ export function TimelinePage() {
                               onClick={() => handleItemFeedback(row.item_id, label)}
                               className={isDimmed ? "opacity-40" : ""}
                             >
-                              {label === "more_like_this" ? "More like this" : label === "not_relevant" ? "Not relevant" : label === "too_technical" ? "Too technical" : "Repeat source"}
+                              {label === "more_like_this" ? "More like this" : label === "not_relevant" ? "Not relevant" : label === "too_technical" ? "Too technical" : "Fewer from this source"}
                             </Button>
                           )
                         })}

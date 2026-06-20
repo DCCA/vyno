@@ -155,7 +155,7 @@ export function SourcesPage() {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Waiting for items
+              No items yet
             </p>
             <Badge variant="secondary" className="text-[10px]">{compactRows.length}</Badge>
           </div>
@@ -180,7 +180,7 @@ export function SourcesPage() {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Preview ready
+              Active
             </p>
             <Badge variant="success" className="text-[10px]">{previewRows.length}</Badge>
           </div>
@@ -249,7 +249,7 @@ function CompactSourceCard({
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-[10px]">{row.type_label}</Badge>
           <Badge variant={isFailing ? "warning" : "secondary"} className="text-[10px]">
-            {isFailing ? "failing" : "waiting"}
+            {isFailing ? "failing" : "no items yet"}
           </Badge>
         </div>
         <Button variant="ghost" size="sm" className="h-6 w-6 shrink-0 rounded-full p-0 text-muted-foreground hover:text-foreground" onClick={() => setExpanded(!expanded)} aria-label="More actions">
@@ -282,7 +282,7 @@ function CompactSourceCard({
         <div className="flex-1" />
         {expanded ? (
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs text-destructive" onClick={() => onSourceFeedback(row, "mute_source")} disabled={saving}>Mute</Button>
+            <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs text-muted-foreground" onClick={() => onSourceFeedback(row, "mute_source")} disabled={saving}>Mute</Button>
             {row.can_edit ? <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs" onClick={() => onEditUnifiedSourceRow(row)} disabled={saving}>Edit</Button> : null}
             {row.can_delete ? <Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs text-destructive" onClick={() => onDeleteUnifiedSourceRow(row)} disabled={saving}>Delete</Button> : null}
           </div>
@@ -368,7 +368,7 @@ function SourcePreviewCard({
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="outline" className="text-[10px]">{row.type_label}</Badge>
             <Badge variant={isFailing ? "warning" : "success"} className="text-[10px]">
-              {isFailing ? `failing (${row.count})` : "ready"}
+              {isFailing ? `failing (${row.count})` : "active"}
             </Badge>
           </div>
           <div className="min-w-0 space-y-1">
@@ -412,7 +412,7 @@ function SourcePreviewCard({
           <div className="flex-1" />
           {expanded ? (
             <>
-              <Button variant="ghost" size="sm" className="h-7 text-xs border-destructive/40 text-destructive" onClick={() => onSourceFeedback(row, "mute_source")} disabled={saving}>Mute</Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => onSourceFeedback(row, "mute_source")} disabled={saving}>Mute</Button>
               {row.can_edit ? <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => onEditUnifiedSourceRow(row)} disabled={saving}>Edit</Button> : null}
               {row.can_delete ? <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => onDeleteUnifiedSourceRow(row)} disabled={saving}>Delete</Button> : null}
             </>

@@ -102,6 +102,17 @@ export function sourceValuePlaceholderForType(sourceType: string): string {
   return "Enter source value"
 }
 
+export function formatModeLabel(mode: string): string {
+  switch ((mode || "").trim().toLowerCase()) {
+    case "fresh_only": return "Fresh only"
+    case "balanced": return "Balanced"
+    case "replay_recent": return "Replay recent"
+    case "backfill": return "Backfill (catch-up)"
+    default:
+      return mode ? mode.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : mode
+  }
+}
+
 export function sourceValueHelpForType(sourceType: string): string {
   const st = (sourceType || "").trim().toLowerCase()
   if (st === "rss") return "Paste the feed URL (ends in /rss, /feed, or .xml)."

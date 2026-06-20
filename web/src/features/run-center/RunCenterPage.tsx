@@ -9,6 +9,7 @@ import { MetricCard } from "@/components/ui/metric-card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
+import { formatModeLabel } from "@/lib/console-utils"
 
 export function RunCenterPage() {
   const { loading, saving, saveAction, localNotices, clearScopedNotice } = useUiState()
@@ -53,11 +54,11 @@ export function RunCenterPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">Run now: default ({runPolicy.default_mode})</SelectItem>
-                  <SelectItem value="fresh_only">Run now: fresh_only</SelectItem>
-                  <SelectItem value="balanced">Run now: balanced</SelectItem>
-                  <SelectItem value="replay_recent">Run now: replay_recent</SelectItem>
-                  <SelectItem value="backfill">Run now: backfill</SelectItem>
+                  <SelectItem value="default">Run now: default ({formatModeLabel(runPolicy.default_mode)})</SelectItem>
+                  <SelectItem value="fresh_only">Run now: {formatModeLabel("fresh_only")}</SelectItem>
+                  <SelectItem value="balanced">Run now: {formatModeLabel("balanced")}</SelectItem>
+                  <SelectItem value="replay_recent">Run now: {formatModeLabel("replay_recent")}</SelectItem>
+                  <SelectItem value="backfill">Run now: {formatModeLabel("backfill")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
