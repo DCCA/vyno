@@ -139,7 +139,7 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {sourceHealth.slice(0, 6).map((item) => (
-              <div key={`${item.kind}:${item.source}`} className="rounded-lg border border-amber-300/40 bg-amber-50/40 p-4 dark:border-amber-700/30 dark:bg-amber-950/20">
+              <div key={`${item.kind}:${item.source}`} className="min-w-0 rounded-lg border border-amber-300/40 bg-amber-50/40 p-4 dark:border-amber-700/30 dark:bg-amber-950/20">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1">
                     <p className="truncate font-mono text-[11px]" title={item.source}>{item.source}</p>
