@@ -10,12 +10,13 @@ The product bet is that AI information overload is not solved by another feed. I
 
 ## Project Status
 
-Current as of 2026-06-10:
+Current as of 2026-06-27:
 - backend test suite passes with `254` tests
 - frontend source-shape suite passes with `24` tests
+- frontend production build passes
+- latest default-branch CI and Security GitHub Actions workflows pass on `master`
 - production web dependency audit reports `0` vulnerabilities
-- the Security GitHub Actions workflow passes on the default `master` branch
-- the remaining full `npm audit` item is a dev-server-only Vite/esbuild advisory that requires a breaking upgrade and is deferred for a dedicated dependency PR
+- full development dependency audit is intentionally tracked separately from the public-sharing surface, because dev-server advisories can require breaking Vite/esbuild upgrades
 
 ## What The Project Does
 - Ingests content from RSS feeds, YouTube channels and queries, X inbox links, optional X selectors, and GitHub selectors.
@@ -354,14 +355,15 @@ Most commonly used:
 - `DIGEST_LOG_LEVEL`
 
 ## Verification Status
-Verified against the current working tree on 2026-06-10:
+Verified against the current working tree on 2026-06-27:
 - `make test` passed (`254` backend tests)
 - `npm --prefix web run test --silent` passed (`24` frontend tests)
 - `npm --prefix web run build --silent` passed
-- `make security-check` passed
-- `npm --prefix web audit --audit-level=moderate --omit=dev` passed with `0` vulnerabilities
+- latest GitHub Actions `CI` run passed on `master`
+- latest GitHub Actions `Security` run passed on `master`
+- `npm --prefix web audit --audit-level=moderate --omit=dev` passed with `0` production vulnerabilities
 
-The full development dependency audit still reports a Vite/esbuild development-server advisory that requires a breaking Vite upgrade. That work is intentionally deferred to a separate dependency-upgrade PR so the production-audit cleanup stays low risk.
+Full development dependency audits can include dev-server-only Vite/esbuild advisories; those should be handled in dedicated dependency-upgrade PRs rather than mixed into product/docs cleanup.
 
 ## Known Limitations
 - External API/network conditions can still produce `partial` or `failed` runs.
