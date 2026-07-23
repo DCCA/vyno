@@ -135,8 +135,8 @@ step "Installing dependencies"
 cd "$ROOT_DIR"
 
 if [ "$HAS_UV" -eq 1 ]; then
-  info "Installing Python packages (uv sync)..."
-  uv sync
+  info "Installing Python packages (uv sync --all-extras)..."
+  uv sync --all-extras
 else
   if [ ! -d ".venv" ]; then
     info "Creating virtual environment..."
@@ -144,7 +144,7 @@ else
   fi
   info "Installing Python packages (pip)..."
   . .venv/bin/activate
-  pip install -e . --quiet
+  pip install -e '.[runtime,llm]' --quiet
 fi
 
 if [ -x "${ROOT_DIR}/web/node_modules/.bin/vite" ]; then

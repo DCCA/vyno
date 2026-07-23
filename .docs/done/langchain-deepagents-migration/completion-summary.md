@@ -73,3 +73,26 @@ opt-in **DeepAgents** implementation for the one genuinely agentic task.
 - **DeepAgents kept opt-in** (`quality_repair_agent` defaults to `structured`)
   to preserve determinism/simplicity; revisit if a live run shows the agent
   meaningfully outperforms the structured judge.
+
+## Live-run verification (2026-07-23)
+
+The deferred live run was executed (`make live` + a `preview_mode=True` run).
+Pipeline mechanics are green end to end: ingest, dedupe, selection, Telegram
+delivery, Obsidian archive, run history, and fail-open degradation all behaved
+as designed. The LLM path itself surfaced three issues:
+
+1. **Fixed - Docker prod missing LLM deps:** `requirements.txt` (used by the
+   Dockerfile) did not include `langchain-openai`/`deepagents`, so deployed
+   bot/scheduler runs silently fell back to rules scoring + extractive
+   summaries (`llm_coverage=0.0`, status `partial`).
+2. **Fixed - local setup missing LLM deps:** `scripts/setup.sh` ran plain
+   `uv sync` (and `pip install -e .`), which skips the `llm` extra. Now
+   `uv sync --all-extras` / `pip install -e '.[runtime,llm]'`.
+3. **Open - OpenAI key blocks all models:** the project API key is scoped to
+   exactly one model, `gpt-5.1-codex-mini`, which OpenAI has deprecated
+   (invocations return 404 `model_not_found`, confirmed via `/v1/models`).
+   Until the key's model allowlist is updated in the OpenAI dashboard and
+   `openai_model`/`quality_repair_model` point at a current model, every LLM
+   call fails and the pipeline runs in fallback mode. The live proof of the
+   LangChain scorer/summarizer and the DeepAgents judge therefore remains
+   pending on that account-side fix.
