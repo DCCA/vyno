@@ -20,6 +20,7 @@ runtime = [
 ]
 llm = [
   "langchain-openai>=1.0",
+  "deepagents>=0.6",
 ]
 test = [
   "pytest>=8.0",

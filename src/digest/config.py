@@ -94,6 +94,7 @@ class ProfileConfig:
     quality_repair_threshold: float = 80.0
     quality_repair_candidate_pool_size: int = 40
     quality_repair_fail_open: bool = True
+    quality_repair_agent: str = "structured"
     quality_learning_enabled: bool = True
     quality_learning_max_offset: float = 8.0
     quality_learning_half_life_days: int = 14
@@ -365,6 +366,12 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
             5, int(data.get("quality_repair_candidate_pool_size", 40) or 40)
         ),
         quality_repair_fail_open=bool(data.get("quality_repair_fail_open", True)),
+        quality_repair_agent=(
+            "deepagents"
+            if str(data.get("quality_repair_agent", "structured")).strip().lower()
+            == "deepagents"
+            else "structured"
+        ),
         quality_learning_enabled=bool(data.get("quality_learning_enabled", True)),
         quality_learning_max_offset=quality_learning_max_offset,
         quality_learning_half_life_days=max(

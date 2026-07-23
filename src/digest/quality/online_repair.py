@@ -79,17 +79,9 @@ class ResponsesAPIQualityRepair:
         must_read_max_per_source: int,
         digest_max_per_source: int,
     ) -> QualityRepairResult:
-        current_ids = [si.item.id for si in current_must_read]
-        if len(current_ids) < DIGEST_MUST_READ_LIMIT:
-            raise RuntimeError(
-                f"Quality repair requires at least {DIGEST_MUST_READ_LIMIT} current must-read items"
-            )
-        pool_ids = [si.item.id for si in candidate_pool]
-        if len(pool_ids) < DIGEST_MUST_READ_LIMIT:
-            raise RuntimeError(
-                f"Quality repair requires candidate pool size >= {DIGEST_MUST_READ_LIMIT}"
-            )
-
+        current_ids, pool_ids = _validate_repair_inputs(
+            current_must_read, candidate_pool
+        )
         user_text = _quality_eval_input(
             current_must_read=current_must_read,
             candidate_pool=candidate_pool,
@@ -102,37 +94,67 @@ class ResponsesAPIQualityRepair:
             )
         except Exception as exc:  # normalize transport/parse errors
             raise RuntimeError(f"Quality repair failed: {exc}") from exc
-        if not isinstance(parsed, dict):
-            raise RuntimeError("Quality repair output missing structured JSON")
-
-        quality_score = max(0.0, min(100.0, float(parsed.get("quality_score", 0.0))))
-        confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0.0))))
-        issues = _normalize_issue_list(parsed.get("issues", []))
-        repaired_ids = _normalize_repaired_ids(parsed.get("repaired_must_read_ids", []))
-
-        allowed = set(pool_ids)
-        if len(repaired_ids) != DIGEST_MUST_READ_LIMIT:
-            raise RuntimeError(
-                "Quality repair invalid schema: repaired_must_read_ids size"
-            )
-        if len(set(repaired_ids)) != len(repaired_ids):
-            raise RuntimeError("Quality repair invalid schema: duplicate repaired ids")
-        if any(item_id not in allowed for item_id in repaired_ids):
-            raise RuntimeError(
-                "Quality repair invalid schema: id outside candidate pool"
-            )
-
-        # Keep the existing list if model emits empty issues with no change.
-        if not issues and repaired_ids == current_ids:
-            issues = ["no_material_issues"]
-
-        return QualityRepairResult(
-            quality_score=quality_score,
-            confidence=confidence,
-            issues=issues,
-            repaired_must_read_ids=repaired_ids,
-            model=self.model,
+        return build_repair_result(
+            parsed, current_ids=current_ids, pool_ids=pool_ids, model=self.model
         )
+
+
+def _validate_repair_inputs(
+    current_must_read: list[ScoredItem],
+    candidate_pool: list[ScoredItem],
+) -> tuple[list[str], list[str]]:
+    current_ids = [si.item.id for si in current_must_read]
+    if len(current_ids) < DIGEST_MUST_READ_LIMIT:
+        raise RuntimeError(
+            f"Quality repair requires at least {DIGEST_MUST_READ_LIMIT} current must-read items"
+        )
+    pool_ids = [si.item.id for si in candidate_pool]
+    if len(pool_ids) < DIGEST_MUST_READ_LIMIT:
+        raise RuntimeError(
+            f"Quality repair requires candidate pool size >= {DIGEST_MUST_READ_LIMIT}"
+        )
+    return current_ids, pool_ids
+
+
+def build_repair_result(
+    parsed: object,
+    *,
+    current_ids: list[str],
+    pool_ids: list[str],
+    model: str,
+) -> QualityRepairResult:
+    """Validate a structured repair payload and build a QualityRepairResult.
+
+    Shared by the LangChain structured client and the DeepAgents editor agent so
+    both enforce identical id/pool/dedup guarantees.
+    """
+    if not isinstance(parsed, dict):
+        raise RuntimeError("Quality repair output missing structured JSON")
+
+    quality_score = max(0.0, min(100.0, float(parsed.get("quality_score", 0.0))))
+    confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0.0))))
+    issues = _normalize_issue_list(parsed.get("issues", []))
+    repaired_ids = _normalize_repaired_ids(parsed.get("repaired_must_read_ids", []))
+
+    allowed = set(pool_ids)
+    if len(repaired_ids) != DIGEST_MUST_READ_LIMIT:
+        raise RuntimeError("Quality repair invalid schema: repaired_must_read_ids size")
+    if len(set(repaired_ids)) != len(repaired_ids):
+        raise RuntimeError("Quality repair invalid schema: duplicate repaired ids")
+    if any(item_id not in allowed for item_id in repaired_ids):
+        raise RuntimeError("Quality repair invalid schema: id outside candidate pool")
+
+    # Keep the existing list if model emits empty issues with no change.
+    if not issues and repaired_ids == current_ids:
+        issues = ["no_material_issues"]
+
+    return QualityRepairResult(
+        quality_score=quality_score,
+        confidence=confidence,
+        issues=issues,
+        repaired_must_read_ids=repaired_ids,
+        model=model,
+    )
 
 
 def rebuild_sections_with_repair(

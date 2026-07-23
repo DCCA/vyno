@@ -6,7 +6,12 @@
 - [ ] Migrate `ResponsesAPIScorerTagger` internals to `ChatOpenAI.with_structured_output`, preserving contract
 - [ ] Migrate `ResponsesAPISummarizer` internals to LangChain, preserving retries/contract
 - [ ] Update/extend unit tests to inject a fake LangChain client instead of mocking `urllib`
-- [ ] DeepAgents fit decision on `quality/online_repair.py` (adopt only if genuinely agentic)
+- [x] DeepAgents fit decision on `quality/online_repair.py`: ADOPTED as an
+      opt-in editor agent (`quality/deep_repair.py`, `DeepAgentQualityRepair`),
+      selected via `profile.quality_repair_agent: "structured" | "deepagents"`
+      (default `structured` to preserve determinism/simplicity). Reuses the
+      shared prompt/schema/validation; lazy-imports deepagents so a missing dep
+      feeds the existing fail-open path.
 - [ ] Full backend suite green (254+) + ruff clean
 - [ ] Impeccable UI check on `web/` against its rule set (manual review; plugin not loaded this session)
 - [ ] Validate/dogfood on deterministic + mocked path; run `make doctor` if feasible
