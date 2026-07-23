@@ -88,11 +88,14 @@ as designed. The LLM path itself surfaced three issues:
 2. **Fixed - local setup missing LLM deps:** `scripts/setup.sh` ran plain
    `uv sync` (and `pip install -e .`), which skips the `llm` extra. Now
    `uv sync --all-extras` / `pip install -e '.[runtime,llm]'`.
-3. **Open - OpenAI key blocks all models:** the project API key is scoped to
-   exactly one model, `gpt-5.1-codex-mini`, which OpenAI has deprecated
-   (invocations return 404 `model_not_found`, confirmed via `/v1/models`).
-   Until the key's model allowlist is updated in the OpenAI dashboard and
-   `openai_model`/`quality_repair_model` point at a current model, every LLM
-   call fails and the pipeline runs in fallback mode. The live proof of the
-   LangChain scorer/summarizer and the DeepAgents judge therefore remains
-   pending on that account-side fix.
+3. **Fixed - model + endpoint access:** the OpenAI project allowlist was
+   scoped to the deprecated `gpt-5.1-codex-mini` (every call 404'd). After the
+   dashboard allowlist was widened, defaults moved to `gpt-4.1-mini`
+   (constants, `config/profile.yaml`, `.env.example`). A second trap surfaced:
+   the project allowlist granted models on the Responses endpoint while
+   blocking Chat Completions, and `langchain-openai` routes standard models to
+   Chat Completions by default. The shared client and the DeepAgents agent now
+   pin `use_responses_api=True`, matching the pre-migration Responses-only
+   behavior. With that, both quality judges (LangChain structured and
+   DeepAgents) passed live contract tests, and the full pipeline ran with
+   `llm_coverage=1.0`.

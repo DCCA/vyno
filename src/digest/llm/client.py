@@ -38,5 +38,10 @@ def structured_model(
             "langchain-openai is required for LLM calls; install the 'llm' extra"
         ) from exc
 
-    llm = ChatOpenAI(model=model, timeout=timeout, max_retries=max_retries)
+    # use_responses_api pins the Responses endpoint: langchain-openai otherwise
+    # routes standard models to Chat Completions, and OpenAI project model
+    # allowlists can grant one endpoint while blocking the other.
+    llm = ChatOpenAI(
+        model=model, timeout=timeout, max_retries=max_retries, use_responses_api=True
+    )
     return llm.with_structured_output(schema, method="json_schema", strict=True)

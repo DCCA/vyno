@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-DEFAULT_OPENAI_MODEL = "gpt-5.1-codex-mini"
+DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
 
 DEFAULT_RUN_ID_LENGTH = 12
 DEFAULT_RUN_LOCK_STALE_SECONDS = 21600
