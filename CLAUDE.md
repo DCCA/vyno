@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Daily Digest — a local-first Python + React app that ingests AI news from multiple sources (RSS, YouTube, X/Twitter, GitHub), scores/deduplicates content via OpenAI Responses API, and delivers curated digests to Telegram and Obsidian.
+AI Daily Digest — a local-first Python + React app that ingests AI news from multiple sources (RSS, YouTube, X/Twitter, GitHub), scores/deduplicates content via OpenAI (LangChain structured output), and delivers curated digests to Telegram and Obsidian.
 
 ## Common Commands
 
@@ -14,7 +14,7 @@ uv sync                          # preferred (Python)
 npm --prefix web install         # frontend
 
 # Run tests
-make test                        # 254 backend tests (unittest discover)
+make test                        # 258 backend tests (unittest discover)
 npm --prefix web run test        # 24 frontend tests (Node native test runner, across web/tests/*.test.mjs)
 
 # Run a single backend test
@@ -37,6 +37,15 @@ make web-ui-build
 # Run one digest manually
 make live
 
+# Run the Telegram bot in the foreground
+make bot
+
+# Start the scheduler loop (defaults: TIME=07:00 TZ=America/Sao_Paulo)
+make schedule
+
+# Screenshot all web UI pages (visual QA)
+make web-screenshots
+
 # Preflight checks
 make doctor
 
@@ -57,12 +66,11 @@ Ruff is the linter (config in `pyproject.toml`: `target-version = "py311"`, rule
 
 ### Docker targets
 
-Two service families, each with `build`/`up`/`down`/`logs`/`ps`/`restart`/`deploy`:
+Two compose services: `digest-bot` (Telegram bot) and `digest-scheduler` (web API + scheduler).
 
-- `make docker-*` — the `digest-bot` (Telegram bot) service
-- `make docker-scheduler-*` — the `digest-scheduler` (web API + scheduler) service
-
-`deploy` = build + up. To bring up the full stack after tests pass: `make docker-scheduler-deploy && make docker-deploy`.
+- `make docker-build`/`docker-up`/`docker-deploy` — operate on **both** services (`deploy` = build + up); `make docker-deploy` alone brings up the full stack
+- `make docker-logs`/`docker-restart` — `digest-bot` only
+- `make docker-scheduler-*` — the same `build`/`up`/`down`/`logs`/`ps`/`restart`/`deploy` family scoped to `digest-scheduler` only
 
 ## Architecture
 
@@ -76,21 +84,22 @@ Pipeline flow: **Ingest → Normalize → Dedupe → Score → Select → Delive
 | `runtime.py` | Main orchestrator — runs the full digest pipeline with progress callbacks |
 | `models.py` | Core dataclasses (`Item`, `Score`, `ScoredItem`, `DigestSections`, `RunReport`) |
 | `config.py` | Config dataclasses loaded from YAML |
-| `connectors/` | Source integrations: `rss.py`, `youtube.py`, `x_inbox.py`, `x_selectors.py`, `github.py` |
+| `connectors/` | Source integrations: `rss.py`, `youtube.py`, `x_inbox.py`, `x_provider.py`, `x_selectors.py`, `github.py` |
 | `pipeline/` | Processing stages: `normalize.py`, `dedupe.py`, `scoring.py`, `selection.py`, `summarize.py` |
-| `scorers/` | OpenAI Responses API agent scoring (`agent.py`) |
-| `summarizers/` | `responses_api.py` (LLM) + `extractive.py` (deterministic fallback) |
+| `llm/` | Shared LangChain structured-output client (`client.py`) — lazy-imports `langchain-openai`; a missing key/package raises `RuntimeError` so callers fall back to deterministic paths |
+| `scorers/` | LLM agent scoring (`agent.py`, via `llm/client.py`) |
+| `summarizers/` | `responses_api.py` (LLM, via `llm/client.py`) + `extractive.py` (deterministic fallback) |
 | `delivery/` | `telegram.py`, `obsidian.py`, `source_buckets.py` |
 | `storage/` | `sqlite_store.py` — run history, seen-state, feedback, timeline |
 | `quality/` | Online quality learning and repair (`online_repair.py`) |
 | `ops/` | Onboarding, profile/source registries, Telegram commands, run locks |
-| `web/` | FastAPI control plane (`src/digest/web/app.py`) — token-based auth, CORS, all `/api/*` routes |
+| `web/` | FastAPI control plane (`src/digest/web/app.py` + per-domain helper modules) — token-based auth, CORS, all `/api/*` routes |
 
 > Note the two `web` locations: `src/digest/web/` is the Python control plane (this table row); the repo-root `web/` is the React frontend (next section).
 
 ### Frontend (TypeScript/React, repo-root `web/`)
 
-Vite + React Router + Tailwind CSS + Radix UI. Feature-based folder structure under `web/src/features/`: Dashboard, Schedule, RunCenter, Sources, Profile, Timeline, History, Onboarding.
+Vite + React Router + Tailwind CSS + Radix UI. Feature-based folder structure under `web/src/features/`: Dashboard, Schedule, RunCenter, Sources, Profile, Timeline, History, Review, Onboarding.
 
 API client in `web/src/lib/api.ts` talks to the FastAPI backend on port 8787.
 
