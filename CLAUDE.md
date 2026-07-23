@@ -84,9 +84,11 @@ Pipeline flow: **Ingest → Normalize → Dedupe → Score → Select → Delive
 | `storage/` | `sqlite_store.py` — run history, seen-state, feedback, timeline |
 | `quality/` | Online quality learning and repair (`online_repair.py`) |
 | `ops/` | Onboarding, profile/source registries, Telegram commands, run locks |
-| `web/` | FastAPI control plane (`app.py`) — token-based auth, CORS, all `/api/*` routes |
+| `web/` | FastAPI control plane (`src/digest/web/app.py`) — token-based auth, CORS, all `/api/*` routes |
 
-### Frontend (TypeScript/React, `web/`)
+> Note the two `web` locations: `src/digest/web/` is the Python control plane (this table row); the repo-root `web/` is the React frontend (next section).
+
+### Frontend (TypeScript/React, repo-root `web/`)
 
 Vite + React Router + Tailwind CSS + Radix UI. Feature-based folder structure under `web/src/features/`: Dashboard, Schedule, RunCenter, Sources, Profile, Timeline, History, Onboarding.
 
@@ -102,7 +104,7 @@ API client in `web/src/lib/api.ts` talks to the FastAPI backend on port 8787.
 
 **Overlay semantics** (`ops/source_registry.py`, `ops/profile_registry.py`): the tracked base YAML is never mutated. UI/bot edits write a **delta-only** overlay to `data/*.local.yaml`; on load the overlay is deep-merged on top of the base (overlay wins); on save only values that differ from the base are persisted. When editing config behavior, change the registry merge logic — do not write back to the tracked base.
 
-### Web control plane auth & secret redaction (`web/security.py`)
+### Web control plane auth & secret redaction (`src/digest/web/security.py`)
 
 - Auth modes via `DIGEST_WEB_API_AUTH_MODE`: `required` (default), `optional`, `off`. In `required` mode every `/api/*` route except `/api/health` and `OPTIONS` needs the token.
 - Token in `DIGEST_WEB_API_TOKEN`, sent in header `DIGEST_WEB_API_TOKEN_HEADER` (default `X-Digest-Api-Token`). `scripts/start-app.sh` auto-generates a token when auth is `required` and none is set.
@@ -130,5 +132,9 @@ See `.docs/ARCHITECTURE.md` for the current system diagram, primary data flows, 
 ## Testing
 
 - Backend: Python `unittest` — tests live in `tests/test_*.py`
-- Frontend: Node test runner — tests in `web/tests/*.test.mjs`
+- Frontend: Node test runner — tests in `web/tests/*.test.mjs` (these are source-shape/structural tests, not a browser DOM harness)
 - CI runs security scanning (detect-secrets, bandit, semgrep, ruff) on PR/push
+
+## UI feedback convention
+
+Web surfaces follow a **feedback-locality** rule (see `AGENTS.md` for the full spec): show action feedback next to the control that triggered it (same card/row), not as a global top-of-page alert — reserve those for app-wide events (boot/auth/outage). Success auto-dismisses; errors persist. Always include a non-color cue (title/text) plus `aria-live` (`polite` for success/info, `assertive` for errors). This pattern is covered by `web/tests/ui-feedback-locality.test.mjs`.
