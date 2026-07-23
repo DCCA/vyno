@@ -3,16 +3,45 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
-import os
-import urllib.error
 import urllib.parse
-import urllib.request
+from typing import Any
 
 from digest.constants import DEFAULT_OPENAI_MODEL, DIGEST_MUST_READ_LIMIT
+from digest.llm import structured_model
 from digest.models import DigestSections, ScoredItem
 from digest.pipeline.selection import respects_source_cap, select_skim_items
 
 FeatureKey = tuple[str, str]
+
+_SYSTEM_PROMPT = (
+    "You are an editor for an AI daily digest. "
+    "Assess Must-read quality and propose a repaired Must-read list "
+    f"of exactly {DIGEST_MUST_READ_LIMIT} ids selected only from the provided candidate pool. "
+    "Prioritize practical impact, novelty, source diversity, and reduced redundancy."
+)
+
+_SCHEMA = {
+    "title": "must_read_quality_repair",
+    "type": "object",
+    "properties": {
+        "quality_score": {"type": "number"},
+        "confidence": {"type": "number"},
+        "issues": {"type": "array", "items": {"type": "string"}},
+        "repaired_must_read_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": DIGEST_MUST_READ_LIMIT,
+            "maxItems": DIGEST_MUST_READ_LIMIT,
+        },
+    },
+    "required": [
+        "quality_score",
+        "confidence",
+        "issues",
+        "repaired_must_read_ids",
+    ],
+    "additionalProperties": False,
+}
 
 
 @dataclass(slots=True)
@@ -27,12 +56,20 @@ class QualityRepairResult:
 class ResponsesAPIQualityRepair:
     provider = "openai_responses"
 
-    def __init__(self, model: str = DEFAULT_OPENAI_MODEL, timeout: int = 30) -> None:
+    def __init__(
+        self,
+        model: str = DEFAULT_OPENAI_MODEL,
+        timeout: int = 30,
+        *,
+        client: Any | None = None,
+    ) -> None:
         self.model = model
         self.timeout = timeout
-        self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
-        if not self.api_key:
-            raise RuntimeError("OPENAI_API_KEY is required for quality repair")
+        # Raises RuntimeError without OPENAI_API_KEY / langchain-openai, so the
+        # runtime skips repair and keeps the original selection (fail-open).
+        self._client = client or structured_model(
+            model=model, schema=_SCHEMA, timeout=timeout
+        )
 
     def evaluate_and_repair(
         self,
@@ -42,123 +79,82 @@ class ResponsesAPIQualityRepair:
         must_read_max_per_source: int,
         digest_max_per_source: int,
     ) -> QualityRepairResult:
-        current_ids = [si.item.id for si in current_must_read]
-        if len(current_ids) < DIGEST_MUST_READ_LIMIT:
-            raise RuntimeError(
-                f"Quality repair requires at least {DIGEST_MUST_READ_LIMIT} current must-read items"
-            )
-        pool_ids = [si.item.id for si in candidate_pool]
-        if len(pool_ids) < DIGEST_MUST_READ_LIMIT:
-            raise RuntimeError(
-                f"Quality repair requires candidate pool size >= {DIGEST_MUST_READ_LIMIT}"
-            )
-
-        payload = {
-            "model": self.model,
-            "input": [
-                {
-                    "role": "system",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": (
-                                "You are an editor for an AI daily digest. "
-                                "Assess Must-read quality and propose a repaired Must-read list "
-                                f"of exactly {DIGEST_MUST_READ_LIMIT} ids selected only from the provided candidate pool. "
-                                "Prioritize practical impact, novelty, source diversity, and reduced redundancy."
-                            ),
-                        }
-                    ],
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": _quality_eval_input(
-                                current_must_read=current_must_read,
-                                candidate_pool=candidate_pool,
-                                must_read_max_per_source=must_read_max_per_source,
-                                digest_max_per_source=digest_max_per_source,
-                            ),
-                        }
-                    ],
-                },
-            ],
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "must_read_quality_repair",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "quality_score": {"type": "number"},
-                            "confidence": {"type": "number"},
-                            "issues": {"type": "array", "items": {"type": "string"}},
-                            "repaired_must_read_ids": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "minItems": DIGEST_MUST_READ_LIMIT,
-                                "maxItems": DIGEST_MUST_READ_LIMIT,
-                            },
-                        },
-                        "required": [
-                            "quality_score",
-                            "confidence",
-                            "issues",
-                            "repaired_must_read_ids",
-                        ],
-                        "additionalProperties": False,
-                    },
-                }
-            },
-        }
-        req = urllib.request.Request(
-            "https://api.openai.com/v1/responses",
-            data=json.dumps(payload).encode("utf-8"),
-            method="POST",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
+        current_ids, pool_ids = _validate_repair_inputs(
+            current_must_read, candidate_pool
+        )
+        user_text = _quality_eval_input(
+            current_must_read=current_must_read,
+            candidate_pool=candidate_pool,
+            must_read_max_per_source=must_read_max_per_source,
+            digest_max_per_source=digest_max_per_source,
         )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                raw = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"Quality repair HTTPError: {exc.code}") from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError("Quality repair connection error") from exc
-
-        parsed = _extract_json_output(raw)
-        quality_score = max(0.0, min(100.0, float(parsed.get("quality_score", 0.0))))
-        confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0.0))))
-        issues = _normalize_issue_list(parsed.get("issues", []))
-        repaired_ids = _normalize_repaired_ids(parsed.get("repaired_must_read_ids", []))
-
-        allowed = set(pool_ids)
-        if len(repaired_ids) != DIGEST_MUST_READ_LIMIT:
-            raise RuntimeError(
-                "Quality repair invalid schema: repaired_must_read_ids size"
+            parsed = self._client.invoke(
+                [("system", _SYSTEM_PROMPT), ("user", user_text)]
             )
-        if len(set(repaired_ids)) != len(repaired_ids):
-            raise RuntimeError("Quality repair invalid schema: duplicate repaired ids")
-        if any(item_id not in allowed for item_id in repaired_ids):
-            raise RuntimeError(
-                "Quality repair invalid schema: id outside candidate pool"
-            )
-
-        # Keep the existing list if model emits empty issues with no change.
-        if not issues and repaired_ids == current_ids:
-            issues = ["no_material_issues"]
-
-        return QualityRepairResult(
-            quality_score=quality_score,
-            confidence=confidence,
-            issues=issues,
-            repaired_must_read_ids=repaired_ids,
-            model=self.model,
+        except Exception as exc:  # normalize transport/parse errors
+            raise RuntimeError(f"Quality repair failed: {exc}") from exc
+        return build_repair_result(
+            parsed, current_ids=current_ids, pool_ids=pool_ids, model=self.model
         )
+
+
+def _validate_repair_inputs(
+    current_must_read: list[ScoredItem],
+    candidate_pool: list[ScoredItem],
+) -> tuple[list[str], list[str]]:
+    current_ids = [si.item.id for si in current_must_read]
+    if len(current_ids) < DIGEST_MUST_READ_LIMIT:
+        raise RuntimeError(
+            f"Quality repair requires at least {DIGEST_MUST_READ_LIMIT} current must-read items"
+        )
+    pool_ids = [si.item.id for si in candidate_pool]
+    if len(pool_ids) < DIGEST_MUST_READ_LIMIT:
+        raise RuntimeError(
+            f"Quality repair requires candidate pool size >= {DIGEST_MUST_READ_LIMIT}"
+        )
+    return current_ids, pool_ids
+
+
+def build_repair_result(
+    parsed: object,
+    *,
+    current_ids: list[str],
+    pool_ids: list[str],
+    model: str,
+) -> QualityRepairResult:
+    """Validate a structured repair payload and build a QualityRepairResult.
+
+    Shared by the LangChain structured client and the DeepAgents editor agent so
+    both enforce identical id/pool/dedup guarantees.
+    """
+    if not isinstance(parsed, dict):
+        raise RuntimeError("Quality repair output missing structured JSON")
+
+    quality_score = max(0.0, min(100.0, float(parsed.get("quality_score", 0.0))))
+    confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0.0))))
+    issues = _normalize_issue_list(parsed.get("issues", []))
+    repaired_ids = _normalize_repaired_ids(parsed.get("repaired_must_read_ids", []))
+
+    allowed = set(pool_ids)
+    if len(repaired_ids) != DIGEST_MUST_READ_LIMIT:
+        raise RuntimeError("Quality repair invalid schema: repaired_must_read_ids size")
+    if len(set(repaired_ids)) != len(repaired_ids):
+        raise RuntimeError("Quality repair invalid schema: duplicate repaired ids")
+    if any(item_id not in allowed for item_id in repaired_ids):
+        raise RuntimeError("Quality repair invalid schema: id outside candidate pool")
+
+    # Keep the existing list if model emits empty issues with no change.
+    if not issues and repaired_ids == current_ids:
+        issues = ["no_material_issues"]
+
+    return QualityRepairResult(
+        quality_score=quality_score,
+        confidence=confidence,
+        issues=issues,
+        repaired_must_read_ids=repaired_ids,
+        model=model,
+    )
 
 
 def rebuild_sections_with_repair(
@@ -423,29 +419,6 @@ def _item_payload(scored: ScoredItem) -> dict[str, object]:
         "why_it_matters": (summary.why_it_matters if summary else "")[:280],
         "snippet": " ".join((scored.item.raw_text or "").split())[:420],
     }
-
-
-def _extract_json_output(raw: dict) -> dict:
-    output = raw.get("output", [])
-    for out in output:
-        for content in out.get("content", []):
-            if content.get("type") == "output_text":
-                text = content.get("text", "{}")
-                if not isinstance(text, str) or not text.strip():
-                    raise RuntimeError("Quality repair returned empty response")
-                try:
-                    return json.loads(text)
-                except json.JSONDecodeError:
-                    continue
-    text = raw.get("output_text", "{}")
-    if isinstance(text, str):
-        if not text.strip():
-            raise RuntimeError("Quality repair returned empty response")
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("Quality repair returned non-JSON output") from exc
-    raise RuntimeError("Quality repair output missing structured JSON")
 
 
 def _normalize_issue_list(raw: object) -> list[str]:

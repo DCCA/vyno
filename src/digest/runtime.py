@@ -945,7 +945,12 @@ def run_digest(
                         llm_requests_used=llm_requests_used,
                     )
                 else:
-                    quality_judge = ResponsesAPIQualityRepair(model=quality_model)
+                    if profile.quality_repair_agent == "deepagents":
+                        from digest.quality.deep_repair import DeepAgentQualityRepair
+
+                        quality_judge = DeepAgentQualityRepair(model=quality_model)
+                    else:
+                        quality_judge = ResponsesAPIQualityRepair(model=quality_model)
                     repair_result = quality_judge.evaluate_and_repair(
                         current_must_read=sections.must_read,
                         candidate_pool=candidate_pool,
