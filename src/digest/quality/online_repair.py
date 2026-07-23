@@ -3,16 +3,45 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
-import os
-import urllib.error
 import urllib.parse
-import urllib.request
+from typing import Any
 
 from digest.constants import DEFAULT_OPENAI_MODEL, DIGEST_MUST_READ_LIMIT
+from digest.llm import structured_model
 from digest.models import DigestSections, ScoredItem
 from digest.pipeline.selection import respects_source_cap, select_skim_items
 
 FeatureKey = tuple[str, str]
+
+_SYSTEM_PROMPT = (
+    "You are an editor for an AI daily digest. "
+    "Assess Must-read quality and propose a repaired Must-read list "
+    f"of exactly {DIGEST_MUST_READ_LIMIT} ids selected only from the provided candidate pool. "
+    "Prioritize practical impact, novelty, source diversity, and reduced redundancy."
+)
+
+_SCHEMA = {
+    "title": "must_read_quality_repair",
+    "type": "object",
+    "properties": {
+        "quality_score": {"type": "number"},
+        "confidence": {"type": "number"},
+        "issues": {"type": "array", "items": {"type": "string"}},
+        "repaired_must_read_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": DIGEST_MUST_READ_LIMIT,
+            "maxItems": DIGEST_MUST_READ_LIMIT,
+        },
+    },
+    "required": [
+        "quality_score",
+        "confidence",
+        "issues",
+        "repaired_must_read_ids",
+    ],
+    "additionalProperties": False,
+}
 
 
 @dataclass(slots=True)
@@ -27,12 +56,20 @@ class QualityRepairResult:
 class ResponsesAPIQualityRepair:
     provider = "openai_responses"
 
-    def __init__(self, model: str = DEFAULT_OPENAI_MODEL, timeout: int = 30) -> None:
+    def __init__(
+        self,
+        model: str = DEFAULT_OPENAI_MODEL,
+        timeout: int = 30,
+        *,
+        client: Any | None = None,
+    ) -> None:
         self.model = model
         self.timeout = timeout
-        self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
-        if not self.api_key:
-            raise RuntimeError("OPENAI_API_KEY is required for quality repair")
+        # Raises RuntimeError without OPENAI_API_KEY / langchain-openai, so the
+        # runtime skips repair and keeps the original selection (fail-open).
+        self._client = client or structured_model(
+            model=model, schema=_SCHEMA, timeout=timeout
+        )
 
     def evaluate_and_repair(
         self,
@@ -53,84 +90,21 @@ class ResponsesAPIQualityRepair:
                 f"Quality repair requires candidate pool size >= {DIGEST_MUST_READ_LIMIT}"
             )
 
-        payload = {
-            "model": self.model,
-            "input": [
-                {
-                    "role": "system",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": (
-                                "You are an editor for an AI daily digest. "
-                                "Assess Must-read quality and propose a repaired Must-read list "
-                                f"of exactly {DIGEST_MUST_READ_LIMIT} ids selected only from the provided candidate pool. "
-                                "Prioritize practical impact, novelty, source diversity, and reduced redundancy."
-                            ),
-                        }
-                    ],
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": _quality_eval_input(
-                                current_must_read=current_must_read,
-                                candidate_pool=candidate_pool,
-                                must_read_max_per_source=must_read_max_per_source,
-                                digest_max_per_source=digest_max_per_source,
-                            ),
-                        }
-                    ],
-                },
-            ],
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "must_read_quality_repair",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "quality_score": {"type": "number"},
-                            "confidence": {"type": "number"},
-                            "issues": {"type": "array", "items": {"type": "string"}},
-                            "repaired_must_read_ids": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "minItems": DIGEST_MUST_READ_LIMIT,
-                                "maxItems": DIGEST_MUST_READ_LIMIT,
-                            },
-                        },
-                        "required": [
-                            "quality_score",
-                            "confidence",
-                            "issues",
-                            "repaired_must_read_ids",
-                        ],
-                        "additionalProperties": False,
-                    },
-                }
-            },
-        }
-        req = urllib.request.Request(
-            "https://api.openai.com/v1/responses",
-            data=json.dumps(payload).encode("utf-8"),
-            method="POST",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
+        user_text = _quality_eval_input(
+            current_must_read=current_must_read,
+            candidate_pool=candidate_pool,
+            must_read_max_per_source=must_read_max_per_source,
+            digest_max_per_source=digest_max_per_source,
         )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                raw = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"Quality repair HTTPError: {exc.code}") from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError("Quality repair connection error") from exc
+            parsed = self._client.invoke(
+                [("system", _SYSTEM_PROMPT), ("user", user_text)]
+            )
+        except Exception as exc:  # normalize transport/parse errors
+            raise RuntimeError(f"Quality repair failed: {exc}") from exc
+        if not isinstance(parsed, dict):
+            raise RuntimeError("Quality repair output missing structured JSON")
 
-        parsed = _extract_json_output(raw)
         quality_score = max(0.0, min(100.0, float(parsed.get("quality_score", 0.0))))
         confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0.0))))
         issues = _normalize_issue_list(parsed.get("issues", []))
@@ -423,29 +397,6 @@ def _item_payload(scored: ScoredItem) -> dict[str, object]:
         "why_it_matters": (summary.why_it_matters if summary else "")[:280],
         "snippet": " ".join((scored.item.raw_text or "").split())[:420],
     }
-
-
-def _extract_json_output(raw: dict) -> dict:
-    output = raw.get("output", [])
-    for out in output:
-        for content in out.get("content", []):
-            if content.get("type") == "output_text":
-                text = content.get("text", "{}")
-                if not isinstance(text, str) or not text.strip():
-                    raise RuntimeError("Quality repair returned empty response")
-                try:
-                    return json.loads(text)
-                except json.JSONDecodeError:
-                    continue
-    text = raw.get("output_text", "{}")
-    if isinstance(text, str):
-        if not text.strip():
-            raise RuntimeError("Quality repair returned empty response")
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("Quality repair returned non-JSON output") from exc
-    raise RuntimeError("Quality repair output missing structured JSON")
 
 
 def _normalize_issue_list(raw: object) -> list[str]:
