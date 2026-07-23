@@ -138,3 +138,15 @@ See `.docs/ARCHITECTURE.md` for the current system diagram, primary data flows, 
 ## UI feedback convention
 
 Web surfaces follow a **feedback-locality** rule (see `AGENTS.md` for the full spec): show action feedback next to the control that triggered it (same card/row), not as a global top-of-page alert — reserve those for app-wide events (boot/auth/outage). Success auto-dismisses; errors persist. Always include a non-color cue (title/text) plus `aria-live` (`polite` for success/info, `assertive` for errors). This pattern is covered by `web/tests/ui-feedback-locality.test.mjs`.
+
+## Contribution & merge workflow
+
+Standing pattern for changes made in this repo — always follow it end to end, don't stop at "pushed":
+
+1. **Branch** — develop on a feature branch; never commit directly to `master`.
+2. **Commit** — small, focused, scoped commits (imperative subject, e.g. `web(ui): localize action feedback`).
+3. **Open a PR** against `master` as soon as the change is complete (fill summary / affected paths / verification / risks).
+4. **Review** — read the full diff yourself and confirm every CI check run passes: Backend tests (Python 3.11 + 3.12), Frontend tests + build, and the security scan.
+5. **Merge** — merge once CI is green. **Never merge with failing or still-pending checks**; wait for them. The repo uses merge commits (see `git log` history), so default to the `merge` method unless asked otherwise.
+
+Deviate only when the user explicitly asks for something different (e.g. leave as draft, hold for their review).
