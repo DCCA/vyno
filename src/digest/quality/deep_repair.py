@@ -82,7 +82,8 @@ def _build_agent(*, model: str, timeout: int) -> Any:
             "quality-repair agent; install the 'llm' extra"
         ) from exc
 
-    chat = ChatOpenAI(model=model, timeout=timeout, max_retries=0)
+    # use_responses_api: same endpoint pin as llm.client.structured_model
+    chat = ChatOpenAI(model=model, timeout=timeout, max_retries=0, use_responses_api=True)
     return create_deep_agent(
         model=chat,
         system_prompt=_SYSTEM_PROMPT,

@@ -33,9 +33,9 @@ min_llm_coverage: 0.9
 max_fallback_share: 0.1
 agent_scoring_retry_attempts: 1
 agent_scoring_text_max_chars: 8000
-openai_model: gpt-5.1-codex-mini
+openai_model: gpt-4.1-mini
 quality_repair_enabled: true
-quality_repair_model: gpt-5.1-codex-mini
+quality_repair_model: gpt-4.1-mini
 quality_repair_threshold: 80
 quality_repair_candidate_pool_size: 40
 quality_repair_fail_open: true
