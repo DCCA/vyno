@@ -32,6 +32,7 @@ Core history index (summary-first). Full details remain in git history.
 - high-impact-github-issues: Added deterministic GitHub issue impact gate in `src/digest/pipeline/github_issue_impact.py`. ([summary](./high-impact-github-issues/completion-summary.md))
 - hourly-brazil-background-scheduler: Added hourly Brazil-time scheduling with quiet hours and a detached Docker scheduler service. ([summary](./hourly-brazil-background-scheduler/completion-summary.md))
 - incremental-video-presence: Added targeted video supplement logic in `src/digest/runtime.py` for incremental runs: ([summary](./incremental-video-presence/completion-summary.md))
+- langchain-deepagents-migration: Migrated the scorer, summarizer, and quality-repair LLM calls to a shared LangChain structured-output client and added an opt-in DeepAgents editor agent for must-read repair, preserving every contract and fallback. ([summary](./langchain-deepagents-migration/completion-summary.md))
 - latest-run-source-health: Source health now reflects only the latest completed run, clearing stale alerts after a newer clean run. ([summary](./latest-run-source-health/completion-summary.md))
 - left-rail-scroll-fix: Added internal desktop scrolling to the sticky left rail so lower nav content remains reachable. ([summary](./left-rail-scroll-fix/completion-summary.md))
 - logo-favicon: Added brand identity assets — SVG/PNG favicon suite, logo mark/wordmark, PWA manifest, and VynoWordmark React component. ([summary](./logo-favicon/completion-summary.md))

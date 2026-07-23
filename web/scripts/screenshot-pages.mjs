@@ -10,7 +10,8 @@
 
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
-import { resolve, dirname } from 'node:path';
+import { existsSync, readdirSync } from 'node:fs';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -31,10 +32,36 @@ const ROUTES = [
   { path: '/history',    name: 'history' },
 ];
 
+/**
+ * Resolve a Chromium executable when the version Playwright pins isn't the one
+ * installed (common in CI/sandbox images that pre-provision a fixed browser
+ * build). Falls back to Playwright's own managed browser when nothing is found.
+ *   - PLAYWRIGHT_CHROMIUM_PATH: explicit override, wins if set.
+ *   - PLAYWRIGHT_BROWSERS_PATH: scan for any installed chromium build dir.
+ */
+function resolveChromiumExecutable() {
+  const override = process.env.PLAYWRIGHT_CHROMIUM_PATH;
+  if (override && existsSync(override)) return override;
+
+  const root = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  if (root && existsSync(root)) {
+    const candidates = readdirSync(root)
+      .filter((d) => d.startsWith('chromium-'))
+      .map((d) => join(root, d, 'chrome-linux', 'chrome'))
+      .filter((p) => existsSync(p));
+    if (candidates.length) return candidates[0];
+  }
+  return undefined; // let Playwright use its managed browser
+}
+
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
 
-  const browser = await chromium.launch({ headless: true });
+  const executablePath = resolveChromiumExecutable();
+  if (executablePath) {
+    console.log(`Using Chromium at ${executablePath}`);
+  }
+  const browser = await chromium.launch({ headless: true, executablePath });
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
   });
