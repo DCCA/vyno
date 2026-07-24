@@ -1,7 +1,7 @@
 added:
   rss:
   - https://huggingface.co/blog/feed.xml
-  - https://blog.langchain.com/rss/
+  - https://blog.langchain.com/rss.xml
   - https://simonwillison.net/atom/everything/
   - https://www.latent.space/feed
   - https://www.interconnects.ai/feed
