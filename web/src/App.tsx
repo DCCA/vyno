@@ -354,11 +354,13 @@ function App() {
 
   function setScopedNotice(scope: NoticeScope, kind: Notice["kind"], text: string) {
     const next = { kind, text }
-    if (kind === "ok") toast("ok", text)
     if (scope === "global") {
+      if (kind === "ok") toast("ok", text)
       setGlobalNotice(next)
       return
     }
+    // Scoped success renders as the local inline notice only; a toast would
+    // duplicate the same message in a second, non-local place.
     setLocalNotices((prev) => ({ ...prev, [scope]: next }))
   }
 
