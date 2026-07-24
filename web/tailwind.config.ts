@@ -32,14 +32,20 @@ export default {
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
+          surface: "hsl(var(--destructive-surface))",
+          ink: "hsl(var(--destructive-ink))",
         },
         success: {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
+          surface: "hsl(var(--success-surface))",
+          ink: "hsl(var(--success-ink))",
         },
         warning: {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",
+          surface: "hsl(var(--warning-surface))",
+          ink: "hsl(var(--warning-ink))",
         },
       },
       borderRadius: {
