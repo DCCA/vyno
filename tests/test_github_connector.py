@@ -265,3 +265,34 @@ class TestGitHubConnector(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestGitHubSearchQueryQualifier(unittest.TestCase):
+    def test_search_query_gets_issue_qualifier_appended(self):
+        seen_paths: list[str] = []
+
+        def fake_request(path, token, timeout):
+            seen_paths.append(path)
+            return {"items": []}
+
+        with patch("digest.connectors.github._request_json", side_effect=fake_request):
+            fetch_github_items([], [], ["llm"])
+
+        search_paths = [p for p in seen_paths if p.startswith("/search/issues")]
+        self.assertEqual(len(search_paths), 1)
+        self.assertIn("is%3Aissue", search_paths[0])
+
+    def test_search_query_keeps_explicit_type_qualifier(self):
+        seen_paths: list[str] = []
+
+        def fake_request(path, token, timeout):
+            seen_paths.append(path)
+            return {"items": []}
+
+        with patch("digest.connectors.github._request_json", side_effect=fake_request):
+            fetch_github_items([], [], ["agents is:pull-request"])
+
+        search_paths = [p for p in seen_paths if p.startswith("/search/issues")]
+        self.assertEqual(len(search_paths), 1)
+        self.assertIn("is%3Apull-request", search_paths[0])
+        self.assertNotIn("is%3Aissue&", search_paths[0])

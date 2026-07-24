@@ -396,6 +396,10 @@ def _search_issues_and_prs(
     *,
     max_age_days: int,
 ) -> list[Item]:
+    # GitHub's issue search now rejects queries without a type qualifier
+    # (422: "Query must include 'is:issue' or 'is:pull-request'").
+    if "is:issue" not in query and "is:pull-request" not in query:
+        query = f"{query} is:issue"
     q = urllib.parse.quote_plus(query)
     path = f"/search/issues?q={q}&sort=updated&order=desc&per_page={GITHUB_DEFAULT_PER_PAGE}"
     data = _request_json(path, token, timeout)
