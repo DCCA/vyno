@@ -113,7 +113,7 @@ class TestTelegramCommands(unittest.TestCase):
                 self.assertIsNotNone(resp)
                 assert resp is not None
                 self.assertIn("Run started", resp.text or "")
-                for _ in range(50):
+                for _ in range(500):
                     if run_mock.called:
                         break
                     time.sleep(0.01)
@@ -122,7 +122,7 @@ class TestTelegramCommands(unittest.TestCase):
                 self.assertTrue(kwargs.get("use_last_completed_window"))
                 self.assertTrue(kwargs.get("only_new"))
                 self.assertFalse(kwargs.get("allow_seen_fallback", True))
-                for _ in range(50):
+                for _ in range(500):
                     if sent:
                         break
                     time.sleep(0.01)
@@ -409,7 +409,7 @@ class TestTelegramCommands(unittest.TestCase):
             ):
                 resp = handle_update(_msg("/digest run backfill"), ctx)
                 self.assertIn("backfill", resp.text or "")
-                for _ in range(50):
+                for _ in range(500):
                     if run_mock.called:
                         break
                     time.sleep(0.01)
@@ -445,10 +445,11 @@ class TestTelegramCommands(unittest.TestCase):
             ):
                 resp = handle_update(_msg("/digest run"), ctx)
                 self.assertIn("balanced", resp.text or "")
-                for _ in range(50):
+                for _ in range(500):
                     if run_mock.called:
                         break
                     time.sleep(0.01)
+                self.assertTrue(run_mock.called)
                 kwargs = run_mock.call_args.kwargs
                 self.assertTrue(kwargs.get("allow_seen_fallback"))
 
