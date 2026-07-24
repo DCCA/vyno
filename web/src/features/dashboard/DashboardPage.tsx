@@ -306,7 +306,7 @@ function GuidanceCard({
             <AlertTriangle className="h-5 w-5 shrink-0 text-warning-ink" aria-hidden />
             <div>
               <p className="text-sm font-semibold">Review {healthCount} failing source{healthCount !== 1 ? "s" : ""} before the next run</p>
-              <p className="text-sm text-muted-foreground">Failing sources reduce digest quality. Fix or mute them to keep signal clean.</p>
+              <p className="text-sm text-foreground">Failing sources reduce digest quality. Fix or mute them to keep signal clean.</p>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={() => onNavigate("sources")}>
