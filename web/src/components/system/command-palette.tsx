@@ -135,17 +135,17 @@ export function CommandPalette() {
                 </Command.Item>
               </Command.Group>
             </Command.List>
-            <div className="border-t border-border px-4 py-2 text-[12px] text-muted-foreground flex items-center gap-3">
+            <div className="border-t border-border px-4 py-2 text-[13px] text-muted-foreground flex items-center gap-3">
               <span className="flex items-center gap-1">
-                <kbd className="inline-flex h-5 items-center rounded border border-border bg-muted px-1.5 text-[11px] font-mono">↑↓</kbd>
+                <kbd className="inline-flex h-5 items-center rounded border border-border bg-muted px-1.5 text-[13px] font-mono">↑↓</kbd>
                 navigate
               </span>
               <span className="flex items-center gap-1">
-                <kbd className="inline-flex h-5 items-center rounded border border-border bg-muted px-1.5 text-[11px] font-mono">↵</kbd>
+                <kbd className="inline-flex h-5 items-center rounded border border-border bg-muted px-1.5 text-[13px] font-mono">↵</kbd>
                 select
               </span>
               <span className="flex items-center gap-1">
-                <kbd className="inline-flex h-5 items-center rounded border border-border bg-muted px-1.5 text-[11px] font-mono">esc</kbd>
+                <kbd className="inline-flex h-5 items-center rounded border border-border bg-muted px-1.5 text-[13px] font-mono">esc</kbd>
                 close
               </span>
             </div>

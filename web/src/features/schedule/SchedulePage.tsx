@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { MetricCard } from "@/components/ui/metric-card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { formatTimestamp } from "@/lib/format"
 import type { ScheduleConfig, ScheduleStatus } from "@/app/types"
 
 export function SchedulePage() {
@@ -46,12 +47,7 @@ export function SchedulePage() {
         }
         badges={[
           { label: enabled ? "automation enabled" : "automation paused", variant: enabled ? "success" : "warning" },
-          { label: `cadence: ${scheduleDraft.cadence}`, variant: "secondary" },
           { label: `state: ${schedulerState.label}`, variant: schedulerState.variant },
-          {
-            label: scheduleStatus?.next_run_at ? `next: ${formatTimestampBadge(scheduleStatus.next_run_at)}` : "next run not scheduled",
-            variant: scheduleStatus?.enabled ? "secondary" : "warning",
-          },
         ]}
         actions={
           <div className="flex flex-wrap gap-2 lg:justify-end">
@@ -79,7 +75,7 @@ export function SchedulePage() {
         }
       >
         <p className="text-sm font-semibold text-foreground">{verdict.title}</p>
-        <p className="mt-1 text-sm text-muted-foreground">{verdict.detail}</p>
+        <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{verdict.detail}</p>
       </div>
 
       {lifecycle === "needs_setup" ? (
@@ -104,27 +100,24 @@ export function SchedulePage() {
             <CardTitle className="font-display">Automation status</CardTitle>
             <CardDescription>High-signal readout for the current automation posture before you change anything.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2">
-            <MetricCard variant="compact"
+          <CardContent className="space-y-2">
+            <MetricCard variant="inline"
               label="Next run"
-              value={formatTimestamp(scheduleStatus?.next_run_at) || "Not scheduled"}
-              detail={enabled ? cadenceSummary : "Automation is paused"}
+              value={scheduleStatus?.next_run_at ? formatTimestamp(scheduleStatus.next_run_at) : "Not scheduled"}
             />
-            <MetricCard variant="compact"
+            <MetricCard variant="inline"
               label="Last result"
               value={scheduleStatus?.last_result || "No scheduled run yet"}
-              detail={formatTimestamp(scheduleStatus?.last_triggered_at) || "No prior trigger recorded"}
             />
-            <MetricCard variant="compact"
+            <MetricCard variant="inline"
               label="Scheduler state"
               value={schedulerState.title}
-              detail={schedulerState.detail}
             />
-            <MetricCard variant="compact"
+            <MetricCard variant="inline"
               label="Active run"
               value={scheduleStatus?.active_run_id || "None"}
-              detail={scheduleStatus?.active_run_id ? "A digest is currently running." : "No current automation run."}
             />
+            <p className="max-w-[60ch] pt-2 text-sm text-muted-foreground">{schedulerState.detail}</p>
           </CardContent>
         </Card>
 
@@ -134,7 +127,7 @@ export function SchedulePage() {
             <CardDescription>Save, pause, or resume the cadence used by the background scheduler service.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between rounded-lg border border-border/80 bg-secondary/25 p-4">
+            <div className="flex items-center justify-between gap-3">
               <div className="space-y-1">
                 <p className="text-sm font-semibold">Automation enabled</p>
                 <p className="text-sm text-muted-foreground">Pause or resume the schedule without deleting its cadence, quiet hours, or timezone.</p>
@@ -146,8 +139,8 @@ export function SchedulePage() {
               />
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-2 rounded-lg border border-border/80 bg-secondary/20 p-4">
+            <div className="grid gap-4 border-t border-border pt-4 md:grid-cols-2">
+              <div className="space-y-2">
                 <Label htmlFor="schedule-cadence">Cadence</Label>
                 <Select
                   value={scheduleDraft.cadence}
@@ -162,7 +155,7 @@ export function SchedulePage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2 rounded-lg border border-border/80 bg-secondary/20 p-4">
+              <div className="space-y-2">
                 <Label htmlFor="schedule-timezone">Timezone</Label>
                 <Input
                   id="schedule-timezone"
@@ -182,8 +175,8 @@ export function SchedulePage() {
             </div>
 
             {scheduleDraft.cadence === "hourly" ? (
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-2 rounded-lg border border-border/80 bg-secondary/20 p-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
                   <Label htmlFor="schedule-hourly-minute">Minute past the hour</Label>
                   <Input
                     id="schedule-hourly-minute"
@@ -194,7 +187,7 @@ export function SchedulePage() {
                     onChange={(event) => onChangeScheduleField("hourly_minute", Number(event.target.value || 0))}
                   />
                 </div>
-                <div className="space-y-2 rounded-lg border border-border/80 bg-secondary/20 p-4">
+                <div className="space-y-2">
                   <p className="text-sm font-semibold">Hourly preview</p>
                   <p className="text-sm text-muted-foreground">
                     Runs every hour at :{String(scheduleDraft.hourly_minute).padStart(2, "0")} in {scheduleDraft.timezone || "UTC"}.
@@ -202,7 +195,7 @@ export function SchedulePage() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-2 rounded-lg border border-border/80 bg-secondary/20 p-4">
+              <div className="space-y-2">
                 <Label htmlFor="schedule-daily-time">Daily time</Label>
                 <Input
                   id="schedule-daily-time"
@@ -213,7 +206,7 @@ export function SchedulePage() {
               </div>
             )}
 
-            <div className="space-y-4 rounded-lg border border-border/80 bg-secondary/20 p-4">
+            <div className="space-y-4 border-t border-border pt-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold">Quiet hours</p>
@@ -270,7 +263,7 @@ export function SchedulePage() {
             <CardTitle className="font-display">What happens next</CardTitle>
             <CardDescription>Explain the current schedule in plain language before the user leaves the page.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <CardContent className="max-w-[60ch] space-y-3 text-sm text-muted-foreground">
             <p>
               {enabled
                 ? `${cadenceSummary} while the background scheduler service is running.`
@@ -292,25 +285,22 @@ export function SchedulePage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {scheduleStatus?.last_error ? (
-              <div className="rounded-lg border border-amber-300/50 bg-amber-50/50 p-4">
+              <div className="rounded-lg border border-warning/40 bg-warning/10 p-4">
                 <div className="flex items-start gap-3">
-                  <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
+                  <AlertTriangle className="mt-0.5 h-5 w-5 text-warning-ink" aria-hidden />
                   <div className="space-y-1">
-                    <p className="text-sm font-semibold text-amber-900">Latest scheduler issue</p>
-                    <p className="text-sm text-amber-800">{scheduleStatus.last_error}</p>
+                    <p className="text-sm font-semibold">Latest scheduler issue</p>
+                    <p className="text-sm text-muted-foreground">{scheduleStatus.last_error}</p>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-emerald-200/70 bg-emerald-50/55 p-4">
-                <p className="text-sm font-semibold text-emerald-900">No active scheduler issue</p>
-                <p className="mt-1 text-sm text-emerald-800">Automation is clear to continue with the current schedule.</p>
-              </div>
+              <p className="text-sm text-muted-foreground">No active scheduler issue. Automation is clear to continue with the current schedule.</p>
             )}
 
-            <div className="space-y-2 rounded-lg border border-border/80 bg-secondary/20 p-4">
+            <div className="space-y-1 border-t border-border pt-3">
               <p className="text-sm font-semibold">Current state guidance</p>
-              <p className="text-sm text-muted-foreground">{schedulerState.nextStep}</p>
+              <p className="max-w-[60ch] text-sm text-muted-foreground">{schedulerState.nextStep}</p>
             </div>
           </CardContent>
         </Card>
@@ -337,7 +327,7 @@ function runVerdict(
     return { tone: "warning", title: "Automation is on, but the scheduler reported an error", detail: "See “Issues and recovery” below before relying on automatic runs." }
   }
   if (serviceLive && status?.next_run_at) {
-    return { tone: "ok", title: "Automation is live", detail: `Next digest ${formatTimestamp(status.next_run_at)} · ${cadenceSummary}.` }
+    return { tone: "ok", title: "Automation is live", detail: `Next digest ${formatTimestamp(status.next_run_at)} · ${cadenceSummary}` }
   }
   return {
     tone: "warning",
@@ -419,21 +409,3 @@ function describeSchedule(schedule: ScheduleConfig): string {
   return `${base} Quiet hours suppress runs from ${schedule.quiet_start_local} to ${schedule.quiet_end_local}.`
 }
 
-function formatTimestamp(value: string | undefined): string {
-  if (!value) return ""
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleString()
-}
-
-function formatTimestampBadge(value: string | undefined): string {
-  if (!value) return ""
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}

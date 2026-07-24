@@ -1,26 +1,35 @@
-import { Activity, AlertTriangle, ArrowRight, CheckCircle2, Clock3, Database, Play, Rocket } from "lucide-react"
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock3, Play, ThumbsDown, ThumbsUp } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
-import { useNavActions, useOnboardingState, useRunState, useScheduleState, useSourceState, useTimelineState } from "@/app/console-context"
+import { useNavActions, useOnboardingState, useRunState, useScheduleState, useSourceState, useUiState } from "@/app/console-context"
+import type { RunItem } from "@/app/types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { MetricCard } from "@/components/ui/metric-card"
+import { Skeleton } from "@/components/ui/skeleton"
+import { InlineNotice } from "@/components/system/notice"
 import { WorkspaceHeader } from "@/components/system/page-header"
+import { formatStatus, formatTimestamp } from "@/lib/format"
 
 export function DashboardPage() {
   const navigate = useNavigate()
-  const { runStatus } = useRunState()
+  const { runStatus, latestRunItems, onLatestItemFeedback } = useRunState()
   const { sourceHealth } = useSourceState()
   const { scheduleStatus } = useScheduleState()
   const { onboarding, setupPercent } = useOnboardingState()
-  const { timelineRuns } = useTimelineState()
+  const { loading, localNotices, clearScopedNotice } = useUiState()
   const { navigateToSurface } = useNavActions()
 
   const onboardingDone = (onboarding?.lifecycle ?? "needs_setup") === "ready"
-  const hasRuns = Boolean(runStatus?.latest_completed)
+  const latest = runStatus?.latest_completed ?? null
+  const hasRuns = Boolean(latest)
   const hasSchedule = Boolean(scheduleStatus?.enabled)
   const hasHealthIssues = sourceHealth.length > 0
+  const latestDegraded = Boolean(latest && latest.status !== "success")
+
+  const mustReads = latestRunItems.filter((item) => item.section === "must_read")
+  const skimCount = latestRunItems.filter((item) => item.section === "skim").length
+  const videoCount = latestRunItems.filter((item) => item.section === "videos").length
 
   return (
     <div className="space-y-4">
@@ -28,18 +37,10 @@ export function DashboardPage() {
         title="Dashboard"
         description={
           onboardingDone
-            ? "Automation-first home for the next scheduled digest, latest result, and follow-up actions."
+            ? "The desk view: what the last edition picked, and whether the next one is on track."
             : "Finish setup here, then let the digest run automatically on its saved schedule."
         }
-        badges={[
-          { label: `latest: ${runStatus?.latest?.status ?? "n/a"}` },
-          { label: `source alerts: ${sourceHealth.length}`, variant: hasHealthIssues ? "warning" : "success" },
-          { label: onboardingDone ? "setup complete" : `setup: ${setupPercent}%`, variant: onboardingDone ? "success" : "warning" },
-          {
-            label: hasSchedule ? `next: ${scheduleStatus?.next_run_at || "scheduled"}` : "schedule off",
-            variant: hasSchedule ? "success" : "warning",
-          },
-        ]}
+        badges={onboardingDone ? undefined : [{ label: `setup: ${setupPercent}%`, variant: "warning" }]}
       />
 
       <GuidanceCard
@@ -51,125 +52,234 @@ export function DashboardPage() {
         onNavigate={navigateToSurface}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Latest run" value={runStatus?.latest?.status ?? "n/a"} detail={runStatus?.latest?.run_id || "No run yet"} />
-        <MetricCard label="Source alerts" value={String(sourceHealth.length)} detail={hasHealthIssues ? "Needs attention" : "Healthy"} />
-        <MetricCard
-          label={onboardingDone ? "Next schedule" : "Setup completion"}
-          value={onboardingDone ? (scheduleStatus?.next_run_at || "Scheduled") : `${setupPercent}%`}
-          detail={onboardingDone ? "Automation window" : "Activation progress"}
-        />
-        <MetricCard label="Scheduled status" value={hasSchedule ? "On" : "Off"} detail={hasSchedule ? "Recurring" : "Manual only"} />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-display">{onboardingDone ? "Automation control" : "Activation focus"}</CardTitle>
-            <CardDescription>
-              {onboardingDone
-                ? "The digest is now a recurring product workflow. Use this module to jump into interventions."
-                : "Complete the setup path first, then the dashboard becomes your recurring product home."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {onboardingDone ? (
-                <Button className="justify-between" onClick={() => navigateToSurface("run")}>
-                  Open Run Center
-                  <Rocket className="h-4 w-4" />
-                </Button>
-              ) : (
-                <Button className="justify-between" onClick={() => navigateToSurface("onboarding")}>
-                  Continue Setup
-                  <Rocket className="h-4 w-4" />
-                </Button>
-              )}
-              <Button variant="outline" className="justify-between" onClick={() => navigateToSurface("sources")}>
-                Open Sources
-                <Database className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" className="justify-between" onClick={() => navigateToSurface("schedule")}>
-                Manage Schedule
-                <Clock3 className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" className="justify-between" onClick={() => navigateToSurface("timeline")}>
-                Open Timeline
-                <Activity className="h-4 w-4" />
-              </Button>
+      <Card>
+        <CardContent className="py-4">
+          {loading && !runStatus ? (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-5 w-28" />
+                </div>
+              ))}
             </div>
-            <div className="rounded-lg border border-border bg-muted/30 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={hasSchedule ? "success" : "warning"}>
-                  {hasSchedule ? "Automation enabled" : "Automation not enabled"}
-                </Badge>
-                <Badge variant="outline">timeline runs {timelineRuns.length}</Badge>
+          ) : (
+            <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <dt className="text-[13px] font-medium uppercase tracking-[0.04em] text-muted-foreground">Latest run</dt>
+                <dd className="mt-1 flex flex-wrap items-baseline gap-x-2">
+                  <span className={`text-sm font-semibold ${latestDegraded ? "text-warning-ink" : "text-foreground"}`}>
+                    {formatStatus(latest?.status)}
+                  </span>
+                  {latest ? (
+                    <span className="font-mono text-[13px] tabular-nums text-muted-foreground">
+                      {formatTimestamp(latest.started_at, "relative")}
+                    </span>
+                  ) : null}
+                </dd>
               </div>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                {hasSchedule
-                  ? scheduleStatus?.next_run_at
-                    ? `Next scheduled digest: ${scheduleStatus.next_run_at}`
-                    : "A recurring schedule is configured and waiting for its next window."
-                  : "Automation is currently off. The product will keep depending on manual runs until a schedule is enabled."}
-              </p>
-              {scheduleStatus?.last_error ? <p className="mt-3 text-sm text-amber-800">{scheduleStatus.last_error}</p> : null}
-            </div>
-          </CardContent>
-        </Card>
+              <div>
+                <dt className="text-[13px] font-medium uppercase tracking-[0.04em] text-muted-foreground">Next digest</dt>
+                <dd className="mt-1 text-sm font-semibold text-foreground">
+                  {hasSchedule ? (
+                    <span className="font-mono tabular-nums" title={scheduleStatus?.next_run_at || undefined}>
+                      {scheduleStatus?.next_run_at ? formatTimestamp(scheduleStatus.next_run_at, "relative") : "Scheduled"}
+                    </span>
+                  ) : (
+                    "Manual only"
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[13px] font-medium uppercase tracking-[0.04em] text-muted-foreground">Sources</dt>
+                <dd className="mt-1 text-sm font-semibold">
+                  {hasHealthIssues ? (
+                    <span className="font-mono tabular-nums text-warning-ink">{sourceHealth.length} failing</span>
+                  ) : (
+                    <span className="text-foreground">All reporting</span>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[13px] font-medium uppercase tracking-[0.04em] text-muted-foreground">Schedule</dt>
+                <dd className="mt-1 text-sm font-semibold text-foreground">{hasSchedule ? "On" : "Off"}</dd>
+              </div>
+            </dl>
+          )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-display">Current posture</CardTitle>
-            <CardDescription>High-signal readout for the workspace without opening deeper diagnostic screens.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <MetricCard variant="inline" label="Lifecycle" value={onboardingDone ? "Recurring use" : "Guided setup"} />
-            <MetricCard variant="inline" label="Last completed run" value={runStatus?.latest_completed?.status ?? "n/a"} />
-            <MetricCard variant="inline" label="Source health" value={hasHealthIssues ? `${sourceHealth.length} active alerts` : "No active alerts"} />
-            <MetricCard variant="inline" label="Schedule" value={hasSchedule ? "Enabled" : "Disabled"} />
-          </CardContent>
-        </Card>
-      </div>
+          {latestDegraded && latest ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-ink" aria-hidden />
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-semibold text-foreground">Run {formatStatus(latest.status).toLowerCase()}</span>
+                  {" — "}
+                  <span className="font-mono tabular-nums">{latest.source_error_count}</span> source error{latest.source_error_count !== 1 ? "s" : ""},{" "}
+                  <span className="font-mono tabular-nums">{latest.summary_error_count}</span> summary error{latest.summary_error_count !== 1 ? "s" : ""}
+                  {" · "}
+                  <span className="font-mono text-[13px]">{latest.run_id}</span>
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => navigateToSurface("timeline")}>
+                Diagnose in Timeline
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <InlineNotice notice={localNotices.dashboard} onDismiss={() => clearScopedNotice("dashboard")} />
+
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-baseline justify-between gap-2 space-y-0">
+          <div className="space-y-1">
+            <CardTitle className="font-display text-lg">The latest edition</CardTitle>
+            <CardDescription>
+              {latest
+                ? `Must-reads your editor selected ${formatTimestamp(latest.started_at, "relative")}. Grade them to sharpen its taste.`
+                : "Once the first digest runs, its selections land here for review and feedback."}
+            </CardDescription>
+          </div>
+          {latest ? (
+            <Button variant="ghost" size="sm" onClick={() => navigateToSurface("timeline")}>
+              Full edition
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          ) : null}
+        </CardHeader>
+        <CardContent>
+          {loading && latestRunItems.length === 0 && hasRuns ? (
+            <div className="space-y-4">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : mustReads.length > 0 ? (
+            <>
+              <ol className="max-w-[860px] space-y-1">
+                {mustReads.map((item, index) => (
+                  <EditionRow key={item.item_id} item={item} rank={index + 1} onFeedback={onLatestItemFeedback} />
+                ))}
+              </ol>
+              <p className="mt-4 max-w-[60ch] border-t border-border pt-3 text-sm text-muted-foreground">
+                Plus <span className="font-mono tabular-nums">{skimCount}</span> skim item{skimCount !== 1 ? "s" : ""} and{" "}
+                <span className="font-mono tabular-nums">{videoCount}</span> video{videoCount !== 1 ? "s" : ""} in the delivered digest.
+              </p>
+            </>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3 py-2">
+              <p className="text-sm text-muted-foreground">
+                {hasRuns
+                  ? "The latest run selected no must-read items. Open the Timeline to see why."
+                  : "No editions yet. Run the digest once to put the first selection on the desk."}
+              </p>
+              <Button size="sm" onClick={() => navigateToSurface(hasRuns ? "timeline" : "run")}>
+                {hasRuns ? "Open Timeline" : "Run first digest"}
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {hasHealthIssues ? (
         <Card>
           <CardHeader>
-            <CardTitle className="font-display">Source health alerts</CardTitle>
-            <CardDescription>Recent ingestion failures that can reduce digest quality.</CardDescription>
+            <CardTitle className="font-display text-lg">Source health</CardTitle>
+            <CardDescription>Failing sources reduce edition quality until fixed or muted.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {sourceHealth.slice(0, 6).map((item) => (
-              <div key={`${item.kind}:${item.source}`} className="min-w-0 rounded-lg border border-amber-300/40 bg-amber-50/40 p-4 dark:border-amber-700/30 dark:bg-amber-950/20">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <p className="truncate font-mono text-[11px]" title={item.source}>{item.source}</p>
-                    <p className="text-xs text-muted-foreground">{item.count} failures in recent runs</p>
-                    <p className="text-xs text-muted-foreground">{item.hint || "No hint available"}</p>
-                  </div>
-                  <Badge variant="warning" className="shrink-0">{item.kind}</Badge>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => navigate(`/sources?q=${encodeURIComponent(item.source)}&status=failing`)}
+          <CardContent>
+            <ul>
+              {sourceHealth.slice(0, 6).map((item) => (
+                <li
+                  key={`${item.kind}:${item.source}`}
+                  className="flex flex-wrap items-center justify-between gap-3 border-t border-border py-3 first:border-0 first:pt-0 last:pb-0"
                 >
-                  View in Sources
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ))}
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate font-mono text-[13px]" title={item.source}>{item.source}</p>
+                      <Badge variant="warning">{item.kind}</Badge>
+                    </div>
+                    <p className="max-w-[60ch] text-sm text-muted-foreground">
+                      <span className="font-mono tabular-nums">{item.count}</span> recent failure{item.count !== 1 ? "s" : ""}
+                      {item.hint ? ` · ${item.hint}` : ""}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/sources?q=${encodeURIComponent(item.source)}&status=failing`)}
+                  >
+                    View in Sources
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-display">System calm</CardTitle>
-            <CardDescription>No current source-health alerts are competing for attention.</CardDescription>
-          </CardHeader>
-        </Card>
-      )}
+      ) : null}
     </div>
+  )
+}
+
+function EditionRow({
+  item,
+  rank,
+  onFeedback,
+}: {
+  item: RunItem
+  rank: number
+  onFeedback: (itemId: string, label: "more_like_this" | "not_relevant" | "too_technical" | "repeat_source") => void
+}) {
+  return (
+    <li className="group flex items-start gap-3 rounded-md px-2 py-2.5 transition-colors hover:bg-muted/50">
+      <span className="mt-0.5 w-5 shrink-0 text-right font-mono text-[13px] tabular-nums text-muted-foreground" aria-hidden>
+        {rank}
+      </span>
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noreferrer"
+          className="block text-sm font-medium leading-snug text-foreground underline-offset-2 hover:underline"
+        >
+          {item.title}
+        </a>
+        <p className="text-[13px] text-muted-foreground">
+          <span className="font-mono">{item.source_family}</span>
+          {" · score "}
+          <span className="font-mono tabular-nums">{item.score_total}</span>
+        </p>
+        {item.summary ? <p className="line-clamp-2 max-w-[60ch] text-sm text-muted-foreground">{item.summary}</p> : null}
+      </div>
+      <div className="flex shrink-0 gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0"
+          aria-label={`More like "${item.title}"`}
+          title="More like this"
+          onClick={() => onFeedback(item.item_id, "more_like_this")}
+        >
+          <ThumbsUp className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0"
+          aria-label={`Not relevant: "${item.title}"`}
+          title="Not relevant"
+          onClick={() => onFeedback(item.item_id, "not_relevant")}
+        >
+          <ThumbsDown className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </li>
   )
 }
 
@@ -190,13 +300,13 @@ function GuidanceCard({
 }) {
   if (hasHealthIssues) {
     return (
-      <Card className="border-amber-300/50 bg-amber-50/30 dark:border-amber-700/30 dark:bg-amber-950/15">
+      <Card className="border-warning/40 bg-warning/10">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
           <div className="flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <AlertTriangle className="h-5 w-5 shrink-0 text-warning-ink" aria-hidden />
             <div>
               <p className="text-sm font-semibold">Review {healthCount} failing source{healthCount !== 1 ? "s" : ""} before the next run</p>
-              <p className="text-xs text-muted-foreground">Failing sources reduce digest quality. Fix or mute them to keep signal clean.</p>
+              <p className="text-sm text-muted-foreground">Failing sources reduce digest quality. Fix or mute them to keep signal clean.</p>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={() => onNavigate("sources")}>
@@ -213,10 +323,10 @@ function GuidanceCard({
       <Card className="border-accent/30 bg-accent/5">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
           <div className="flex items-center gap-3">
-            <Play className="h-5 w-5 shrink-0 text-accent" />
+            <Play className="h-5 w-5 shrink-0 text-accent" aria-hidden />
             <div>
               <p className="text-sm font-semibold">Run your first digest to see how sources perform</p>
-              <p className="text-xs text-muted-foreground">A test run validates your setup and shows what the digest looks like.</p>
+              <p className="text-sm text-muted-foreground">A test run validates your setup and shows what the digest looks like.</p>
             </div>
           </div>
           <Button size="sm" onClick={() => onNavigate("run")}>
@@ -233,10 +343,10 @@ function GuidanceCard({
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
           <div className="flex items-center gap-3">
-            <Clock3 className="h-5 w-5 shrink-0 text-primary" />
+            <Clock3 className="h-5 w-5 shrink-0 text-primary" aria-hidden />
             <div>
               <p className="text-sm font-semibold">Enable a schedule so digests run automatically</p>
-              <p className="text-xs text-muted-foreground">Without a schedule, digests only run when you manually trigger them.</p>
+              <p className="text-sm text-muted-foreground">Without a schedule, digests only run when you manually trigger them.</p>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={() => onNavigate("schedule")}>
@@ -248,17 +358,21 @@ function GuidanceCard({
     )
   }
 
+  // Healthy state stays quiet: no painted card, one calm line.
   return (
-    <Card className="border-emerald-200/60 bg-emerald-50/30 dark:border-emerald-800/30 dark:bg-emerald-950/15">
+    <Card>
       <CardContent className="flex items-center gap-3 py-4">
-        <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-        <div>
-          <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">All good</p>
-          <p className="text-xs text-emerald-700 dark:text-emerald-400">
-            {nextRunAt ? `Next digest runs at ${nextRunAt}.` : "Schedule is enabled and waiting for the next window."}
-            {" "}No action needed.
-          </p>
-        </div>
+        <CheckCircle2 className="h-5 w-5 shrink-0 text-success-ink" aria-hidden />
+        <p className="text-sm text-muted-foreground">
+          <span className="font-semibold text-foreground">All good.</span>{" "}
+          {nextRunAt ? (
+            <>
+              Next digest <span className="font-mono tabular-nums" title={nextRunAt}>{formatTimestamp(nextRunAt, "relative")}</span>. No action needed.
+            </>
+          ) : (
+            "Schedule is enabled and waiting for the next window. No action needed."
+          )}
+        </p>
       </CardContent>
     </Card>
   )

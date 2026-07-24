@@ -22,8 +22,8 @@ test("schedule is a dedicated workspace with its own route and save flow", () =>
   expectSource(appSource, /\/api\/config\/schedule/, "schedule config save endpoint missing")
   expectSource(appSource, /path="\/schedule"/, "schedule route missing")
   expectSource(scheduleSource, /title="Schedule"/, "schedule page header missing")
-  expectSource(scheduleSource, /cadence: \${scheduleDraft\.cadence}/, "schedule header should show cadence")
-  expectSource(scheduleSource, /formatTimestampBadge/, "schedule header should use a compact next-run label")
+  expectSource(scheduleSource, /label="Next run"/, "schedule status should surface the next run")
+  expectSource(scheduleSource, /import \{ formatTimestamp \} from "@\/lib\/format"/, "schedule should reuse the shared timestamp formatter")
   expectSource(scheduleSource, /Schedule controls/, "schedule controls section missing")
   expectSource(scheduleSource, /Quiet hours/, "schedule quiet-hours controls missing")
   expectSource(scheduleSource, /What happens next/, "schedule preview section missing")
@@ -38,6 +38,6 @@ test("setup and profile link into schedule controls instead of duplicating the f
 
 test("workspace header keeps a stable content column when actions are present", () => {
   expectSource(headerSource, /lg:grid-cols-\[minmax\(0,1fr\)_auto\]/, "workspace header should use a stable desktop grid")
-  expectSource(headerSource, /max-w-\[68ch\]/, "workspace description should keep a readable measure without over-constraining")
+  expectSource(headerSource, /max-w-\[60ch\]/, "workspace description should keep a readable measure without over-constraining")
   expectSource(headerSource, /text-balance/, "workspace description should balance headline copy")
 })
