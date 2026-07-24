@@ -157,7 +157,7 @@ export function SourcesPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               No items yet
             </p>
-            <Badge variant="secondary" className="text-[10px]">{compactRows.length}</Badge>
+            <Badge variant="secondary">{compactRows.length}</Badge>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {compactRows.map((row) => (
@@ -182,7 +182,7 @@ export function SourcesPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Active
             </p>
-            <Badge variant="success" className="text-[10px]">{previewRows.length}</Badge>
+            <Badge variant="success">{previewRows.length}</Badge>
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {previewRows.map((row) => (
@@ -247,8 +247,8 @@ function CompactSourceCard({
       {/* Header: badges + overflow */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <Badge variant="outline" className="text-[10px]">{row.type_label}</Badge>
-          <Badge variant={isFailing ? "warning" : "secondary"} className="text-[10px]">
+          <Badge variant="outline">{row.type_label}</Badge>
+          <Badge variant={isFailing ? "warning" : "secondary"}>
             {isFailing ? "failing" : "no items yet"}
           </Badge>
         </div>
@@ -267,8 +267,8 @@ function CompactSourceCard({
 
       {/* Failing detail */}
       {isFailing ? (
-        <div className="mt-2 rounded-lg bg-amber-50/60 px-2.5 py-1.5 dark:bg-amber-950/20">
-          <p className="flex items-center gap-1 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+        <div className="mt-2 rounded-lg bg-warning/10 px-2.5 py-1.5">
+          <p className="flex items-center gap-1 text-[13px] font-medium text-warning-ink">
             <AlertTriangle className="h-3 w-3 shrink-0" />
             {truncateText(row.last_error, 60)}
           </p>
@@ -366,8 +366,8 @@ function SourcePreviewCard({
         {/* Content */}
         <div className="flex-1 space-y-3 p-4">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Badge variant="outline" className="text-[10px]">{row.type_label}</Badge>
-            <Badge variant={isFailing ? "warning" : "success"} className="text-[10px]">
+            <Badge variant="outline">{row.type_label}</Badge>
+            <Badge variant={isFailing ? "warning" : "success"}>
               {isFailing ? `failing (${row.count})` : "active"}
             </Badge>
           </div>
@@ -375,12 +375,12 @@ function SourcePreviewCard({
             <div className="text-xs text-muted-foreground">{metaLine}</div>
             {hasPreviewLink ? (
               <a href={row.preview_url ?? undefined} target="_blank" rel="noreferrer" className="block hover:underline">
-                <h3 className="source-card-title-clamp font-display text-[1.05rem] leading-tight tracking-[-0.02em] text-foreground">
+                <h3 className="source-card-title-clamp font-display text-base leading-tight tracking-[-0.02em] text-foreground">
                   {row.preview_title}
                 </h3>
               </a>
             ) : (
-              <h3 className="source-card-title-clamp font-display text-[1.05rem] leading-tight tracking-[-0.02em] text-foreground">
+              <h3 className="source-card-title-clamp font-display text-base leading-tight tracking-[-0.02em] text-foreground">
                 {row.preview_title}
               </h3>
             )}
@@ -396,12 +396,12 @@ function SourcePreviewCard({
 
         {/* Error detail */}
         {isFailing ? (
-          <div className="mx-4 mb-3 rounded-lg border border-amber-300/40 bg-amber-50/50 px-3 py-2 text-xs dark:border-amber-700/30 dark:bg-amber-950/20">
-            <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
+          <div className="mx-4 mb-3 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-[13px]">
+            <div className="flex items-center gap-1.5 font-semibold text-warning-ink">
               <AlertTriangle className="h-3.5 w-3.5" />
               Ingestion issue
             </div>
-            <p className="mt-1 text-amber-700 dark:text-amber-400" title={row.last_error}>{truncateText(row.last_error, 100)}</p>
+            <p className="mt-1 text-muted-foreground" title={row.last_error}>{truncateText(row.last_error, 100)}</p>
           </div>
         ) : null}
 

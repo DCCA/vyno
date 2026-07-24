@@ -19,8 +19,8 @@ export function WorkspaceHeader({
       <CardHeader className="gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-6">
         <div className="min-w-0 max-w-[72ch] space-y-2">
           <div className="space-y-1">
-            <CardTitle className="font-display text-xl md:text-2xl">{title}</CardTitle>
-            <CardDescription className="max-w-[68ch] text-balance">{description}</CardDescription>
+            <h2 className="font-display text-xl font-semibold leading-tight tracking-[-0.01em] md:text-2xl">{title}</h2>
+            <CardDescription className="max-w-[60ch] text-balance">{description}</CardDescription>
           </div>
           {badges && badges.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">

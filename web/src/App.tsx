@@ -139,6 +139,7 @@ function App() {
   const [seenResetPreviewCount, setSeenResetPreviewCount] = useState<number | null>(null)
   const [seenResetConfirm, setSeenResetConfirm] = useState(false)
   const [timelineRuns, setTimelineRuns] = useState<TimelineRun[]>([])
+  const [latestRunItems, setLatestRunItems] = useState<RunItem[]>([])
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([])
   const [timelineSummary, setTimelineSummary] = useState<TimelineSummary | null>(null)
   const [timelineNotes, setTimelineNotes] = useState<TimelineNote[]>([])
@@ -666,6 +667,17 @@ function App() {
         setTimelineRunId(nextRunId)
       } else {
         setTimelineRunId("")
+      }
+      const latestCompletedId = statusData.latest_completed?.run_id
+      if (latestCompletedId) {
+        try {
+          const latestItems = await api<{ items: RunItem[] }>(`/api/run-items?run_id=${encodeURIComponent(latestCompletedId)}`)
+          setLatestRunItems(latestItems.items ?? [])
+        } catch {
+          setLatestRunItems([])
+        }
+      } else {
+        setLatestRunItems([])
       }
       if (typeData.types.length > 0 && !typeData.types.includes(sourceType)) {
         setSourceType(typeData.types[0])
@@ -1363,6 +1375,29 @@ function App() {
     }
   }
 
+  async function submitLatestItemFeedback(itemId: string, label: string) {
+    const runId = runStatus?.latest_completed?.run_id
+    if (!runId || !itemId) {
+      setScopedNotice("dashboard", "error", "No completed run is available for feedback yet.")
+      return
+    }
+    setSaveAction("dashboard-item-feedback")
+    setSaving(true)
+    try {
+      await api("/api/feedback/item", {
+        method: "POST",
+        body: JSON.stringify({ run_id: runId, item_id: itemId, label }),
+      })
+      await refreshFeedbackSummary({ silent: true })
+      setScopedNotice("dashboard", "ok", "Feedback saved — the editor learns from it on the next run.")
+    } catch (error) {
+      setScopedNotice("dashboard", "error", String(error))
+    } finally {
+      setSaveAction("")
+      setSaving(false)
+    }
+  }
+
   async function submitSourceFeedback(row: UnifiedSourceRow, label: string) {
     setSaveAction("source-feedback")
     setSaving(true)
@@ -1417,10 +1452,13 @@ function App() {
   const runSlice = useMemo(() => ({
     runStatus, runProgress, runPolicy, setRunPolicy,
     runNowModeOverride, setRunNowModeOverride, runNowLoading, digestBusy,
+    latestRunItems,
+    onLatestItemFeedback: (itemId: string, label: "more_like_this" | "not_relevant" | "too_technical" | "repeat_source") =>
+      void submitLatestItemFeedback(itemId, label),
     onRunNow: () => void runNow(),
     onRefreshAll: () => void refreshAll(),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [runStatus, runProgress, runPolicy, runNowModeOverride, runNowLoading, digestBusy])
+  }), [runStatus, runProgress, runPolicy, runNowModeOverride, runNowLoading, digestBusy, latestRunItems])
 
   const sourceSlice = useMemo(() => ({
     sources, sourceTypes, sourceType, setSourceType, sourceValue, setSourceValue,
@@ -1547,7 +1585,7 @@ function App() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-3">
-              <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Navigation</p>
+              <p className="px-2 pb-1.5 text-[13px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Navigation</p>
               <nav aria-label="Workspace surfaces" className="space-y-0.5">
                 {visibleNavItems.map((item) => {
                   const Icon = item.icon
@@ -1562,19 +1600,19 @@ function App() {
                       className={({ isActive }) =>
                         `group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm transition-colors duration-100 ${
                           isActive
-                            ? "bg-muted font-medium text-foreground border-l-2 border-accent"
-                            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border-l-2 border-transparent"
+                            ? "bg-accent/10 font-medium text-foreground"
+                            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                         }`
                       }
                     >
                       {({ isActive }) => (
                         <>
                           <span className="flex items-center gap-2">
-                            <Icon className={`h-4 w-4 ${isActive ? "text-foreground" : "text-muted-foreground"}`} />
+                            <Icon className={`h-4 w-4 ${isActive ? "text-accent" : "text-muted-foreground"}`} />
                             <span>{item.label}</span>
                           </span>
                           {badge ? (
-                            <Badge variant={item.id === "onboarding" && !onboardingDone ? "warning" : "secondary"} className="text-[10px]">
+                            <Badge variant={item.id === "onboarding" && !onboardingDone ? "warning" : "secondary"}>
                               {badge}
                             </Badge>
                           ) : null}
@@ -1587,16 +1625,16 @@ function App() {
             </div>
 
             <div className="border-t border-border p-3 space-y-2">
-              <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground space-y-1.5">
+              <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[13px] text-muted-foreground space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span>Status</span>
-                  <Badge variant={runStatus?.active ? "warning" : "success"} className="text-[10px]">
+                  <Badge variant={runStatus?.active ? "warning" : "success"}>
                     {runStatus?.active ? "Running" : "Idle"}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Health</span>
-                  <span className="text-foreground">{sourceHealth.length > 0 ? `${sourceHealth.length} issues` : "OK"}</span>
+                  <span className="font-mono tabular-nums text-foreground">{sourceHealth.length > 0 ? `${sourceHealth.length} issues` : "OK"}</span>
                 </div>
               </div>
 
@@ -1613,7 +1651,7 @@ function App() {
                   )}
                   <span>Theme</span>
                 </span>
-                <span className="text-[11px]">{theme}</span>
+                <span className="text-[13px]">{theme}</span>
               </button>
             </div>
           </div>
@@ -1642,7 +1680,7 @@ function App() {
             >
               <Search className="h-3.5 w-3.5" />
               <span>Search</span>
-              <kbd className="ml-2 inline-flex h-5 items-center rounded border border-border bg-background px-1.5 text-[11px] font-mono">
+              <kbd className="ml-2 inline-flex h-5 items-center rounded bg-background px-1.5 text-[13px] font-mono">
                 <CommandIcon className="mr-0.5 h-3 w-3" />K
               </kbd>
             </button>
@@ -1669,7 +1707,7 @@ function App() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">Default ({formatModeLabel(runPolicy.default_mode)})</SelectItem>
+                  <SelectItem value="default">Default · {formatModeLabel(runPolicy.default_mode)}</SelectItem>
                   <SelectItem value="fresh_only">{formatModeLabel("fresh_only")}</SelectItem>
                   <SelectItem value="balanced">{formatModeLabel("balanced")}</SelectItem>
                   <SelectItem value="replay_recent">{formatModeLabel("replay_recent")}</SelectItem>
@@ -1690,25 +1728,6 @@ function App() {
         </header>
 
         <div className="flex-1 px-6 py-5 space-y-4">
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 animate-surface-enter" aria-label="Run status ribbon">
-          <div className="console-status-ribbon rounded-lg px-4 py-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">Surface</p>
-            <p className="mt-1 font-display text-lg font-semibold">{currentSurface}</p>
-          </div>
-          <div className="console-status-ribbon rounded-lg px-4 py-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">Mode</p>
-            <p className="mt-1 font-display text-lg font-semibold">{runPolicy.default_mode}</p>
-          </div>
-          <div className="console-status-ribbon rounded-lg px-4 py-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">Source health</p>
-            <p className="mt-1 font-display text-lg font-semibold">{sourceHealth.length > 0 ? `${sourceHealth.length} issues` : "Clear"}</p>
-          </div>
-          <div className="console-status-ribbon rounded-lg px-4 py-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">Last run</p>
-            <p className="mt-1 font-display text-lg font-semibold">{runStatus?.latest_completed?.status ?? "n/a"}</p>
-          </div>
-        </section>
-
         {globalLoadingText ? (
           <Card aria-live="polite" aria-busy className="border-accent/20 bg-accent/5">
             <CardContent className="flex items-center gap-2 py-3">
@@ -1753,7 +1772,7 @@ function App() {
                     <Clock3 className="h-3.5 w-3.5" /> Elapsed {formatElapsed(runProgress.elapsed_s)}
                   </span>
                   {runActivityFacts.map((fact) => (
-                    <Badge key={fact} variant="secondary" className="text-[10px]">
+                    <Badge key={fact} variant="secondary">
                       {fact}
                     </Badge>
                   ))}

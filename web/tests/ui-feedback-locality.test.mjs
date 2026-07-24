@@ -21,7 +21,7 @@ function expectSource(source, pattern, message) {
 }
 
 test("feedback uses scoped channels instead of a single global action banner", () => {
-  expectSource(typesSource, /type NoticeScope = "global" \| "run" \| "onboarding" \| "sources" \| "profile" \| "schedule" \| "timeline" \| "history"/, "notice scope union missing")
+  expectSource(typesSource, /type NoticeScope = "global" \| "dashboard" \| "run" \| "onboarding" \| "sources" \| "profile" \| "schedule" \| "timeline" \| "history"/, "notice scope union missing")
   expectSource(appSource, /function setScopedNotice\(scope: NoticeScope, kind: Notice\["kind"\], text: string\)/, "scoped notice setter missing")
   expectSource(noticeSource, /export function InlineNotice/, "scoped notice renderer missing")
 })

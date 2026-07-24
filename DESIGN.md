@@ -9,12 +9,18 @@ colors:
   overcast-card: "hsl(0 0% 100%)"
   overcast-secondary: "hsl(200 14% 96%)"
   overcast-muted: "hsl(200 12% 95.5%)"
-  overcast-muted-ink: "hsl(200 7% 44%)"
+  overcast-muted-ink: "hsl(200 8% 33%)"
   overcast-border: "hsl(200 12% 90%)"
   ink-button: "hsl(200 12% 11%)"
   destructive-red: "hsl(0 72% 47%)"
+  destructive-surface: "hsl(0 75% 95%)"
+  destructive-ink: "hsl(0 72% 32%)"
   success-green: "hsl(158 74% 34%)"
+  success-surface: "hsl(156 50% 93%)"
+  success-ink: "hsl(158 74% 20%)"
   warning-amber: "hsl(28 90% 36%)"
+  warning-surface: "hsl(35 85% 93%)"
+  warning-ink: "hsl(28 90% 24%)"
 typography:
   display:
     fontFamily: "Archivo, Public Sans, ui-sans-serif, system-ui"
@@ -120,13 +126,17 @@ One cool-slate neutral family plus a single editorial green; every other color i
 - **Pressroom Green** (hsl(162 84% 28%) light / hsl(158 64% 45%) dark): the only voice of emphasis. Marks primary selection, focus rings, active state, and signal (what the system picked). On dark surfaces it brightens and flips to a deep green foreground (hsl(160 90% 12%)) for legible filled controls.
 
 ### Neutral
-- **Overcast Slate family** (all hue 200): page background hsl(200 16% 99%), ink hsl(200 12% 10%), card white, secondary surface hsl(200 14% 96%), muted surface hsl(200 12% 95.5%), muted ink hsl(200 7% 44%), border hsl(200 12% 90%). Dark theme: background hsl(200 14% 7%), card hsl(200 12% 10%), ink hsl(200 10% 95%), border hsl(200 10% 18%).
+- **Overcast Slate family** (all hue 200): page background hsl(200 16% 99%), ink hsl(200 12% 10%), card white, secondary surface hsl(200 14% 96%), muted surface hsl(200 12% 95.5%), muted ink hsl(200 8% 33%), border hsl(200 12% 90%). Dark theme: background hsl(200 14% 7%), card hsl(200 12% 10%), ink hsl(200 10% 95%), muted ink hsl(200 8% 65%), border hsl(200 10% 18%). Muted ink clears 7:1 on both page and card in both themes.
 - **Ink Button** (hsl(200 12% 11%)): the primary action color is the ink itself, not the accent; a dark near-black button reads as the desk's confident default action.
 
 ### State voices
-- **Destructive Red** (hsl(0 72% 47%) light / hsl(0 65% 58%) dark): errors and irreversible actions only.
-- **Success Green** (hsl(158 74% 34%) light / hsl(156 60% 46%) dark): confirmations and healthy status.
-- **Warning Amber** (hsl(28 90% 36%) light / hsl(35 90% 55%) dark): degraded states, attention without alarm.
+Each state has a filled token (for tint washes at low alpha) plus a **surface + ink pair** for badges and inline chips, tuned to at least 7:1 in both themes.
+- **Destructive Red** (hsl(0 72% 47%) light / hsl(0 65% 58%) dark): errors and irreversible actions only. Badge pair: surface hsl(0 75% 95%) + ink hsl(0 72% 32%) light; surface hsl(0 45% 13%) + ink hsl(0 75% 78%) dark.
+- **Success Green** (hsl(158 74% 34%) light / hsl(156 60% 46%) dark): confirmations and healthy status. Badge pair: surface hsl(156 50% 93%) + ink hsl(158 74% 20%) light; surface hsl(156 45% 13%) + ink hsl(156 60% 64%) dark.
+- **Warning Amber** (hsl(28 90% 36%) light / hsl(35 90% 55%) dark): degraded states, attention without alarm. Badge pair: surface hsl(35 85% 93%) + ink hsl(28 90% 24%) light; surface hsl(35 55% 12%) + ink hsl(35 90% 68%) dark.
+
+### Named Rules (state)
+**The Tinted Voice Rule.** State text never sits white-on-fill. Badges and inline state chips use the tinted surface + ink pair; filled state tokens appear only as low-alpha washes (10 to 15 percent) behind foreground or muted text.
 
 ### Named Rules
 **The One Accent Rule.** Pressroom Green is the only emphasis color and never exceeds roughly 10% of a screen. No gradients, anywhere; the legacy `gradient-accent` class renders flat accent by design.
@@ -196,7 +206,7 @@ Tactile and confident: components respond firmly to touch (active scale 0.98, 15
 - **Disabled:** 50% opacity, not-allowed cursor
 
 ### Navigation
-- Console rail with quiet typographic items; active item carries the accent voice. In dark theme the rail gets a faint top emerald wash (5% alpha fading to slate by 120px), the one permitted atmospheric touch.
+- Console rail with quiet typographic items; the active item carries the accent voice as a 10 percent accent tint fill with an accent-colored icon - never a side-stripe border. In dark theme the rail gets a faint top emerald wash (5% alpha fading to slate by 120px), the one permitted atmospheric touch.
 
 ### Signature: Status feedback
 Feedback renders next to the control that triggered it (same card or row), never as a global banner; success auto-dismisses, errors persist, both carry non-color cues and `aria-live` semantics. This locality pattern is a tested invariant of the product.

@@ -98,7 +98,7 @@ export function OnboardingPage() {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {milestoneRows.map((step, index) => (
               <div key={step.id} className="rounded-xl border bg-muted/15 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Milestone {index + 1}</p>
+                <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Milestone {index + 1}</p>
                 <div className="mt-2 flex items-start justify-between gap-2">
                   <p className="text-sm font-semibold leading-tight">{step.label}</p>
                   <Badge variant={step.status === "complete" ? "success" : step.id === firstPendingMilestone ? "warning" : "secondary"}>{step.status}</Badge>
@@ -260,8 +260,8 @@ export function OnboardingPage() {
                         <p className="text-sm font-semibold leading-tight">{entry.label}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">{entry.description}</p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          <Badge variant="secondary" className="text-[10px]">{entry.source_type.replace("_", " ")}</Badge>
-                          {entry.already_active ? <span className="text-[10px] text-muted-foreground">already added</span> : null}
+                          <Badge variant="secondary">{entry.source_type.replace("_", " ")}</Badge>
+                          {entry.already_active ? <span className="text-[13px] text-muted-foreground">already added</span> : null}
                         </div>
                       </div>
                     </button>

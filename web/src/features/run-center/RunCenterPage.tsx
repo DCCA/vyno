@@ -54,7 +54,7 @@ export function RunCenterPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">Run now: default ({formatModeLabel(runPolicy.default_mode)})</SelectItem>
+                  <SelectItem value="default">Run now: default · {formatModeLabel(runPolicy.default_mode)}</SelectItem>
                   <SelectItem value="fresh_only">Run now: {formatModeLabel("fresh_only")}</SelectItem>
                   <SelectItem value="balanced">Run now: {formatModeLabel("balanced")}</SelectItem>
                   <SelectItem value="replay_recent">Run now: {formatModeLabel("replay_recent")}</SelectItem>
@@ -82,10 +82,10 @@ export function RunCenterPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">run_id {runStatus?.latest_completed?.run_id ?? "-"}</Badge>
+              <Badge variant="outline" className="font-mono normal-case">run_id {runStatus?.latest_completed?.run_id ?? "-"}</Badge>
               <Badge variant="secondary">status {runStatus?.latest_completed?.status ?? "-"}</Badge>
-              <Badge variant="outline">source errors {runStatus?.latest_completed?.source_error_count ?? 0}</Badge>
-              <Badge variant="outline">summary errors {runStatus?.latest_completed?.summary_error_count ?? 0}</Badge>
+              <Badge variant="outline">source errors <span className="font-mono tabular-nums">{runStatus?.latest_completed?.source_error_count ?? 0}</span></Badge>
+              <Badge variant="outline">summary errors <span className="font-mono tabular-nums">{runStatus?.latest_completed?.summary_error_count ?? 0}</span></Badge>
             </div>
             <Button variant="outline" size="sm" onClick={() => navigateToSurface("timeline")}>
               Open timeline details

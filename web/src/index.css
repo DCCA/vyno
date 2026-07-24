@@ -16,7 +16,8 @@
     --secondary: 200 14% 96%;
     --secondary-foreground: 200 10% 22%;
     --muted: 200 12% 95.5%;
-    --muted-foreground: 200 7% 44%;
+    /* 7:1 on both page bg and card (AAA body text). */
+    --muted-foreground: 200 8% 33%;
     /* Single considered accent: emerald. No gradient. */
     --accent: 162 84% 28%;
     --accent-foreground: 0 0% 100%;
@@ -26,6 +27,13 @@
     --success-foreground: 0 0% 100%;
     --warning: 28 90% 36%;
     --warning-foreground: 0 0% 100%;
+    /* State voices for badges/inline chips: tinted surface + dark ink, >=7:1. */
+    --success-surface: 156 50% 93%;
+    --success-ink: 158 74% 20%;
+    --warning-surface: 35 85% 93%;
+    --warning-ink: 28 90% 24%;
+    --destructive-surface: 0 75% 95%;
+    --destructive-ink: 0 72% 32%;
     --border: 200 12% 90%;
     --input: 200 12% 88%;
     --ring: 162 84% 28%;
@@ -43,7 +51,8 @@
     --secondary: 200 10% 14%;
     --secondary-foreground: 200 8% 80%;
     --muted: 200 10% 13%;
-    --muted-foreground: 200 7% 56%;
+    /* 7:1 on both page bg and card (AAA body text). */
+    --muted-foreground: 200 8% 65%;
     /* Brighter emerald for dark surfaces; dark foreground keeps button text legible (CR 5.27). */
     --accent: 158 64% 45%;
     --accent-foreground: 160 90% 12%;
@@ -53,6 +62,13 @@
     --success-foreground: 160 90% 10%;
     --warning: 35 90% 55%;
     --warning-foreground: 35 90% 10%;
+    /* State voices for badges/inline chips: tinted surface + bright ink, >=7:1. */
+    --success-surface: 156 45% 13%;
+    --success-ink: 156 60% 64%;
+    --warning-surface: 35 55% 12%;
+    --warning-ink: 35 90% 68%;
+    --destructive-surface: 0 45% 13%;
+    --destructive-ink: 0 75% 78%;
     --border: 200 10% 18%;
     --input: 200 10% 20%;
     --ring: 158 64% 45%;
@@ -246,11 +262,6 @@
     background: hsl(var(--card));
   }
 
-  .console-status-ribbon {
-    border: 1px solid hsl(var(--border));
-    background: hsl(var(--card));
-  }
-
   .source-card-media {
     position: relative;
     aspect-ratio: 1.55 / 1;
@@ -296,7 +307,7 @@
   border: none;
   outline: none;
   background: transparent;
-  font-size: 15px;
+  font-size: 14px;
   padding: 12px 16px;
   color: hsl(var(--foreground));
 }
@@ -313,7 +324,7 @@
 }
 
 [cmdk-group-heading] {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -335,7 +346,7 @@
 
 [cmdk-item][data-selected="true"] {
   background: hsl(var(--accent) / 0.1);
-  color: hsl(var(--accent));
+  color: hsl(var(--foreground));
 }
 
 [cmdk-item]:active {

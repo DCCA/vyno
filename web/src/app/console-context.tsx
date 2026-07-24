@@ -50,6 +50,8 @@ export type RunState = {
   setRunNowModeOverride: (value: string) => void
   runNowLoading: boolean
   digestBusy: boolean
+  latestRunItems: RunItem[]
+  onLatestItemFeedback: (itemId: string, label: "more_like_this" | "not_relevant" | "too_technical" | "repeat_source") => void
   onRunNow: () => void
   onRefreshAll: () => void
 }

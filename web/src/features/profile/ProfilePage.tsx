@@ -590,9 +590,9 @@ export function ProfilePage() {
                   </Button>
                 </div>
                 {profileJsonParseError ? (
-                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-950 dark:text-amber-100">
-                    <p className="font-medium">Expert JSON needs attention</p>
-                    <p className="mt-1 text-xs">Fix JSON errors before validating or computing diffs.</p>
+                  <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
+                    <p className="font-medium text-warning-ink">Expert JSON needs attention</p>
+                    <p className="mt-1 text-[13px] text-muted-foreground">Fix JSON errors before validating or computing diffs.</p>
                   </div>
                 ) : null}
                 <div className="grid gap-4 xl:grid-cols-2">
@@ -643,9 +643,9 @@ export function ProfilePage() {
                   onChange={(event) => setProfileJson(event.target.value)}
                 />
                 {profileJsonParseError ? (
-                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-950 dark:text-amber-100">
-                    <p className="font-medium">Expert JSON needs attention</p>
-                    <p className="mt-1 text-xs">{profileJsonParseError}</p>
+                  <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
+                    <p className="font-medium text-warning-ink">Expert JSON needs attention</p>
+                    <p className="mt-1 text-[13px] text-muted-foreground">{profileJsonParseError}</p>
                   </div>
                 ) : null}
               </TabsContent>

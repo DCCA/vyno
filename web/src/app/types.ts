@@ -338,6 +338,7 @@ export type SaveAction =
   | "source-add"
   | "source-remove"
   | "source-feedback"
+  | "dashboard-item-feedback"
   | "onboarding-preflight"
   | "source-pack"
   | "source-catalog-apply"
@@ -356,6 +357,6 @@ export type SaveAction =
   | "rollback"
 
 export type Notice = { kind: "ok" | "error"; text: string }
-export type NoticeScope = "global" | "run" | "onboarding" | "sources" | "profile" | "schedule" | "timeline" | "history"
+export type NoticeScope = "global" | "dashboard" | "run" | "onboarding" | "sources" | "profile" | "schedule" | "timeline" | "history"
 
 export type ConsoleSurface = "dashboard" | "run" | "onboarding" | "sources" | "profile" | "schedule" | "timeline" | "history"
