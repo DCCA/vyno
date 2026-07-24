@@ -48,6 +48,7 @@ video/out/
 # Local skills/tooling artifacts
 .agents/
 .claude/skills/
+.impeccable/
 .pi/
 skills-lock.json
 .dmux/

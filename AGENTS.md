@@ -94,3 +94,7 @@ Use this as a default UX rule for all web surfaces.
   - assertive for errors/blockers
 - Table-row actions (for example edit/delete) SHOULD render feedback near the table region, with row identity in message text.
 - Destructive actions SHOULD keep confirmation and result feedback in the same local interaction zone.
+
+## Design Context
+- `PRODUCT.md` (repo root) carries the strategic design context: register (product), platform (web), users, positioning, brand personality, anti-references, design principles, and the AAA-ish accessibility bar. Read it before any UX or UI work.
+- `DESIGN.md` (repo root) captures the visual system as implemented: Overcast Slate neutrals (hue 200), the single Pressroom Green accent, typography (Archivo / Public Sans / IBM Plex Mono), shadows, shapes, components, and named rules. Treat its tokens and named rules as normative for web surfaces.
