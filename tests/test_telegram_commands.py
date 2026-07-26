@@ -375,18 +375,6 @@ class TestTelegramCommands(unittest.TestCase):
 
     # ── Mini App button test ─────────────────────────────────────────
 
-    def test_web_public_url_adds_console_button(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            ctx, _, _ = self._ctx(tmp)
-            ctx.web_public_url = "https://digest.example.com"
-            resp = handle_update(_msg("/status"), ctx)
-            markup = resp.reply_markup or {}
-            rows = markup.get("inline_keyboard", [])
-            texts = [btn.get("text", "") for row in rows for btn in row]
-            self.assertTrue(
-                any("Console" in t for t in texts),
-                "Expected 'Open Console' button when web_public_url is set",
-            )
 
     # ── Run mode tests ─────────────────────────────────────────────
 
@@ -600,18 +588,6 @@ class TestTelegramCommands(unittest.TestCase):
             self.assertNotIn("<b>bold</b>", text.replace("<b>muted", ""))
             self.assertIn("&lt;b&gt;", text)
 
-    def test_no_console_button_without_url(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            ctx, _, _ = self._ctx(tmp)
-            ctx.web_public_url = ""
-            resp = handle_update(_msg("/status"), ctx)
-            markup = resp.reply_markup or {}
-            rows = markup.get("inline_keyboard", [])
-            texts = [btn.get("text", "") for row in rows for btn in row]
-            self.assertFalse(
-                any("Console" in t for t in texts),
-                "Should not have 'Open Console' button when web_public_url is empty",
-            )
 
 
 def _msg(text: str) -> dict:

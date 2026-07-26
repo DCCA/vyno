@@ -351,21 +351,6 @@ def set_telegram_commands(
     _tg_post(bot_token, "setMyCommands", payload)
 
 
-def set_telegram_menu_button(
-    bot_token: str,
-    *,
-    chat_id: str | None = None,
-    menu_button: dict | None = None,
-) -> None:
-    """Set the bot's menu button (e.g. to launch a Mini App)."""
-    payload: dict[str, Any] = {}
-    if chat_id:
-        payload["chat_id"] = chat_id
-    if menu_button is not None:
-        payload["menu_button"] = json.dumps(menu_button, separators=(",", ":"))
-    _tg_post(bot_token, "setChatMenuButton", payload)
-
-
 def _tg_post(bot_token: str, method: str, payload: dict[str, Any]) -> dict:
     """Low-level POST to Telegram Bot API."""
     body = urllib.parse.urlencode(payload).encode("utf-8")

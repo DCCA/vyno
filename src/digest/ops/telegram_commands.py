@@ -71,7 +71,6 @@ class CommandContext:
     lock: RunLock
     send_message: Callable[[str, str, dict | None], None]
     answer_callback: Callable[[str, str], None] | None = None
-    web_public_url: str = ""
     wizard_state: dict[tuple[str, str], dict] = field(default_factory=dict)
 
 
@@ -678,10 +677,6 @@ def _schedule_keyboard(ctx: CommandContext) -> dict:
             {"text": f"TZ: {tz}", "callback_data": "sch:tz"},
         ],
     ]
-    if ctx.web_public_url:
-        rows.append(
-            [{"text": "Open in Console", "web_app": {"url": f"{ctx.web_public_url}/schedule"}}]
-        )
     return {"inline_keyboard": rows}
 
 
@@ -714,10 +709,6 @@ def _handle_history_command(
         )
         buttons.append(
             [{"text": f"Details: {r.run_id}", "callback_data": f"hist:{r.run_id}"}]
-        )
-    if ctx.web_public_url:
-        buttons.append(
-            [{"text": "Open in Console", "web_app": {"url": f"{ctx.web_public_url}/"}}]
         )
     return BotResponse(
         chat_id=chat_id,
@@ -1209,10 +1200,6 @@ def _settings_keyboard(ctx: CommandContext) -> dict:
             {"text": f"Topics ({len(topics)})", "callback_data": "cfg:topics"},
         ],
     ]
-    if ctx.web_public_url:
-        rows.append(
-            [{"text": "Open in Console", "web_app": {"url": f"{ctx.web_public_url}/profile"}}]
-        )
     return {"inline_keyboard": rows}
 
 
@@ -1366,10 +1353,6 @@ def _status_keyboard(ctx: CommandContext) -> dict:
             {"text": "Doctor", "callback_data": "st:doctor"},
         ],
     ]
-    if ctx.web_public_url:
-        rows.append(
-            [{"text": "Open Console", "web_app": {"url": ctx.web_public_url}}]
-        )
     return {"inline_keyboard": rows}
 
 

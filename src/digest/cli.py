@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
 import time
 from datetime import datetime, timezone
@@ -10,11 +9,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from digest.constants import (
-    DEFAULT_RUN_LOCK_STALE_SECONDS,
-    WEB_DEFAULT_HOST,
-    WEB_DEFAULT_PORT,
-)
+from digest.constants import DEFAULT_RUN_LOCK_STALE_SECONDS
 from digest.config import load_dotenv
 from digest.ops.onboarding import OnboardingSettings, run_preflight
 from digest.ops.profile_registry import load_effective_profile
@@ -24,7 +19,6 @@ from digest.delivery.telegram import (
     get_telegram_updates,
     send_telegram_message,
     set_telegram_commands,
-    set_telegram_menu_button,
 )
 from digest.logging_utils import setup_logging
 from digest.ops.run_lock import RunLock
@@ -295,8 +289,6 @@ def _cmd_bot(args: argparse.Namespace) -> int:
             "TELEGRAM_ADMIN_CHAT_IDS and TELEGRAM_ADMIN_USER_IDS are required for bot mode"
         )
 
-    web_public_url = os.getenv("DIGEST_WEB_PUBLIC_URL", "").strip().rstrip("/")
-
     lock = RunLock(args.run_lock_path, stale_seconds=args.run_lock_stale_seconds)
     ctx = CommandContext(
         sources_path=args.sources,
@@ -313,7 +305,6 @@ def _cmd_bot(args: argparse.Namespace) -> int:
         answer_callback=lambda callback_id, text="": answer_telegram_callback(
             bot_token, callback_id, text
         ),
-        web_public_url=web_public_url,
     )
 
     # Register commands in Telegram's autocomplete menu
@@ -323,20 +314,6 @@ def _cmd_bot(args: argparse.Namespace) -> int:
         set_telegram_commands(bot_token, BOT_COMMANDS)
     except Exception as exc:
         print(f"bot_warning: failed to register commands: {exc}")
-
-    # Set menu button to Mini App if public URL is configured
-    if web_public_url:
-        try:
-            set_telegram_menu_button(
-                bot_token,
-                menu_button={
-                    "type": "web_app",
-                    "text": "Open Console",
-                    "web_app": {"url": web_public_url},
-                },
-            )
-        except Exception as exc:
-            print(f"bot_warning: failed to set menu button: {exc}")
 
     offset: int | None = None
     last_ok_at = ""
@@ -407,32 +384,6 @@ def _cmd_bot(args: argparse.Namespace) -> int:
             time.sleep(2)
 
 
-def _cmd_web(args: argparse.Namespace) -> int:
-    try:
-        uvicorn = importlib.import_module("uvicorn")
-    except ImportError as exc:  # pragma: no cover
-        raise RuntimeError(
-            "uvicorn is required for web mode. Install optional web dependencies."
-        ) from exc
-
-    from digest.web.app import WebSettings, create_app
-
-    settings = WebSettings(
-        sources_path=args.sources,
-        sources_overlay_path=args.sources_overlay,
-        profile_path=args.profile,
-        profile_overlay_path=args.profile_overlay,
-        db_path=args.db,
-        run_lock_path=args.run_lock_path,
-        run_lock_stale_seconds=args.run_lock_stale_seconds,
-        history_dir=args.history_dir,
-        onboarding_state_path=args.onboarding_state_path,
-    )
-    app = create_app(settings)
-    uvicorn.run(app, host=args.host, port=args.port, reload=False)
-    return 0
-
-
 def main() -> int:
     load_dotenv(".env")
     setup_logging()
@@ -474,21 +425,6 @@ def main() -> int:
     bot_health.add_argument("--stale-seconds", type=int, default=90)
     bot_health.add_argument("--max-error-streak", type=int, default=5)
     bot_health.set_defaults(func=_cmd_bot_health_check)
-
-    web = sub.add_parser("web", help="Run config web API server")
-    web.add_argument("--host", default=WEB_DEFAULT_HOST)
-    web.add_argument("--port", type=int, default=WEB_DEFAULT_PORT)
-    web.add_argument("--run-lock-path", default=".runtime/run.lock")
-    web.add_argument(
-        "--run-lock-stale-seconds",
-        type=int,
-        default=DEFAULT_RUN_LOCK_STALE_SECONDS,
-    )
-    web.add_argument("--history-dir", default=".runtime/config-history")
-    web.add_argument(
-        "--onboarding-state-path", default=".runtime/onboarding-state.json"
-    )
-    web.set_defaults(func=_cmd_web)
 
     args = parser.parse_args()
     return args.func(args)

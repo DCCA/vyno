@@ -20,8 +20,6 @@ logs
 *.db-journal
 *.db-shm
 *.db-wal
-web/node_modules
-web/dist
 video
 .env
 .env.*

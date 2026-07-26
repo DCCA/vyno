@@ -4,13 +4,13 @@ Approved 2026-07-26: Tier 0 + Tier 1, keep X (no refactor), Tier 2 Option A, pas
 
 ## PR 1 - Hygiene (Tier 0)
 
-- [ ] Scout: every reference to `requirements.txt` (Dockerfile, CI, scripts, docs) and to the 5 dead functions (verify zero call sites incl. tests)
-- [ ] `git rm -r video/` (+ remove untracked `video/node_modules` from disk)
-- [ ] Delete `requirements.txt`; repoint any consumer to `pyproject.toml`/`uv`
-- [ ] Delete dead functions: `build_rank_overrides`, `score_items`, `edit_telegram_reply_markup`, `_build_digest_lines`, `_build_context_lines`
-- [ ] Remove stray untracked `~/` dir at repo root (local cleanup, not in PR)
-- [ ] Commit proposal.md + tasks.md with this PR
-- [ ] Validate (tests + ruff), codex review, CI green, merge
+- [x] Scout: every reference to `requirements.txt` (Dockerfile, CI, scripts, docs) and to the 5 dead functions (verify zero call sites incl. tests)
+- [x] `git rm -r video/` (+ remove untracked `video/node_modules` from disk)
+- [x] Delete `requirements.txt`; repoint any consumer to `pyproject.toml`/`uv`
+- [x] Delete dead functions: `build_rank_overrides`, `score_items`, `edit_telegram_reply_markup`, `_build_digest_lines`, `_build_context_lines`
+- [x] Remove stray untracked `~/` dir at repo root (local cleanup, not in PR)
+- [x] Commit proposal.md + tasks.md with this PR
+- [x] Validate (tests + ruff), codex review, CI green, merge
 
 ## PR 2 - Cuts (Option A + Tier 1 + paste-a-link)
 
