@@ -73,19 +73,6 @@ def render_telegram_message(
     )
 
 
-def _build_digest_lines(
-    date_str: str,
-    sections: DigestSections,
-    *,
-    context: dict[str, Any] | None,
-) -> list[str]:
-    return [
-        line
-        for block in _build_digest_blocks(date_str, sections, context=context)
-        for line in block.splitlines()
-    ]
-
-
 def _build_digest_blocks(
     date_str: str,
     sections: DigestSections,
@@ -108,76 +95,6 @@ def _build_digest_blocks(
             )
         )
     return blocks
-
-
-def _build_context_lines(context: dict[str, Any] | None) -> list[str]:
-    if not context:
-        return []
-    mode = context.get("mode") if isinstance(context.get("mode"), dict) else {}
-    fetched = context.get("fetched") if isinstance(context.get("fetched"), dict) else {}
-    pipeline = (
-        context.get("pipeline") if isinstance(context.get("pipeline"), dict) else {}
-    )
-    filtering = (
-        context.get("filtering") if isinstance(context.get("filtering"), dict) else {}
-    )
-    video_funnel = (
-        context.get("video_funnel")
-        if isinstance(context.get("video_funnel"), dict)
-        else {}
-    )
-    selection = (
-        context.get("selection") if isinstance(context.get("selection"), dict) else {}
-    )
-
-    only_new = bool(mode.get("only_new", False))
-    run_mode = "incremental" if only_new else "manual"
-    lines = [
-        f"- mode={run_mode}",
-        (
-            "- fetched "
-            f"rss={int(fetched.get('rss_items', 0) or 0)} "
-            f"yt={int(fetched.get('youtube_items', 0) or 0)} "
-            f"x={int(fetched.get('x_items', 0) or 0)} "
-            f"gh={int(fetched.get('github_items', 0) or 0)}"
-        ),
-        (
-            "- candidates "
-            f"unique={int(pipeline.get('unique_count', 0) or 0)} "
-            f"final={int(pipeline.get('candidate_count', 0) or 0)}"
-        ),
-        (
-            "- filters "
-            f"seen={int(pipeline.get('seen_count', 0) or 0)} "
-            f"low-impact-issues={int(pipeline.get('github_issue_dropped_low_impact', 0) or 0)}"
-        ),
-        (
-            "- dropped "
-            f"dedupe={int(filtering.get('dedupe_dropped', 0) or 0)} "
-            f"window={int(filtering.get('window_dropped', 0) or 0)} "
-            f"seen={int(filtering.get('seen_dropped', 0) or 0)} "
-            f"blocked={int(filtering.get('blocked_dropped', 0) or 0)} "
-            f"ranked-out={int(filtering.get('ranking_dropped', 0) or 0)}"
-        ),
-        (
-            "- videos "
-            f"fetched={int(video_funnel.get('fetched', 0) or 0)} "
-            f"post-window={int(video_funnel.get('post_window', 0) or 0)} "
-            f"post-seen={int(video_funnel.get('post_seen', 0) or 0)} "
-            f"post-block={int(video_funnel.get('post_block', 0) or 0)} "
-            f"selected={int(video_funnel.get('selected', 0) or 0)}"
-        ),
-        (
-            "- selected "
-            f"M/S/V={int(selection.get('must_read_count', 0) or 0)}/"
-            f"{int(selection.get('skim_count', 0) or 0)}/"
-            f"{int(selection.get('video_count', 0) or 0)}"
-        ),
-    ]
-    sparse_note = str(context.get("sparse_note", "")).strip()
-    if sparse_note:
-        lines.append(f"- {sparse_note}")
-    return lines
 
 
 def _build_sparse_note(context: dict[str, Any] | None) -> str:
@@ -424,22 +341,6 @@ def edit_telegram_message(
     if reply_markup is not None:
         payload["reply_markup"] = json.dumps(reply_markup, separators=(",", ":"))
     _tg_post(bot_token, "editMessageText", payload)
-
-
-def edit_telegram_reply_markup(
-    bot_token: str,
-    chat_id: str,
-    message_id: int,
-    reply_markup: dict | None = None,
-) -> None:
-    """Edit only the inline keyboard on an existing message."""
-    payload: dict[str, Any] = {
-        "chat_id": chat_id,
-        "message_id": str(message_id),
-    }
-    if reply_markup is not None:
-        payload["reply_markup"] = json.dumps(reply_markup, separators=(",", ":"))
-    _tg_post(bot_token, "editMessageReplyMarkup", payload)
 
 
 def set_telegram_commands(

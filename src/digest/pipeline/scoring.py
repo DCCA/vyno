@@ -87,10 +87,6 @@ def score_item(item: Item, profile: ProfileConfig) -> Score:
     )
 
 
-def score_items(items: list[Item], profile: ProfileConfig) -> list[Score]:
-    return [score_item(item, profile) for item in items if not is_blocked(item, profile)]
-
-
 def is_blocked(item: Item, profile: ProfileConfig) -> bool:
     if any(src.lower() in item.source.lower() for src in profile.blocked_sources):
         return True
