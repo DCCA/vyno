@@ -88,3 +88,4 @@ Core history index (summary-first). Full details remain in git history.
 - x-linked-articles-discovery: Promoted outbound links from `x_author` posts into first-class digest candidates with endorsement-aware scoring. ([summary](./x-linked-articles-discovery/completion-summary.md))
 - x-selector-search-modernization: Moved both `x_author` and `x_theme` onto the official recent-search Search Posts API path. ([summary](./x-selector-search-modernization/completion-summary.md))
 - youtube-noise-sanitization: Completed Firehose artifacts for ".docs/done/youtube-noise-sanitization/" (proposal, spec, design, tasks). ([summary](./youtube-noise-sanitization/completion-summary.md))
+- factory-simplification: Retired the web console (Option A), removed dead flexibility, added paste-a-link sources and the engineer self-improvement loop. ([summary](./factory-simplification/completion-summary.md))
