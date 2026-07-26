@@ -25,7 +25,6 @@ class TestOnboarding(unittest.TestCase):
         sources = {
             "rss_feeds": ["https://example.com/rss.xml"],
             "youtube_channels": [],
-            "youtube_queries": [],
             "github_repos": ["openai/openai-cookbook"] if github else [],
             "github_topics": [],
             "github_search_queries": [],

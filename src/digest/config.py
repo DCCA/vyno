@@ -21,7 +21,6 @@ except ImportError as exc:  # pragma: no cover
 class SourceConfig:
     rss_feeds: list[str] = field(default_factory=list)
     youtube_channels: list[str] = field(default_factory=list)
-    youtube_queries: list[str] = field(default_factory=list)
     x_inbox_path: str = ""
     x_authors: list[str] = field(default_factory=list)
     x_themes: list[str] = field(default_factory=list)
@@ -37,8 +36,6 @@ class OutputSettings:
     telegram_bot_token: str = ""
     obsidian_vault_path: str = ""
     obsidian_folder: str = "AI Digest"
-    obsidian_naming: str = "timestamped"
-    render_mode: str = "sectioned"
 
 
 @dataclass(slots=True)
@@ -94,7 +91,6 @@ class ProfileConfig:
     quality_repair_threshold: float = 80.0
     quality_repair_candidate_pool_size: int = 40
     quality_repair_fail_open: bool = True
-    quality_repair_agent: str = "structured"
     quality_learning_enabled: bool = True
     quality_learning_max_offset: float = 8.0
     quality_learning_half_life_days: int = 14
@@ -141,7 +137,6 @@ def load_sources(path: str | Path) -> SourceConfig:
     data = _read_yaml(path)
     rss_feeds = _as_str_list(data, "rss_feeds")
     youtube_channels = _as_str_list(data, "youtube_channels")
-    youtube_queries = _as_str_list(data, "youtube_queries")
     x_authors = _as_str_list(data, "x_authors")
     x_themes = _as_str_list(data, "x_themes")
     github_repos = _as_str_list(data, "github_repos")
@@ -153,7 +148,6 @@ def load_sources(path: str | Path) -> SourceConfig:
     if not (
         rss_feeds
         or youtube_channels
-        or youtube_queries
         or github_repos
         or github_topics
         or github_search_queries
@@ -166,7 +160,6 @@ def load_sources(path: str | Path) -> SourceConfig:
     return SourceConfig(
         rss_feeds=rss_feeds,
         youtube_channels=youtube_channels,
-        youtube_queries=youtube_queries,
         x_inbox_path=x_inbox_path,
         x_authors=x_authors,
         x_themes=x_themes,
@@ -190,12 +183,6 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         out = {}
     if not isinstance(out, dict):
         raise ValueError("output must be an object")
-    naming = str(out.get("obsidian_naming", "timestamped")).strip().lower()
-    if naming not in {"timestamped", "daily"}:
-        raise ValueError("output.obsidian_naming must be 'timestamped' or 'daily'")
-    render_mode = str(out.get("render_mode", "sectioned")).strip().lower()
-    if render_mode not in {"sectioned", "source_segmented"}:
-        raise ValueError("output.render_mode must be 'sectioned' or 'source_segmented'")
     env_telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     env_telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     env_obsidian_vault = _normalize_path_string(os.getenv("OBSIDIAN_VAULT_PATH", ""))
@@ -210,8 +197,6 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         obsidian_folder=str(out.get("obsidian_folder", "AI Digest")).strip()
         or env_obsidian_folder
         or "AI Digest",
-        obsidian_naming=naming,
-        render_mode=render_mode,
     )
     env_model = os.getenv("OPENAI_MODEL", "").strip()
     min_llm_coverage = float(data.get("min_llm_coverage", 0.9) or 0.9)
@@ -366,12 +351,6 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
             5, int(data.get("quality_repair_candidate_pool_size", 40) or 40)
         ),
         quality_repair_fail_open=bool(data.get("quality_repair_fail_open", True)),
-        quality_repair_agent=(
-            "deepagents"
-            if str(data.get("quality_repair_agent", "structured")).strip().lower()
-            == "deepagents"
-            else "structured"
-        ),
         quality_learning_enabled=bool(data.get("quality_learning_enabled", True)),
         quality_learning_max_offset=quality_learning_max_offset,
         quality_learning_half_life_days=max(

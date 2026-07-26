@@ -49,7 +49,6 @@ class TestProfileRegistry(unittest.TestCase):
                     "max_agent_items_per_run: 40\n"
                     "output:\n"
                     "  obsidian_folder: AI Digest\n"
-                    "  render_mode: sectioned\n"
                 ),
                 encoding="utf-8",
             )
@@ -58,14 +57,13 @@ class TestProfileRegistry(unittest.TestCase):
                 "llm_enabled": True,
                 "max_agent_items_per_run": 40,
                 "output": {
-                    "obsidian_folder": "AI Digest",
-                    "render_mode": "source_segmented",
+                    "obsidian_folder": "My Digest",
                 },
             }
 
             saved_overlay = save_profile_overlay(str(base), str(overlay), payload)
             self.assertTrue(saved_overlay["llm_enabled"])
-            self.assertEqual(saved_overlay["output"]["render_mode"], "source_segmented")
+            self.assertEqual(saved_overlay["output"]["obsidian_folder"], "My Digest")
             self.assertNotIn("max_agent_items_per_run", saved_overlay)
 
             persisted = yaml.safe_load(overlay.read_text(encoding="utf-8"))

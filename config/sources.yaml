@@ -41,8 +41,6 @@ youtube_channels:
   - UCSJbGtTlrDami-tDGPUV9-w   # Bloomberg Technology
   - UCVYamHliCI9rw1tHR1xbkfw   # CNBC Technology
 
-youtube_queries: []
-
 # X (MVP): manual inbox file with one X URL per line
 x_inbox_path: "data/x_inbox.txt"
 x_authors: []

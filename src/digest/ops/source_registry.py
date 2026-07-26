@@ -13,7 +13,6 @@ from digest.connectors.github import normalize_github_org
 _SOURCE_FIELDS = {
     "rss": "rss_feeds",
     "youtube_channel": "youtube_channels",
-    "youtube_query": "youtube_queries",
     "x_author": "x_authors",
     "x_theme": "x_themes",
     "github_repo": "github_repos",
@@ -36,7 +35,6 @@ def load_effective_sources(base_path: str, overlay_path: str) -> SourceConfig:
     payload = {
         "rss_feeds": _merge_field("rss", base.rss_feeds, overlay),
         "youtube_channels": _merge_field("youtube_channel", base.youtube_channels, overlay),
-        "youtube_queries": _merge_field("youtube_query", base.youtube_queries, overlay),
         "x_authors": _merge_field("x_author", base.x_authors, overlay),
         "x_themes": _merge_field("x_theme", base.x_themes, overlay),
         "github_repos": _merge_field("github_repo", base.github_repos, overlay),
@@ -53,7 +51,6 @@ def list_sources(base_path: str, overlay_path: str) -> dict[str, list[str]]:
     return {
         "rss": s.rss_feeds,
         "youtube_channel": s.youtube_channels,
-        "youtube_query": s.youtube_queries,
         "x_author": s.x_authors,
         "x_theme": s.x_themes,
         "github_repo": s.github_repos,
@@ -180,9 +177,6 @@ def canonicalize_source_value(source_type: str, value: str) -> str:
         if not re.fullmatch(r"[A-Za-z0-9_-]{5,64}", raw):
             raise ValueError("youtube_channel must be a channel id")
         return raw
-
-    if st == "youtube_query":
-        return " ".join(raw.split())
 
     if st == "x_author":
         candidate = raw.strip()

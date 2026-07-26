@@ -164,7 +164,7 @@ def run_digest(
 
     for channel_id in sources.youtube_channels:
         try:
-            fetched = fetch_youtube_items([channel_id], [])
+            fetched = fetch_youtube_items([channel_id])
             raw_items.extend(fetched)
             record_source_links("youtube_channel", channel_id, fetched)
             youtube_fetched_items += len(fetched)
@@ -196,43 +196,6 @@ def run_digest(
                 "fetch_youtube_channel",
                 "YouTube channel fetch failed",
                 channel_id=channel_id,
-                error=str(exc),
-            )
-
-    for query in sources.youtube_queries:
-        try:
-            fetched = fetch_youtube_items([], [query])
-            raw_items.extend(fetched)
-            record_source_links("youtube_query", query, fetched)
-            youtube_fetched_items += len(fetched)
-            log_event(
-                run_logger,
-                "info",
-                "fetch_youtube_query",
-                "Fetched YouTube query source",
-                query=query,
-                item_count=len(fetched),
-            )
-            emit_progress(
-                "fetch_youtube_query",
-                "Fetched YouTube query source",
-                query=query,
-                item_count=len(fetched),
-            )
-        except Exception as exc:
-            source_errors.append(f"youtube:query:{query}: {exc}")
-            log_event(
-                run_logger,
-                "error",
-                "fetch_youtube_query",
-                "YouTube query fetch failed",
-                query=query,
-                error=str(exc),
-            )
-            emit_progress(
-                "fetch_youtube_query",
-                "YouTube query fetch failed",
-                query=query,
                 error=str(exc),
             )
 
@@ -945,12 +908,7 @@ def run_digest(
                         llm_requests_used=llm_requests_used,
                     )
                 else:
-                    if profile.quality_repair_agent == "deepagents":
-                        from digest.quality.deep_repair import DeepAgentQualityRepair
-
-                        quality_judge = DeepAgentQualityRepair(model=quality_model)
-                    else:
-                        quality_judge = ResponsesAPIQualityRepair(model=quality_model)
+                    quality_judge = ResponsesAPIQualityRepair(model=quality_model)
                     repair_result = quality_judge.evaluate_and_repair(
                         current_must_read=sections.must_read,
                         candidate_pool=candidate_pool,
@@ -1325,7 +1283,6 @@ def run_digest(
     telegram_messages = render_telegram_messages(
         date_str,
         sections,
-        render_mode=profile.output.render_mode,
         context=context_payload,
     )
     if not preview_mode:
@@ -1336,7 +1293,6 @@ def run_digest(
         source_count=len(candidate_items),
         run_id=run_id,
         generated_at_utc=now.isoformat(),
-        render_mode=profile.output.render_mode,
         context=context_payload,
     )
 
@@ -1439,7 +1395,6 @@ def run_digest(
                 profile.output.obsidian_folder,
                 date_str,
                 note,
-                naming=profile.output.obsidian_naming,
                 run_id=run_id,
                 run_dt_utc=now,
             )

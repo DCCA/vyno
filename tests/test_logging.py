@@ -46,7 +46,7 @@ class TestLogging(unittest.TestCase):
             db = Path(tmp) / "digest.db"
             vault = Path(tmp) / "vault"
             store = SQLiteStore(str(db))
-            sources = SourceConfig(rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[])
+            sources = SourceConfig(rss_feeds=["fixture"], youtube_channels=[])
             profile = ProfileConfig(
                 output=OutputSettings(obsidian_vault_path=str(vault), obsidian_folder="AI Digest"),
                 llm_enabled=False,

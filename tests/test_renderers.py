@@ -325,7 +325,7 @@ class TestRenderers(unittest.TestCase):
         self.assertIn("Dropped: dedupe=5, window=3, seen=2, blocked=1, ranked-out=4", note)
         self.assertNotIn("videos fetched=8 post-window=3 post-seen=1 post-block=1 selected=0", msg)
 
-    def test_telegram_ignores_source_segmented_layout(self):
+    def test_telegram_sectioned_layout(self):
         sec = DigestSections(
             must_read=[_scored(1)],
             skim=[_scored(2)],
@@ -333,14 +333,6 @@ class TestRenderers(unittest.TestCase):
             themes=["agents"],
         )
         msg = render_telegram_message("2026-02-21", sec)
-        segmented = "\n".join(
-            render_telegram_messages(
-                "2026-02-21",
-                sec,
-                render_mode="source_segmented",
-            )
-        )
-        self.assertEqual(segmented, msg)
         self.assertNotIn("Top Highlights", msg)
         self.assertNotIn("Themes", msg)
         self.assertIn("Must-read", msg)

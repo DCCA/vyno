@@ -5,7 +5,6 @@ from pathlib import Path
 import re
 from typing import Any
 
-from digest.delivery.source_buckets import build_source_buckets, top_highlights
 from digest.models import DigestSections
 
 
@@ -44,7 +43,6 @@ def render_obsidian_note(
     *,
     run_id: str = "",
     generated_at_utc: str = "",
-    render_mode: str = "sectioned",
     context: dict[str, Any] | None = None,
 ) -> str:
     doc_tags = ["ai", "digest"]
@@ -64,10 +62,6 @@ def render_obsidian_note(
     context_lines = _render_context_lines(context)
     if context_lines:
         lines.extend(["## Context", *context_lines, ""])
-
-    if render_mode == "source_segmented":
-        lines.extend(_render_source_segmented_sections(sections))
-        return "\n".join(lines).strip() + "\n"
 
     lines.append("## Must-read")
     for idx, item in enumerate(sections.must_read, start=1):
@@ -173,39 +167,14 @@ def _render_context_lines(context: dict[str, Any] | None) -> list[str]:
     return lines
 
 
-def _render_source_segmented_sections(sections: DigestSections) -> list[str]:
-    lines = ["## Top Highlights"]
-    for idx, item in enumerate(top_highlights(sections, limit=3), start=1):
-        safe_title = _clean_text(item.item.title, max_len=140)
-        lines.append(f"{idx}. [{safe_title}]({item.item.url})")
-        if item.summary:
-            lines.append(f"   - TL;DR: {_clean_text(item.summary.tldr, max_len=240)}")
-        if item.score.tags:
-            lines.append(f"   - Tags: {_render_tags(item.score.tags)}")
-
-    buckets = build_source_buckets(sections, per_bucket_limit=8)
-    for bucket, rows in buckets.items():
-        lines.extend(["", f"## {bucket}"])
-        for item in rows:
-            safe_title = _clean_text(item.item.title, max_len=140)
-            line = f"- [{safe_title}]({item.item.url})"
-            if item.score.tags:
-                line += f" — tags: {_render_tags(item.score.tags)}"
-            lines.append(line)
-    return lines
-
-
 def build_obsidian_note_path(
     vault_path: str,
     folder: str,
-    naming: str,
     run_dt_utc: datetime,
     run_id: str,
 ) -> Path:
     target_dir = Path(vault_path).expanduser() / folder
     date_str = run_dt_utc.date().isoformat()
-    if naming == "daily":
-        return target_dir / f"{date_str}.md"
     time_part = run_dt_utc.strftime("%H%M%S")
     safe_run = "".join(c for c in run_id if c.isalnum())[:12] or "run"
     return target_dir / date_str / f"{time_part}-{safe_run}.md"
@@ -217,13 +186,12 @@ def write_obsidian_note(
     date_str: str,
     content: str,
     *,
-    naming: str = "timestamped",
     run_id: str = "",
     run_dt_utc: datetime | None = None,
 ) -> Path:
     if run_dt_utc is None:
         run_dt_utc = datetime.now(timezone.utc)
-    out_path = build_obsidian_note_path(vault_path, folder, naming, run_dt_utc, run_id)
+    out_path = build_obsidian_note_path(vault_path, folder, run_dt_utc, run_id)
     target_dir = out_path.parent
     target_dir.mkdir(parents=True, exist_ok=True)
     temp_path = out_path.with_suffix(".md.tmp")

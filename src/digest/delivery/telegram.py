@@ -48,7 +48,6 @@ def render_telegram_messages(
     sections: DigestSections,
     *,
     max_len: int = 4000,
-    render_mode: str = "sectioned",
     context: dict[str, Any] | None = None,
 ) -> list[str]:
     if max_len < 256:
@@ -67,7 +66,6 @@ def render_telegram_message(
         render_telegram_messages(
             date_str,
             sections,
-            render_mode="sectioned",
             context=context,
         )
     )
