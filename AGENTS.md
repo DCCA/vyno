@@ -76,9 +76,11 @@ High-signal source types in current system include:
 
 The engineer is an agent session that reads the factory's own telemetry and ships at most one improvement PR per cycle. A human merges; the engineer never does. Run a cycle with the prompt: "Run one engineer cycle per AGENTS.md."
 
+A **cycle** is one human-triggered invocation over one evidence snapshot (the queries below, run once at the start). It MUST terminate immediately after either opening one PR or recording a no-PR outcome - re-running the queries or re-invoking the engineer to get a second PR out of the same signals is a violation, not a new cycle.
+
 ### Inputs (read-only)
 
-Signal comes from these queries against `digest-live.db` (`sqlite3` CLI or Python), CI status on `master`, and the repo itself - nothing else:
+Signal comes from these queries against `digest-live.db` (`sqlite3` CLI or Python), CI status (its own PR's checks while shipping; `master` CI as background signal), and the repo itself - nothing else:
 
 ```sql
 -- Last 7 runs (status + error blobs)
@@ -116,7 +118,7 @@ If these queries drift from the schema, fix the brief in the same PR that change
 
 ### Hard fences (MUST NOT)
 
-- Touch `.env`, any secret or credential, or delivery targets (Telegram chat ids, vault path).
+- Touch `.env`, any secret or credential, or any delivery/output configuration surface: the `output:` section of `config/profile.yaml`, `data/profile.local.yaml`, or `ProfileConfig.output.*` semantics - changing where or to whom digests are delivered requires explicit human authorization.
 - Change the SQLite schema.
 - Merge PRs, bypass CI, or push to `master`.
 - Rewrite history under `.docs/done/`.
