@@ -17,6 +17,7 @@ _SYSTEM_PROMPT = (
     "You are an editor for an AI daily digest. "
     "Assess Must-read quality and propose a repaired Must-read list "
     f"of exactly {DIGEST_MUST_READ_LIMIT} ids selected only from the provided candidate pool. "
+    "Report quality_score on a 0-100 scale (100 = excellent). "
     "Prioritize practical impact, novelty, source diversity, and reduced redundancy."
 )
 
@@ -127,7 +128,13 @@ def build_repair_result(
     if not isinstance(parsed, dict):
         raise RuntimeError("Quality repair output missing structured JSON")
 
-    quality_score = max(0.0, min(100.0, float(parsed.get("quality_score", 0.0))))
+    quality_score = float(parsed.get("quality_score", 0.0))
+    # ponytail: models sometimes answer on a 0-10 scale despite the prompt;
+    # normalize so the 0-100 repair threshold stays meaningful. Ceiling: a
+    # genuine 0-100 score of <=10 gets inflated for that run.
+    if 0.0 < quality_score <= 10.0:
+        quality_score *= 10.0
+    quality_score = max(0.0, min(100.0, quality_score))
     confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0.0))))
     issues = _normalize_issue_list(parsed.get("issues", []))
     repaired_ids = _normalize_repaired_ids(parsed.get("repaired_must_read_ids", []))
