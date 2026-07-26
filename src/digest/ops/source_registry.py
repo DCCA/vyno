@@ -21,6 +21,21 @@ _SOURCE_FIELDS = {
     "github_org": "github_orgs",
 }
 
+# x.com paths that are app routes, not profiles (x.com/i/status/123 is a post).
+_X_RESERVED_PATHS = {
+    "i",
+    "home",
+    "explore",
+    "notifications",
+    "messages",
+    "search",
+    "settings",
+    "intent",
+    "hashtag",
+    "share",
+    "compose",
+}
+
 
 @dataclass(slots=True)
 class OverlayData:
@@ -183,6 +198,11 @@ def canonicalize_source_value(source_type: str, value: str) -> str:
         parsed = urllib.parse.urlparse(candidate)
         if parsed.scheme in {"http", "https"} and parsed.netloc.lower() in {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}:
             path = [part for part in parsed.path.split("/") if part]
+            lowered = [part.lower() for part in path]
+            if "status" in lowered:
+                raise ValueError("x_author must be a profile URL, not a post URL")
+            if lowered and lowered[0] in _X_RESERVED_PATHS:
+                raise ValueError(f"x_author cannot be the reserved path /{lowered[0]}")
             candidate = path[0] if path else ""
         handle = candidate.lstrip("@").strip().lower()
         if not re.fullmatch(r"[a-z0-9_]{1,15}", handle):

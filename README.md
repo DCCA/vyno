@@ -58,7 +58,7 @@ The setup wizard checks your system, installs dependencies, and creates local ov
 
 ## Common Commands
 - `make live`: execute one live digest run
-- `make schedule`: run the CLI scheduler loop
+- `make schedule`: run the scheduler loop (driven by `profile.schedule`, which the Telegram `/schedule` commands edit; exactly-once per slot with catch-up)
 - `make bot`: run the Telegram admin bot loop
 - `make doctor`: run onboarding and environment preflight checks
 - `make test`: run backend tests

@@ -349,6 +349,16 @@ def set_telegram_commands(
     _tg_post(bot_token, "setMyCommands", payload)
 
 
+def clear_telegram_menu_button(bot_token: str) -> None:
+    """Reset the chat menu button to Telegram's default.
+
+    Retires the "Open Console" Mini App button on bots configured before the
+    web console was removed.
+    """
+    payload = {"menu_button": json.dumps({"type": "default"}, separators=(",", ":"))}
+    _tg_post(bot_token, "setChatMenuButton", payload)
+
+
 def _tg_post(bot_token: str, method: str, payload: dict[str, Any]) -> dict:
     """Low-level POST to Telegram Bot API."""
     body = urllib.parse.urlencode(payload).encode("utf-8")

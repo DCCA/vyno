@@ -50,7 +50,7 @@ class TestDockerAssets(unittest.TestCase):
         )
         self.assertRegex(
             data,
-            r"(?m)^schedule:\n\t.*--sources-overlay data/sources\.local\.yaml .*--profile-overlay data/profile\.local\.yaml .* schedule ",
+            r"(?m)^schedule:\n\t.*--sources-overlay data/sources\.local\.yaml .*--profile-overlay data/profile\.local\.yaml .* schedule$",
         )
         self.assertRegex(
             data,

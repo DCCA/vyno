@@ -1469,6 +1469,13 @@ def _handle_paste_add(
     if detection is None:
         return "Usage: /source add &lt;type&gt; &lt;value&gt; - or paste a URL / @handle"
     if not detection.source_type:
+        if detection.invalid:
+            return f"Not added - {_esc(detection.note)}"
+        if detection.note == "unreachable":
+            return (
+                f"Could not reach {_esc(detection.value)} - not added. "
+                "Check the link and retry."
+            )
         try:
             SQLiteStore(ctx.db_path).add_feedback(
                 run_id="",

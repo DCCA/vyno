@@ -108,7 +108,7 @@ AI Daily Digest is a Python runtime operated through a Telegram bot and the CLI/
   - `digest-live.db`
   - `logs/digest.log`
   - `.runtime/run-artifacts/<run_id>/*`
-  - `.runtime/*` (locks, bot heartbeat)
+  - `.runtime/*` (locks, bot heartbeat, `schedule-state.json` slot marker)
   - `obsidian-vault/` notes
 
 ## Reliability and Observability
@@ -120,7 +120,7 @@ AI Daily Digest is a Python runtime operated through a Telegram bot and the CLI/
 
 ## Deployment Topologies
 - CLI automation mode:
-  - `make schedule` runs the standalone CLI scheduler loop.
+  - `make schedule` runs the CLI scheduler loop, driven by `profile.schedule` (the settings the Telegram `/schedule` commands edit): cadence, local time, quiet hours, timezone, exactly-once per slot with same-day catch-up via `.runtime/schedule-state.json`.
 - Background scheduler service mode:
   - `make docker-scheduler-up` runs a detached Docker service running `digest schedule` for always-on scheduling.
   - `make docker-scheduler-deploy` rebuilds and recreates that service after local code changes.

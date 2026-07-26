@@ -26,7 +26,7 @@ make live
 # Run the Telegram bot in the foreground
 make bot
 
-# Start the scheduler loop (defaults: TIME=07:00 TZ=America/Sao_Paulo)
+# Start the scheduler loop (driven by profile.schedule; edit via /schedule in Telegram)
 make schedule
 
 # Preflight checks

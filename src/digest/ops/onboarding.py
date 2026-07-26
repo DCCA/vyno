@@ -23,7 +23,6 @@ class OnboardingSettings:
     profile_overlay_path: str
     db_path: str
     run_lock_path: str = ".runtime/run.lock"
-    history_dir: str = ".runtime/config-history"
     onboarding_state_path: str = ".runtime/onboarding-state.json"
 
 
@@ -220,11 +219,6 @@ def run_preflight(
             "run_lock_writable",
             "Run lock path writable",
             settings.run_lock_path,
-        ),
-        (
-            "history_writable",
-            "History path writable",
-            settings.history_dir,
         ),
         (
             "onboarding_state_writable",

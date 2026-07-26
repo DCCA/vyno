@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from digest.constants import DEFAULT_RUN_LOCK_STALE_SECONDS
 from digest.config import load_dotenv
@@ -15,6 +14,7 @@ from digest.ops.onboarding import OnboardingSettings, run_preflight
 from digest.ops.profile_registry import load_effective_profile
 from digest.delivery.telegram import (
     answer_telegram_callback,
+    clear_telegram_menu_button,
     edit_telegram_message,
     get_telegram_updates,
     send_telegram_message,
@@ -22,6 +22,7 @@ from digest.delivery.telegram import (
 )
 from digest.logging_utils import setup_logging
 from digest.ops.run_lock import RunLock
+from digest.ops.schedule_slots import evaluate_schedule_tick
 from digest.ops.source_registry import load_effective_sources
 from digest.ops.telegram_commands import CommandContext, handle_update
 from digest.runtime import run_digest
@@ -65,23 +66,71 @@ def _execute_run(
     return 0
 
 
-def _cmd_schedule(args: argparse.Namespace) -> int:
-    hh, mm = args.time.split(":")
-    hour = int(hh)
-    minute = int(mm)
-    tz = ZoneInfo(args.timezone)
+SCHEDULE_STATE_PATH = ".runtime/schedule-state.json"
+SCHEDULE_TICK_SECONDS = 15
 
+
+def _read_json_state(path: str) -> dict[str, Any]:
+    p = Path(path)
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_json_state(path: str, payload: dict[str, Any]) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=True), encoding="utf-8")
+    tmp.replace(p)
+
+
+def _cmd_schedule(args: argparse.Namespace) -> int:
+    """Profile-driven scheduler loop.
+
+    profile.schedule (edited via the Telegram /schedule commands) is the
+    single source of truth: cadence, local time, quiet hours, timezone.
+    Exactly-once per slot via a persisted marker, with same-day catch-up
+    after restarts.
+    """
+    last_action = ""
     while True:
-        now = datetime.now(tz)
-        if now.hour == hour and now.minute == minute:
-            _execute_run(
-                args,
-                use_last_completed_window=True,
-                only_new=True,
-                show_progress=False,
+        profile = load_effective_profile(args.profile, args.profile_overlay)
+        now = datetime.now(timezone.utc)
+        state = _read_json_state(SCHEDULE_STATE_PATH)
+        action, slot = evaluate_schedule_tick(
+            profile, now, str(state.get("last_triggered_slot", "") or "")
+        )
+        if action != last_action and action in {"disabled", "quiet"}:
+            hint = " (enable via /schedule on)" if action == "disabled" else ""
+            print(f"scheduler: {action}{hint}", flush=True)
+        last_action = action
+        if action == "run":
+            # ponytail: marker precedes the run - a crash mid-run skips the
+            # slot instead of double-delivering the digest on restart.
+            _write_json_state(
+                SCHEDULE_STATE_PATH,
+                {
+                    **state,
+                    "last_triggered_slot": slot,
+                    "last_triggered_at": now.isoformat(),
+                },
             )
-            time.sleep(61)
-        time.sleep(1)
+            print(f"scheduler: triggering run for slot {slot}", flush=True)
+            try:
+                _execute_run(
+                    args,
+                    use_last_completed_window=True,
+                    only_new=True,
+                    show_progress=False,
+                )
+            except Exception as exc:
+                print(f"scheduler_error: {exc}", flush=True)
+        time.sleep(SCHEDULE_TICK_SECONDS)
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
@@ -315,6 +364,12 @@ def _cmd_bot(args: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"bot_warning: failed to register commands: {exc}")
 
+    # Self-heal bots configured before the web console was removed.
+    try:
+        clear_telegram_menu_button(bot_token)
+    except Exception as exc:
+        print(f"bot_warning: failed to reset menu button: {exc}")
+
     offset: int | None = None
     last_ok_at = ""
     consecutive_errors = 0
@@ -398,9 +453,9 @@ def main() -> int:
     run_p = sub.add_parser("run", help="Run digest once")
     run_p.set_defaults(func=_cmd_run)
 
-    sched = sub.add_parser("schedule", help="Run digest daily at fixed local time")
-    sched.add_argument("--time", default="07:00")
-    sched.add_argument("--timezone", default="America/Sao_Paulo")
+    sched = sub.add_parser(
+        "schedule", help="Run the profile-driven scheduler loop (profile.schedule)"
+    )
     sched.set_defaults(func=_cmd_schedule)
 
     doctor = sub.add_parser("doctor", help="Run onboarding preflight checks")

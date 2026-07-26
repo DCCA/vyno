@@ -626,6 +626,34 @@ class TestTelegramCommands(unittest.TestCase):
             self.assertEqual(rows[0][4], "ingest_suggestion")
             self.assertEqual(rows[0][8], "https://pod.example.com/show")
 
+    def test_source_add_unreachable_url_is_not_logged_as_suggestion(self):
+        from digest.ops.ingest_detect import IngestDetection
+        from digest.storage.sqlite_store import SQLiteStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, sent, answered = self._ctx(tmp)
+            detection = IngestDetection(
+                "", "https://down.example.com/blog", note="unreachable"
+            )
+            with patch(
+                "digest.ops.telegram_commands.detect_ingest",
+                return_value=detection,
+            ):
+                resp = handle_update(
+                    _msg("/source add https://down.example.com/blog"), ctx
+                )
+            self.assertIn("Could not reach", resp.text or "")
+            self.assertEqual(SQLiteStore(ctx.db_path).list_feedback(), [])
+
+    def test_source_add_invalid_handle_is_not_logged_as_suggestion(self):
+        from digest.storage.sqlite_store import SQLiteStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, sent, answered = self._ctx(tmp)
+            resp = handle_update(_msg("/source add @not-a-handle!"), ctx)
+            self.assertIn("x_author", resp.text or "")
+            self.assertEqual(SQLiteStore(ctx.db_path).list_feedback(), [])
+
     def test_source_add_plain_text_shows_usage(self):
         with tempfile.TemporaryDirectory() as tmp:
             ctx, sent, answered = self._ctx(tmp)

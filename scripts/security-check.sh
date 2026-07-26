@@ -38,7 +38,7 @@ run_semgrep_advisory() {
   uvx --from semgrep semgrep scan \
     --config p/secrets \
     --config p/python \
-    --exclude "${ROOT_DIR}/.venv" \ \
+    --exclude "${ROOT_DIR}/.venv" \
     "${ROOT_DIR}/src" "${ROOT_DIR}/tests"
 }
 
