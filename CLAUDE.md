@@ -14,7 +14,7 @@ uv sync                          # preferred (Python)
 npm --prefix web install         # frontend
 
 # Run tests
-make test                        # 258 backend tests (unittest discover)
+make test                        # 260 backend tests (unittest discover)
 npm --prefix web run test        # 24 frontend tests (Node native test runner, across web/tests/*.test.mjs)
 
 # Run a single backend test
@@ -85,7 +85,7 @@ Pipeline flow: **Ingest → Normalize → Dedupe → Score → Select → Delive
 | `models.py` | Core dataclasses (`Item`, `Score`, `ScoredItem`, `DigestSections`, `RunReport`) |
 | `config.py` | Config dataclasses loaded from YAML |
 | `connectors/` | Source integrations: `rss.py`, `youtube.py`, `x_inbox.py`, `x_provider.py`, `x_selectors.py`, `github.py` |
-| `pipeline/` | Processing stages: `normalize.py`, `dedupe.py`, `scoring.py`, `selection.py`, `summarize.py` |
+| `pipeline/` | Processing stages: `normalize.py`, `clean_text.py`, `dedupe.py`, `scoring.py`, `selection.py`, `summarize.py`, `github_issue_impact.py` |
 | `llm/` | Shared LangChain structured-output client (`client.py`) — lazy-imports `langchain-openai`; a missing key/package raises `RuntimeError` so callers fall back to deterministic paths |
 | `scorers/` | LLM agent scoring (`agent.py`, via `llm/client.py`) |
 | `summarizers/` | `responses_api.py` (LLM, via `llm/client.py`) + `extractive.py` (deterministic fallback) |
