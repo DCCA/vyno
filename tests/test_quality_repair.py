@@ -3,9 +3,42 @@ from datetime import datetime
 
 from digest.models import DigestSections, Item, Score, ScoredItem
 from digest.quality.online_repair import (
+    build_repair_result,
     rebuild_sections_with_repair,
     validate_repaired_must_read,
 )
+
+
+def _payload(score: float) -> dict:
+    return {
+        "quality_score": score,
+        "confidence": 0.9,
+        "issues": ["x"],
+        "repaired_must_read_ids": ["a", "b", "c", "d", "e"],
+    }
+
+
+_POOL = ["a", "b", "c", "d", "e", "f"]
+
+
+class TestQualityScoreScale(unittest.TestCase):
+    def test_ten_scale_score_is_normalized_to_hundred_scale(self):
+        result = build_repair_result(
+            _payload(8.5), current_ids=["a"], pool_ids=_POOL, model="m"
+        )
+        self.assertEqual(result.quality_score, 85.0)
+
+    def test_hundred_scale_score_is_kept(self):
+        result = build_repair_result(
+            _payload(88.0), current_ids=["a"], pool_ids=_POOL, model="m"
+        )
+        self.assertEqual(result.quality_score, 88.0)
+
+    def test_zero_score_stays_zero(self):
+        result = build_repair_result(
+            _payload(0.0), current_ids=["a"], pool_ids=_POOL, model="m"
+        )
+        self.assertEqual(result.quality_score, 0.0)
 
 
 def _mk(idx: int, source: str, total: int) -> ScoredItem:
