@@ -50,10 +50,43 @@ def render_telegram_messages(
     max_len: int = 4000,
     context: dict[str, Any] | None = None,
 ) -> list[str]:
+    return [
+        text
+        for text, _ in render_telegram_payloads(
+            date_str, sections, max_len=max_len, context=context
+        )
+    ]
+
+
+def render_telegram_payloads(
+    date_str: str,
+    sections: DigestSections,
+    *,
+    max_len: int = 4000,
+    context: dict[str, Any] | None = None,
+) -> list[tuple[str, list[tuple[int, str]]]]:
+    """Chunked digest messages plus the (number, item_id) refs each chunk renders."""
     if max_len < 256:
         raise ValueError("max_len must be >= 256")
-    blocks = _build_digest_blocks(date_str, sections, context=context)
-    return _chunk_blocks(blocks, max_len=max_len)
+    pairs = _build_digest_block_pairs(date_str, sections, context=context)
+    return _chunk_block_pairs(pairs, max_len=max_len)
+
+
+def build_feedback_keyboard(
+    run_id: str, items: list[tuple[int, str]]
+) -> dict | None:
+    """Per-item thumbs keyboard for a delivered digest chunk."""
+    if not items:
+        return None
+    return {
+        "inline_keyboard": [
+            [
+                {"text": f"\U0001f44d {number}", "callback_data": f"fb:{run_id}:{item_id}:5"},
+                {"text": f"\U0001f44e {number}", "callback_data": f"fb:{run_id}:{item_id}:1"},
+            ]
+            for number, item_id in items
+        ]
+    }
 
 
 def render_telegram_message(
@@ -71,28 +104,33 @@ def render_telegram_message(
     )
 
 
-def _build_digest_blocks(
+def _build_digest_block_pairs(
     date_str: str,
     sections: DigestSections,
     *,
     context: dict[str, Any] | None,
-) -> list[str]:
-    blocks = [f"AI Digest - {date_str}"]
+) -> list[tuple[str, tuple[int, str] | None]]:
+    pairs: list[tuple[str, tuple[int, str] | None]] = [
+        (f"AI Digest - {date_str}", None)
+    ]
     sparse_note = _build_sparse_note(context)
     if sparse_note:
-        blocks.append(sparse_note)
+        pairs.append((sparse_note, None))
 
     primary_items = _select_primary_items(sections)
     section_labels = _section_labels(sections)
     for idx, item in enumerate(primary_items, start=1):
-        blocks.append(
-            _render_item_block(
-                idx,
-                item,
-                section_label=section_labels.get(item.item.id, "Selected"),
+        pairs.append(
+            (
+                _render_item_block(
+                    idx,
+                    item,
+                    section_label=section_labels.get(item.item.id, "Selected"),
+                ),
+                (idx, item.item.id),
             )
         )
-    return blocks
+    return pairs
 
 
 def _build_sparse_note(context: dict[str, Any] | None) -> str:
@@ -274,12 +312,24 @@ def _chunk_lines(lines: list[str], *, max_len: int) -> list[str]:
     return [c for c in chunks if c]
 
 
-def _chunk_blocks(blocks: list[str], *, max_len: int) -> list[str]:
-    chunks: list[str] = []
+def _chunk_block_pairs(
+    pairs: list[tuple[str, tuple[int, str] | None]], *, max_len: int
+) -> list[tuple[str, list[tuple[int, str]]]]:
+    chunks: list[tuple[str, list[tuple[int, str]]]] = []
     current: list[str] = []
+    current_refs: list[tuple[int, str]] = []
     current_len = 0
 
-    for block in blocks:
+    def _flush() -> None:
+        nonlocal current, current_refs, current_len
+        text = "\n\n".join(current).strip()
+        if text:
+            chunks.append((text, current_refs))
+        current = []
+        current_refs = []
+        current_len = 0
+
+    for block, ref in pairs:
         text = block.strip()
         if not text:
             continue
@@ -290,16 +340,14 @@ def _chunk_blocks(blocks: list[str], *, max_len: int) -> list[str]:
                 text = truncated[0]
         separator = 2 if current else 0
         if current and current_len + separator + len(text) > max_len:
-            chunks.append("\n\n".join(current).strip())
-            current = [text]
-            current_len = len(text)
-            continue
+            _flush()
         current.append(text)
-        current_len += separator + len(text)
+        current_len += (2 if current_len else 0) + len(text)
+        if ref is not None:
+            current_refs.append(ref)
 
-    if current:
-        chunks.append("\n\n".join(current).strip())
-    return [chunk for chunk in chunks if chunk]
+    _flush()
+    return chunks
 
 
 def send_telegram_message(

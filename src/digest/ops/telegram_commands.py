@@ -215,8 +215,37 @@ def _handle_callback_query(callback: dict, ctx: CommandContext) -> BotResponse:
         return _handle_status_callback(
             data[3:], chat_id, user_id, callback_id, message_id, ctx
         )
+    if data.startswith("fb:"):
+        return _handle_feedback_callback(data[3:], user_id, callback_id, ctx)
 
     return BotResponse(callback_query_id=callback_id, callback_text="Unsupported action")
+
+
+def _handle_feedback_callback(
+    payload: str, user_id: str, callback_id: str, ctx: CommandContext
+) -> BotResponse:
+    """Digest item thumbs: payload is "<run_id>:<item_id>:<rating>"."""
+    parts = payload.split(":")
+    rating = parts[2] if len(parts) == 3 else ""
+    if rating not in {"5", "1"} or not parts[0] or not parts[1]:
+        return BotResponse(
+            callback_query_id=callback_id, callback_text="Invalid feedback"
+        )
+    try:
+        SQLiteStore(ctx.db_path).add_feedback(
+            run_id=parts[0],
+            item_id=parts[1],
+            rating=int(rating),
+            label="more_like_this" if rating == "5" else "not_relevant",
+            comment="",
+            target_kind="item",
+            actor=user_id,
+        )
+    except Exception:
+        return BotResponse(
+            callback_query_id=callback_id, callback_text="Feedback failed"
+        )
+    return BotResponse(callback_query_id=callback_id, callback_text="Noted")
 
 
 # ── Source wizard (sw: prefix) ───────────────────────────────────────

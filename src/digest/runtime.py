@@ -6,6 +6,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 import logging
 import os
+import urllib.error
 from pathlib import Path
 from typing import Any, Callable
 
@@ -22,7 +23,11 @@ from digest.connectors.x_inbox import fetch_x_inbox_items
 from digest.connectors.x_selectors import fetch_x_selector_items_linked
 from digest.connectors.youtube import fetch_youtube_items
 from digest.delivery.obsidian import render_obsidian_note, write_obsidian_note
-from digest.delivery.telegram import render_telegram_messages, send_telegram_message
+from digest.delivery.telegram import (
+    build_feedback_keyboard,
+    render_telegram_payloads,
+    send_telegram_message,
+)
 from digest.models import Item, RunReport, ScoredItem
 from digest.pipeline.dedupe import dedupe_and_cluster
 from digest.pipeline.github_issue_impact import evaluate_github_issue_impact
@@ -1280,11 +1285,12 @@ def run_digest(
     # local-time drift where repeated runs overwrite the previous-day note.
     date_str = now.date().isoformat()
 
-    telegram_messages = render_telegram_messages(
+    telegram_payloads = render_telegram_payloads(
         date_str,
         sections,
         context=context_payload,
     )
+    telegram_messages = [text for text, _ in telegram_payloads]
     if not preview_mode:
         _write_latest_telegram_artifact(run_id, telegram_messages)
     note = render_obsidian_note(
@@ -1352,12 +1358,30 @@ def run_digest(
         and profile.output.telegram_chat_id
     ):
         try:
-            for idx, chunk in enumerate(telegram_messages, start=1):
-                send_telegram_message(
-                    profile.output.telegram_bot_token,
-                    profile.output.telegram_chat_id,
-                    chunk,
-                )
+            for idx, (chunk, item_refs) in enumerate(telegram_payloads, start=1):
+                try:
+                    keyboard = build_feedback_keyboard(run_id, item_refs)
+                except Exception:
+                    keyboard = None
+                try:
+                    send_telegram_message(
+                        profile.output.telegram_bot_token,
+                        profile.output.telegram_chat_id,
+                        chunk,
+                        reply_markup=keyboard,
+                    )
+                except urllib.error.HTTPError as exc:
+                    # Fail open only on deterministic 400 rejections (e.g. bad
+                    # reply markup) - those were never delivered. Ambiguous
+                    # failures (timeouts, 5xx) re-raise: retrying could
+                    # double-send a digest that actually landed.
+                    if keyboard is None or exc.code != 400:
+                        raise
+                    send_telegram_message(
+                        profile.output.telegram_bot_token,
+                        profile.output.telegram_chat_id,
+                        chunk,
+                    )
                 log_event(
                     run_logger,
                     "info",
