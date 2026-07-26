@@ -89,7 +89,8 @@ AI Daily Digest is a Python runtime operated through a Telegram bot and the CLI/
 ### Flow: Digest Review and Feedback
 1. Archived run artifacts and selected items are persisted to SQLite and `.runtime/run-artifacts/<run_id>/` (delivered Telegram chunks and the rendered Obsidian note) for non-preview runs.
 2. Operators inspect run outcomes through Telegram (`/status`, `/history`, `/doctor`) or by reading the archived files/logs directly.
-3. Source-level feedback (`mute`/`trust`) is submitted through the Telegram `/feedback` command; feedback is stored with derived feature rows and later reused as ranking bias in runtime.
+3. Item-level feedback comes from the thumbs-up/down inline buttons attached to each delivered digest chunk; a tap writes a feedback row (rating 5 or 1, `target_kind="item"`) via the bot's `fb:` callback handler.
+4. Source-level feedback (`mute`/`trust`) is submitted through the Telegram `/feedback` command; feedback is stored with derived feature rows and later reused as ranking bias in runtime.
 
 ### Flow: Onboarding
 1. `make setup` installs dependencies and creates local overlay files.

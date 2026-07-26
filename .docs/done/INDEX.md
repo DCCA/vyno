@@ -89,3 +89,4 @@ Core history index (summary-first). Full details remain in git history.
 - x-selector-search-modernization: Moved both `x_author` and `x_theme` onto the official recent-search Search Posts API path. ([summary](./x-selector-search-modernization/completion-summary.md))
 - youtube-noise-sanitization: Completed Firehose artifacts for ".docs/done/youtube-noise-sanitization/" (proposal, spec, design, tasks). ([summary](./youtube-noise-sanitization/completion-summary.md))
 - factory-simplification: Retired the web console (Option A), removed dead flexibility, added paste-a-link sources and the engineer self-improvement loop. ([summary](./factory-simplification/completion-summary.md))
+- telegram-item-feedback: Per-item thumbs on delivered digest chunks restore item-level feedback into the ranking bias loop. ([summary](./telegram-item-feedback/completion-summary.md))

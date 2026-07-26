@@ -185,6 +185,7 @@ Delivered archive and feedback:
 - non-preview runs archive Telegram chunks under `.runtime/run-artifacts/<run_id>/telegram.json`
 - non-preview runs archive the rendered Obsidian note under `.runtime/run-artifacts/<run_id>/obsidian.md`
 - the Telegram `/feedback` command records source-level feedback (`mute`/`trust`) and reports an aggregate rating summary (`/feedback summary`)
+- delivered digest messages carry per-item thumbs-up/down buttons; a tap records item-level feedback that biases future ranking
 
 ## Telegram Admin Commands
 When `make bot` (or the `digest-bot` Docker service) is running, authorized admins can use:
