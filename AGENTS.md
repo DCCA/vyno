@@ -7,13 +7,11 @@
 - Docs refactors/cleanup MUST preserve Firehose structure (`.docs/todo`, `.docs/doing`, `.docs/done`) and required artifacts.
 
 ## Project Structure & Module Organization
-AI Daily Digest is a Python application with a local operator console.
+AI Daily Digest is a Python application. The operator surface is the Telegram bot plus the CLI/Makefile - there is no web console.
 
 Key paths:
-- `src/digest/`: runtime, connectors, delivery, web API.
-- `web/`: Vite + React + Tailwind operator console.
+- `src/digest/`: runtime, connectors, delivery, ops.
 - `tests/`: Python unit/integration tests.
-- `web/tests/`: frontend source-shape tests.
 - `config/`: tracked base config (`sources.yaml`, `profile.yaml`).
 - `data/`: local overlays/templates (`sources.local.yaml`, `profile.local.yaml`, `x_inbox.example.txt`).
 - `.docs/`: Firehose planning and history (`PRD.md`, `todo/`, `doing/`, `done/`).
@@ -23,15 +21,10 @@ Keep each change scoped to one logical unit of work.
 ## Build, Test, and Development Commands
 Primary commands:
 - `make test`: run Python test suite.
-- `make app`: start API + UI together (`scripts/start-app.sh`).
 - `make schedule`: run the CLI scheduler loop.
 - `make bot`: run the Telegram admin bot.
-- `make web-api`: run config API only.
-- `make web-ui`: run UI dev server only.
-- `make web-ui-build`: build UI.
 - `make docker-scheduler-up`: run the background Docker scheduler service.
 - `make docker-scheduler-deploy`: rebuild and redeploy the background Docker scheduler service in one command.
-- `npm --prefix web run test`: run frontend tests.
 - `make live`: execute one digest run.
 - `make doctor`: run onboarding/preflight checks.
 - `make security-check`: run security baseline checks.
@@ -50,15 +43,14 @@ Useful checks:
 ## Testing Guidelines
 Verification is mandatory:
 - Run `make test` for backend/runtime changes.
-- Run `npm --prefix web run test` and `npm --prefix web run build` for web UI changes.
 - Keep docs task lists synced with actual completion or explicit deferrals.
 - Before moving a change from `.docs/doing/` to `.docs/done/`, ensure completion notes reflect real behavior.
 
 ## Commit & Pull Request Guidelines
-- Commit messages: imperative, scoped, and specific (example: `web(ui): localize action feedback by surface`).
+- Commit messages: imperative, scoped, and specific (example: `ops: detect source type from pasted url`).
 - Keep commits focused; avoid mixing unrelated work.
 - PRs should include: summary, affected paths, verification steps, risks, and follow-ups.
-- Link related issues/tasks and include screenshots only when UI artifacts are introduced.
+- Link related issues/tasks.
 
 ## Runtime & Config Essentials
 - Runtime uses base configs plus overlays:
@@ -66,13 +58,10 @@ Verification is mandatory:
   - Overlay: `data/sources.local.yaml`, `data/profile.local.yaml`
 - Local DB default: `digest-live.db`
 - Logs default: `logs/digest.log`
-- Web scheduler state defaults to `.runtime/schedule-state.json`
-- Web API auth defaults to required mode; when running API/UI separately, keep matching token/header env vars.
-- The current console is route-based and includes `Dashboard`, `Schedule`, `Run Center`, `Sources`, `Profile`, `Timeline`, `History`, and `Onboarding`.
-- The schedule model now supports hourly cadence and quiet hours in addition to the legacy daily mode.
+- The schedule model supports hourly cadence and quiet hours in addition to daily mode, configured via `profile.schedule` and the Telegram `/schedule` command.
 
 High-signal source types in current system include:
-- `rss`, `youtube_channel`, `youtube_query`
+- `rss`, `youtube_channel`
 - `x_author`, `x_theme` (optional X selectors; supports handle and profile URL canonicalization for `x_author`)
 - `github_repo`, `github_topic`, `github_query`, `github_org`
 
@@ -82,19 +71,3 @@ High-signal source types in current system include:
   - `.docs/done/INDEX.md` as central history index
 - Keep full historical detail recoverable through git history.
 - Use `.docs/todo/` for deferred/not-started work; `.docs/doing/` only for active work.
-
-## UI Feedback Locality Pattern
-Use this as a default UX rule for all web surfaces.
-
-- Feedback MUST be shown close to the action that triggered it (same card/section, near the control row).
-- Global top-of-page alerts SHOULD be reserved for global/system events (boot failures, auth/session issues, app-wide outages).
-- Success feedback SHOULD auto-dismiss after a short timeout; error feedback SHOULD persist until dismissed or corrected.
-- Feedback MUST include non-color cues (explicit title/text) and SHOULD use `aria-live` semantics:
-  - polite for success/info
-  - assertive for errors/blockers
-- Table-row actions (for example edit/delete) SHOULD render feedback near the table region, with row identity in message text.
-- Destructive actions SHOULD keep confirmation and result feedback in the same local interaction zone.
-
-## Design Context
-- `PRODUCT.md` (repo root) carries the strategic design context: register (product), platform (web), users, positioning, brand personality, anti-references, design principles, and the AAA-ish accessibility bar. Read it before any UX or UI work.
-- `DESIGN.md` (repo root) captures the visual system as implemented: Overcast Slate neutrals (hue 200), the single Pressroom Green accent, typography (Archivo / Public Sans / IBM Plex Mono), shadows, shapes, components, and named rules. Treat its tokens and named rules as normative for web surfaces.
