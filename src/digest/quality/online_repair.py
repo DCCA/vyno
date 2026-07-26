@@ -224,28 +224,6 @@ def validate_repaired_must_read(
     return ""
 
 
-def build_rank_overrides(
-    scored_items: list[ScoredItem],
-    *,
-    prior_weights: dict[FeatureKey, float],
-    feedback_weights: dict[FeatureKey, float],
-    max_offset: float,
-) -> dict[str, float]:
-    breakdown = build_rank_adjustment_breakdown(
-        scored_items,
-        prior_weights=prior_weights,
-        feedback_weights=feedback_weights,
-        max_offset=max_offset,
-    )
-    overrides: dict[str, float] = {}
-    for scored in scored_items:
-        item_breakdown = breakdown.get(scored.item.id, {})
-        overrides[scored.item.id] = float(scored.score.total) + float(
-            item_breakdown.get("quality_prior", 0.0)
-        ) + float(item_breakdown.get("feedback_bias", 0.0))
-    return overrides
-
-
 def build_rank_adjustment_breakdown(
     scored_items: list[ScoredItem],
     *,
