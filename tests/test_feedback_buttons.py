@@ -1,4 +1,5 @@
 import tempfile
+import urllib.error
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -178,7 +179,9 @@ class TestDeliveryFailOpen(unittest.TestCase):
             def fake_send(token, chat_id, message, reply_markup=None):
                 calls.append(reply_markup)
                 if reply_markup is not None:
-                    raise RuntimeError("400 reply markup rejected")
+                    raise urllib.error.HTTPError(
+                        "https://api.telegram.org", 400, "Bad Request", None, None
+                    )
                 return 1
 
             with (
@@ -198,6 +201,59 @@ class TestDeliveryFailOpen(unittest.TestCase):
             self.assertIn(report.status, {"success", "partial"})
             self.assertIn(None, calls)
             self.assertTrue(any(markup is not None for markup in calls))
+
+    def test_ambiguous_send_failure_is_not_retried(self):
+        # A timeout may have delivered the message; retrying would double-send.
+        with tempfile.TemporaryDirectory() as tmp:
+            store = SQLiteStore(str(Path(tmp) / "digest.db"))
+            sources = SourceConfig(rss_feeds=["fixture"])
+            profile = ProfileConfig(
+                output=OutputSettings(
+                    telegram_bot_token="token",
+                    telegram_chat_id="chat",
+                    obsidian_vault_path=str(Path(tmp) / "vault"),
+                ),
+                llm_enabled=False,
+                agent_scoring_enabled=False,
+            )
+            fixture_item = Item(
+                id="fixture1",
+                url="https://example.com/fixture1",
+                title="OpenAI evals update",
+                source="fixture-source",
+                author=None,
+                published_at=datetime.now(),
+                type="article",
+                raw_text="Detailed ai evals coverage.",
+                hash="fixturehash1",
+            )
+
+            calls: list = []
+
+            def fake_send(token, chat_id, message, reply_markup=None):
+                calls.append(reply_markup)
+                raise TimeoutError("timed out")
+
+            with (
+                patch("digest.runtime.fetch_rss_items", return_value=[fixture_item]),
+                patch("digest.runtime.send_telegram_message", side_effect=fake_send),
+                patch("digest.runtime.write_obsidian_note"),
+                patch("digest.runtime._write_latest_telegram_artifact"),
+            ):
+                report = run_digest(
+                    sources,
+                    profile,
+                    store,
+                    use_last_completed_window=False,
+                    only_new=False,
+                )
+
+            self.assertEqual(len(calls), 1)
+            self.assertIsNotNone(calls[0])
+            self.assertTrue(
+                any("telegram" in str(e).lower() for e in report.summary_errors)
+                or report.status in {"partial", "failed"}
+            )
 
 
 if __name__ == "__main__":

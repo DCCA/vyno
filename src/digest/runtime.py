@@ -6,6 +6,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 import logging
 import os
+import urllib.error
 from pathlib import Path
 from typing import Any, Callable
 
@@ -1369,9 +1370,12 @@ def run_digest(
                         chunk,
                         reply_markup=keyboard,
                     )
-                except Exception:
-                    # Fail open: never lose the digest to a rejected keyboard.
-                    if keyboard is None:
+                except urllib.error.HTTPError as exc:
+                    # Fail open only on deterministic 400 rejections (e.g. bad
+                    # reply markup) - those were never delivered. Ambiguous
+                    # failures (timeouts, 5xx) re-raise: retrying could
+                    # double-send a digest that actually landed.
+                    if keyboard is None or exc.code != 400:
                         raise
                     send_telegram_message(
                         profile.output.telegram_bot_token,
