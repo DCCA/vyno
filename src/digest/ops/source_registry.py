@@ -13,13 +13,27 @@ from digest.connectors.github import normalize_github_org
 _SOURCE_FIELDS = {
     "rss": "rss_feeds",
     "youtube_channel": "youtube_channels",
-    "youtube_query": "youtube_queries",
     "x_author": "x_authors",
     "x_theme": "x_themes",
     "github_repo": "github_repos",
     "github_topic": "github_topics",
     "github_query": "github_search_queries",
     "github_org": "github_orgs",
+}
+
+# x.com paths that are app routes, not profiles (x.com/i/status/123 is a post).
+_X_RESERVED_PATHS = {
+    "i",
+    "home",
+    "explore",
+    "notifications",
+    "messages",
+    "search",
+    "settings",
+    "intent",
+    "hashtag",
+    "share",
+    "compose",
 }
 
 
@@ -36,7 +50,6 @@ def load_effective_sources(base_path: str, overlay_path: str) -> SourceConfig:
     payload = {
         "rss_feeds": _merge_field("rss", base.rss_feeds, overlay),
         "youtube_channels": _merge_field("youtube_channel", base.youtube_channels, overlay),
-        "youtube_queries": _merge_field("youtube_query", base.youtube_queries, overlay),
         "x_authors": _merge_field("x_author", base.x_authors, overlay),
         "x_themes": _merge_field("x_theme", base.x_themes, overlay),
         "github_repos": _merge_field("github_repo", base.github_repos, overlay),
@@ -53,7 +66,6 @@ def list_sources(base_path: str, overlay_path: str) -> dict[str, list[str]]:
     return {
         "rss": s.rss_feeds,
         "youtube_channel": s.youtube_channels,
-        "youtube_query": s.youtube_queries,
         "x_author": s.x_authors,
         "x_theme": s.x_themes,
         "github_repo": s.github_repos,
@@ -181,14 +193,16 @@ def canonicalize_source_value(source_type: str, value: str) -> str:
             raise ValueError("youtube_channel must be a channel id")
         return raw
 
-    if st == "youtube_query":
-        return " ".join(raw.split())
-
     if st == "x_author":
         candidate = raw.strip()
         parsed = urllib.parse.urlparse(candidate)
         if parsed.scheme in {"http", "https"} and parsed.netloc.lower() in {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}:
             path = [part for part in parsed.path.split("/") if part]
+            lowered = [part.lower() for part in path]
+            if "status" in lowered:
+                raise ValueError("x_author must be a profile URL, not a post URL")
+            if lowered and lowered[0] in _X_RESERVED_PATHS:
+                raise ValueError(f"x_author cannot be the reserved path /{lowered[0]}")
             candidate = path[0] if path else ""
         handle = candidate.lstrip("@").strip().lower()
         if not re.fullmatch(r"[a-z0-9_]{1,15}", handle):

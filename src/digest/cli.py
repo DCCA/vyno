@@ -1,33 +1,28 @@
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
 import time
 from datetime import datetime, timezone
 import os
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
-from digest.constants import (
-    DEFAULT_RUN_LOCK_STALE_SECONDS,
-    WEB_DEFAULT_HOST,
-    WEB_DEFAULT_PORT,
-)
+from digest.constants import DEFAULT_RUN_LOCK_STALE_SECONDS
 from digest.config import load_dotenv
 from digest.ops.onboarding import OnboardingSettings, run_preflight
 from digest.ops.profile_registry import load_effective_profile
 from digest.delivery.telegram import (
     answer_telegram_callback,
+    clear_telegram_menu_button,
     edit_telegram_message,
     get_telegram_updates,
     send_telegram_message,
     set_telegram_commands,
-    set_telegram_menu_button,
 )
 from digest.logging_utils import setup_logging
 from digest.ops.run_lock import RunLock
+from digest.ops.schedule_slots import evaluate_schedule_tick
 from digest.ops.source_registry import load_effective_sources
 from digest.ops.telegram_commands import CommandContext, handle_update
 from digest.runtime import run_digest
@@ -71,23 +66,71 @@ def _execute_run(
     return 0
 
 
-def _cmd_schedule(args: argparse.Namespace) -> int:
-    hh, mm = args.time.split(":")
-    hour = int(hh)
-    minute = int(mm)
-    tz = ZoneInfo(args.timezone)
+SCHEDULE_STATE_PATH = ".runtime/schedule-state.json"
+SCHEDULE_TICK_SECONDS = 15
 
+
+def _read_json_state(path: str) -> dict[str, Any]:
+    p = Path(path)
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_json_state(path: str, payload: dict[str, Any]) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=True), encoding="utf-8")
+    tmp.replace(p)
+
+
+def _cmd_schedule(args: argparse.Namespace) -> int:
+    """Profile-driven scheduler loop.
+
+    profile.schedule (edited via the Telegram /schedule commands) is the
+    single source of truth: cadence, local time, quiet hours, timezone.
+    Exactly-once per slot via a persisted marker, with same-day catch-up
+    after restarts.
+    """
+    last_action = ""
     while True:
-        now = datetime.now(tz)
-        if now.hour == hour and now.minute == minute:
-            _execute_run(
-                args,
-                use_last_completed_window=True,
-                only_new=True,
-                show_progress=False,
+        profile = load_effective_profile(args.profile, args.profile_overlay)
+        now = datetime.now(timezone.utc)
+        state = _read_json_state(SCHEDULE_STATE_PATH)
+        action, slot = evaluate_schedule_tick(
+            profile, now, str(state.get("last_triggered_slot", "") or "")
+        )
+        if action != last_action and action in {"disabled", "quiet"}:
+            hint = " (enable via /schedule on)" if action == "disabled" else ""
+            print(f"scheduler: {action}{hint}", flush=True)
+        last_action = action
+        if action == "run":
+            # ponytail: marker precedes the run - a crash mid-run skips the
+            # slot instead of double-delivering the digest on restart.
+            _write_json_state(
+                SCHEDULE_STATE_PATH,
+                {
+                    **state,
+                    "last_triggered_slot": slot,
+                    "last_triggered_at": now.isoformat(),
+                },
             )
-            time.sleep(61)
-        time.sleep(1)
+            print(f"scheduler: triggering run for slot {slot}", flush=True)
+            try:
+                _execute_run(
+                    args,
+                    use_last_completed_window=True,
+                    only_new=True,
+                    show_progress=False,
+                )
+            except Exception as exc:
+                print(f"scheduler_error: {exc}", flush=True)
+        time.sleep(SCHEDULE_TICK_SECONDS)
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
@@ -295,8 +338,6 @@ def _cmd_bot(args: argparse.Namespace) -> int:
             "TELEGRAM_ADMIN_CHAT_IDS and TELEGRAM_ADMIN_USER_IDS are required for bot mode"
         )
 
-    web_public_url = os.getenv("DIGEST_WEB_PUBLIC_URL", "").strip().rstrip("/")
-
     lock = RunLock(args.run_lock_path, stale_seconds=args.run_lock_stale_seconds)
     ctx = CommandContext(
         sources_path=args.sources,
@@ -313,7 +354,6 @@ def _cmd_bot(args: argparse.Namespace) -> int:
         answer_callback=lambda callback_id, text="": answer_telegram_callback(
             bot_token, callback_id, text
         ),
-        web_public_url=web_public_url,
     )
 
     # Register commands in Telegram's autocomplete menu
@@ -324,19 +364,11 @@ def _cmd_bot(args: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"bot_warning: failed to register commands: {exc}")
 
-    # Set menu button to Mini App if public URL is configured
-    if web_public_url:
-        try:
-            set_telegram_menu_button(
-                bot_token,
-                menu_button={
-                    "type": "web_app",
-                    "text": "Open Console",
-                    "web_app": {"url": web_public_url},
-                },
-            )
-        except Exception as exc:
-            print(f"bot_warning: failed to set menu button: {exc}")
+    # Self-heal bots configured before the web console was removed.
+    try:
+        clear_telegram_menu_button(bot_token)
+    except Exception as exc:
+        print(f"bot_warning: failed to reset menu button: {exc}")
 
     offset: int | None = None
     last_ok_at = ""
@@ -407,32 +439,6 @@ def _cmd_bot(args: argparse.Namespace) -> int:
             time.sleep(2)
 
 
-def _cmd_web(args: argparse.Namespace) -> int:
-    try:
-        uvicorn = importlib.import_module("uvicorn")
-    except ImportError as exc:  # pragma: no cover
-        raise RuntimeError(
-            "uvicorn is required for web mode. Install optional web dependencies."
-        ) from exc
-
-    from digest.web.app import WebSettings, create_app
-
-    settings = WebSettings(
-        sources_path=args.sources,
-        sources_overlay_path=args.sources_overlay,
-        profile_path=args.profile,
-        profile_overlay_path=args.profile_overlay,
-        db_path=args.db,
-        run_lock_path=args.run_lock_path,
-        run_lock_stale_seconds=args.run_lock_stale_seconds,
-        history_dir=args.history_dir,
-        onboarding_state_path=args.onboarding_state_path,
-    )
-    app = create_app(settings)
-    uvicorn.run(app, host=args.host, port=args.port, reload=False)
-    return 0
-
-
 def main() -> int:
     load_dotenv(".env")
     setup_logging()
@@ -447,9 +453,9 @@ def main() -> int:
     run_p = sub.add_parser("run", help="Run digest once")
     run_p.set_defaults(func=_cmd_run)
 
-    sched = sub.add_parser("schedule", help="Run digest daily at fixed local time")
-    sched.add_argument("--time", default="07:00")
-    sched.add_argument("--timezone", default="America/Sao_Paulo")
+    sched = sub.add_parser(
+        "schedule", help="Run the profile-driven scheduler loop (profile.schedule)"
+    )
     sched.set_defaults(func=_cmd_schedule)
 
     doctor = sub.add_parser("doctor", help="Run onboarding preflight checks")
@@ -474,21 +480,6 @@ def main() -> int:
     bot_health.add_argument("--stale-seconds", type=int, default=90)
     bot_health.add_argument("--max-error-streak", type=int, default=5)
     bot_health.set_defaults(func=_cmd_bot_health_check)
-
-    web = sub.add_parser("web", help="Run config web API server")
-    web.add_argument("--host", default=WEB_DEFAULT_HOST)
-    web.add_argument("--port", type=int, default=WEB_DEFAULT_PORT)
-    web.add_argument("--run-lock-path", default=".runtime/run.lock")
-    web.add_argument(
-        "--run-lock-stale-seconds",
-        type=int,
-        default=DEFAULT_RUN_LOCK_STALE_SECONDS,
-    )
-    web.add_argument("--history-dir", default=".runtime/config-history")
-    web.add_argument(
-        "--onboarding-state-path", default=".runtime/onboarding-state.json"
-    )
-    web.set_defaults(func=_cmd_web)
 
     args = parser.parse_args()
     return args.func(args)

@@ -95,7 +95,7 @@ class TestQualityRepairRuntime(unittest.TestCase):
             db_path = Path(tmp) / "digest.db"
             store = SQLiteStore(str(db_path))
             sources = SourceConfig(
-                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+                rss_feeds=["fixture"], youtube_channels=[]
             )
             items = [_item(i) for i in range(1, 9)]
             items[5].source = "https://special.example/feed"
@@ -144,7 +144,7 @@ class TestQualityRepairRuntime(unittest.TestCase):
             db_path = Path(tmp) / "digest.db"
             store = SQLiteStore(str(db_path))
             sources = SourceConfig(
-                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+                rss_feeds=["fixture"], youtube_channels=[]
             )
             items = [_item(i) for i in range(1, 9)]
 
@@ -187,7 +187,7 @@ class TestQualityRepairRuntime(unittest.TestCase):
             db_path = Path(tmp) / "digest.db"
             store = SQLiteStore(str(db_path))
             sources = SourceConfig(
-                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+                rss_feeds=["fixture"], youtube_channels=[]
             )
             items = [_item(i) for i in range(1, 9)]
             items[5].source = "https://special.example/feed"

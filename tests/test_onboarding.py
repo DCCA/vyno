@@ -25,7 +25,6 @@ class TestOnboarding(unittest.TestCase):
         sources = {
             "rss_feeds": ["https://example.com/rss.xml"],
             "youtube_channels": [],
-            "youtube_queries": [],
             "github_repos": ["openai/openai-cookbook"] if github else [],
             "github_topics": [],
             "github_search_queries": [],
@@ -72,7 +71,6 @@ class TestOnboarding(unittest.TestCase):
             profile_overlay_path=str(overlay_profile),
             db_path=str(db_path),
             run_lock_path=str(Path(tmp) / "run.lock"),
-            history_dir=str(Path(tmp) / "history"),
             onboarding_state_path=str(state_path),
         )
 
@@ -99,6 +97,8 @@ class TestOnboarding(unittest.TestCase):
             checks = {c["id"]: c for c in report["checks"]}
             self.assertEqual(checks["github_token"]["status"], "warn")
             self.assertTrue(report["ok"])
+            # config-history died with the web console - no check for it.
+            self.assertNotIn("history_writable", checks)
 
     def test_apply_source_pack_is_idempotent(self):
         with tempfile.TemporaryDirectory() as tmp:

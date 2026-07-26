@@ -123,11 +123,7 @@ def build_repair_result(
     pool_ids: list[str],
     model: str,
 ) -> QualityRepairResult:
-    """Validate a structured repair payload and build a QualityRepairResult.
-
-    Shared by the LangChain structured client and the DeepAgents editor agent so
-    both enforce identical id/pool/dedup guarantees.
-    """
+    """Validate a structured repair payload and build a QualityRepairResult."""
     if not isinstance(parsed, dict):
         raise RuntimeError("Quality repair output missing structured JSON")
 

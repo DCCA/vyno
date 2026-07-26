@@ -48,7 +48,6 @@ def render_telegram_messages(
     sections: DigestSections,
     *,
     max_len: int = 4000,
-    render_mode: str = "sectioned",
     context: dict[str, Any] | None = None,
 ) -> list[str]:
     if max_len < 256:
@@ -67,7 +66,6 @@ def render_telegram_message(
         render_telegram_messages(
             date_str,
             sections,
-            render_mode="sectioned",
             context=context,
         )
     )
@@ -351,18 +349,13 @@ def set_telegram_commands(
     _tg_post(bot_token, "setMyCommands", payload)
 
 
-def set_telegram_menu_button(
-    bot_token: str,
-    *,
-    chat_id: str | None = None,
-    menu_button: dict | None = None,
-) -> None:
-    """Set the bot's menu button (e.g. to launch a Mini App)."""
-    payload: dict[str, Any] = {}
-    if chat_id:
-        payload["chat_id"] = chat_id
-    if menu_button is not None:
-        payload["menu_button"] = json.dumps(menu_button, separators=(",", ":"))
+def clear_telegram_menu_button(bot_token: str) -> None:
+    """Reset the chat menu button to Telegram's default.
+
+    Retires the "Open Console" Mini App button on bots configured before the
+    web console was removed.
+    """
+    payload = {"menu_button": json.dumps({"type": "default"}, separators=(",", ":"))}
     _tg_post(bot_token, "setChatMenuButton", payload)
 
 

@@ -22,14 +22,15 @@ class TestDockerAssets(unittest.TestCase):
         self.assertEqual(health_test[0], "CMD")
         self.assertIn("bot-health-check", health_test)
 
-    def test_compose_scheduler_service_uses_web_with_profile_overlay(self) -> None:
+    def test_compose_scheduler_service_runs_schedule_with_profile_overlay(self) -> None:
         compose = yaml.safe_load(Path("compose.yaml").read_text(encoding="utf-8"))
         command = compose["services"]["digest-scheduler"]["command"]
         self.assertIn("--sources-overlay", command)
         self.assertIn("data/sources.local.yaml", command)
         self.assertIn("--profile-overlay", command)
         self.assertIn("data/profile.local.yaml", command)
-        self.assertIn("web", command)
+        self.assertIn("schedule", command)
+        self.assertNotIn("web", command)
 
     def test_compose_services_export_obsidian_vault_override(self) -> None:
         compose = yaml.safe_load(Path("compose.yaml").read_text(encoding="utf-8"))
@@ -49,7 +50,7 @@ class TestDockerAssets(unittest.TestCase):
         )
         self.assertRegex(
             data,
-            r"(?m)^schedule:\n\t.*--sources-overlay data/sources\.local\.yaml .*--profile-overlay data/profile\.local\.yaml .* schedule ",
+            r"(?m)^schedule:\n\t.*--sources-overlay data/sources\.local\.yaml .*--profile-overlay data/profile\.local\.yaml .* schedule$",
         )
         self.assertRegex(
             data,

@@ -2,8 +2,6 @@
 # Copy to data/profile.local.yaml and set only fields you want to override.
 
 # quality_repair_threshold: 82
-# output:
-#   render_mode: source_segmented
 # schedule:
 #   enabled: true
 #   cadence: hourly

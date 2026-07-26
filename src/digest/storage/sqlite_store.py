@@ -859,7 +859,8 @@ class SQLiteStore:
                 (
                     "SELECT f.rating, f.features_json, i.source, i.type "
                     "FROM feedback f LEFT JOIN items i ON i.id = f.item_id "
-                    "WHERE f.created_at >= ?"
+                    # IS NOT (not <>) so legacy rows with NULL target_kind survive.
+                    "WHERE f.created_at >= ? AND f.target_kind IS NOT 'ingest'"
                 ),
                 (cutoff.isoformat(),),
             ).fetchall()
@@ -948,7 +949,10 @@ class SQLiteStore:
     def feedback_summary(self) -> list[tuple[int, int]]:
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT rating, COUNT(*) FROM feedback GROUP BY rating ORDER BY rating DESC"
+                # IS NOT (not <>) so legacy rows with NULL target_kind still count.
+                "SELECT rating, COUNT(*) FROM feedback "
+                "WHERE target_kind IS NOT 'ingest' "
+                "GROUP BY rating ORDER BY rating DESC"
             ).fetchall()
         return [(int(r[0]), int(r[1])) for r in rows]
 

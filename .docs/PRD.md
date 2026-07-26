@@ -2,22 +2,22 @@
 
 ## Document Status
 - Status: Current shipped-product PRD baseline
-- Updated: 2026-03-14
-- Source of truth alignment: `README.md`, `src/digest/*`, `web/src/*`
+- Updated: 2026-07-26
+- Source of truth alignment: `README.md`, `src/digest/*`
 
 ## Product Intent
 AI Daily Digest exists to reduce AI information overload by ingesting multi-source signals, ranking them for quality and relevance, and delivering concise daily output to Telegram and Obsidian with full run traceability.
 
 ## Primary Users
 - Solo operator who wants a reliable daily AI brief with low noise.
-- Power user who tunes source/profile configuration, run policy, and scheduling from a web console.
+- Power user who tunes source/profile configuration, run policy, and scheduling from Telegram bot commands and the CLI.
 - Admin operator who controls runtime via Telegram bot commands.
 
 ## Product Goals
 - The product SHALL support end-to-end digest generation from configured sources without manual data stitching.
 - The product SHALL provide both automated and manual run triggers.
 - The product SHALL preserve operator trust via observable run status, progress, and source-health diagnostics.
-- The product SHALL preserve configuration safety with overlays, diff/review workflows, and explicit auth controls for web API access.
+- The product SHALL preserve configuration safety with overlays, diff/review workflows, and an admin-restricted Telegram control surface.
 - The product SHALL produce outputs optimized for quick consumption (Telegram) and long-term retrieval (Obsidian Markdown).
 - The product SHALL preserve exact delivered run artifacts and feedback signals so future ranking can learn from what was actually sent.
 
@@ -43,8 +43,7 @@ AI Daily Digest exists to reduce AI information overload by ingesting multi-sour
   - Obsidian markdown notes (timestamped default, legacy daily optional)
   - exact delivered Telegram and Obsidian artifact archiving for non-preview runs
 - Operations:
-  - CLI run/schedule/doctor/bot/web modes
-  - route-based web console with dashboard, schedule, run center, sources, profile, timeline, history, and onboarding surfaces
+  - CLI run/schedule/doctor/bot modes
   - onboarding preflight, source packs, preview, activate, and lifecycle-based navigation
   - run policy controls, seen-reset controls, and dedicated schedule controls for daily or hourly automation
   - timeline digest review, item/source feedback, config history, rollback, and source-health observability
@@ -127,40 +126,31 @@ The system SHALL show the final adjusted ranking score in user-facing digest sur
 - AND raw scoring remains available only for operator inspection surfaces
 
 ### Requirement: Manual and Scheduled Execution
-The system SHALL support manual run execution and schedule-driven run execution from both CLI and web-app workflows.
+The system SHALL support manual run execution and schedule-driven run execution from both CLI and Telegram workflows.
 
 #### Scenario: Scheduled execution
-- GIVEN the web app is running and `profile.schedule` is enabled with a configured time and timezone
+- GIVEN the scheduler loop is running (`digest schedule`) and `profile.schedule` is enabled
 - WHEN the configured schedule boundary is reached
-- THEN the scheduler triggers a digest using web/schedule run defaults
+- THEN the scheduler triggers a digest using `profile.schedule` run defaults
 - AND run metadata and scheduler state are persisted for audit and observability
 
-### Requirement: Operability via Web Console
-The system SHALL provide a web console for configuration, onboarding, and run observability without direct file editing.
-
-#### Scenario: Setup to manage transition
-- GIVEN onboarding is incomplete
-- WHEN the operator runs preflight, applies sources, previews, and activates
-- THEN onboarding status reaches complete
-- AND the main operator navigation expands to the full route-based workspace set
-
 ### Requirement: Run Observability
-The system SHALL provide run status, live progress, source health, timeline events, timeline notes, and config history records.
+The system SHALL provide run status, run history, source health, and structured logging for post-run diagnostics.
 
-#### Scenario: Active run monitoring
-- GIVEN a run is active
-- WHEN the operator opens the dashboard, schedule, or timeline views
-- THEN the UI shows current stage, elapsed progress details, and warning/error counters
-- AND the latest completed run remains available for post-run diagnostics
+#### Scenario: Run status via Telegram and CLI
+- GIVEN a run has started or completed
+- WHEN the operator sends `/status` or `/history` to the Telegram bot, or inspects the structured JSON log
+- THEN the response reflects current stage, warning/error counters, and source health for that run
+- AND run history is retrievable from the SQLite run history store for post-run diagnostics
 
-### Requirement: Dedicated Schedule Controls
-The system SHALL provide a dedicated schedule workspace for recurring automation controls and scheduler diagnostics.
+### Requirement: Schedule Controls
+The system SHALL provide recurring automation controls and scheduler diagnostics via Telegram bot commands.
 
-#### Scenario: Schedule workspace management
-- GIVEN the operator opens the schedule workspace
+#### Scenario: Schedule management via Telegram
+- GIVEN the operator sends `/schedule` commands to the Telegram bot
 - WHEN they save, pause, resume, or inspect automation
 - THEN they can manage `profile.schedule` without editing raw profile JSON
-- AND the page shows next run timing, scheduler state, and the latest scheduler issue near the controls
+- AND the bot reply shows next run timing, scheduler state, and the latest scheduler issue
 
 #### Scenario: Hourly quiet-hours automation
 - GIVEN the operator selects hourly cadence with quiet hours in `America/Sao_Paulo`
@@ -172,19 +162,18 @@ The system SHALL provide a dedicated schedule workspace for recurring automation
 The system SHALL apply configuration via tracked base files plus local overlays, with validation and diff visibility.
 
 #### Scenario: Profile editing workflow
-- GIVEN an operator edits profile JSON in the web console
+- GIVEN an operator edits profile settings via Telegram commands or the local overlay file
 - WHEN validate/diff/save actions are performed
 - THEN only overlay deltas are persisted
-- AND redacted secret placeholders are preserved unless explicitly changed
 
-### Requirement: Access Control and Secret Hygiene
-The system SHALL enforce configurable API auth behavior and redact secrets in config responses.
+### Requirement: Telegram Admin Access Control
+The system SHALL restrict bot updates to configured admin chat and user ids (`TELEGRAM_ADMIN_CHAT_IDS` / `TELEGRAM_ADMIN_USER_IDS`).
 
-#### Scenario: Required auth mode
-- GIVEN `DIGEST_WEB_API_AUTH_MODE=required` and token is configured
-- WHEN a client calls a protected `/api/*` endpoint without a valid token
-- THEN the request is rejected with unauthorized status
-- AND health endpoint remains reachable for local diagnostics
+#### Scenario: Unauthorized Telegram sender
+- GIVEN a Telegram update arrives from a chat id or user id not present in `TELEGRAM_ADMIN_CHAT_IDS` / `TELEGRAM_ADMIN_USER_IDS`
+- WHEN the bot processes the update
+- THEN the bot replies "Not authorized."
+- AND no config mutation or run trigger is applied
 
 ## Constraints and Dependencies
 - External APIs and network quality directly affect run completeness.

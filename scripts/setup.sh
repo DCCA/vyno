@@ -43,7 +43,6 @@ printf "Every prompt has a default — just press Enter to continue.\n"
 step "Checking prerequisites"
 
 HAS_PYTHON=0
-HAS_NODE=0
 
 # Detect OS for install hints
 _os="unknown"
@@ -80,29 +79,6 @@ if [ "$HAS_PYTHON" -eq 0 ]; then
   exit 1
 fi
 
-# Node >= 18
-if command -v node >/dev/null 2>&1; then
-  _nodever=$(node -v | tr -d 'v')
-  _nodemaj=$(printf "%s" "$_nodever" | cut -d. -f1)
-  if [ "$_nodemaj" -ge 18 ]; then
-    info "Node.js ${_nodever} found"
-    HAS_NODE=1
-  else
-    warn "Node.js ${_nodever} found but 18+ is required"
-  fi
-else
-  warn "Node.js not found"
-fi
-
-if [ "$HAS_NODE" -eq 0 ]; then
-  err "Node.js 18+ is required."
-  case "$_os" in
-    mac)  printf "  Install: brew install node\n" ;;
-    wsl|linux)  printf "  Install: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install -y nodejs\n" ;;
-    *)    printf "  Download from https://nodejs.org/\n" ;;
-  esac
-  exit 1
-fi
 
 # uv (optional — offer to install if missing)
 HAS_UV=0
@@ -147,12 +123,6 @@ else
   pip install -e '.[runtime,llm]' --quiet
 fi
 
-if [ -x "${ROOT_DIR}/web/node_modules/.bin/vite" ]; then
-  info "Web dependencies already installed — skipping"
-else
-  info "Installing web interface (npm)..."
-  npm --prefix web install
-fi
 
 # ── 3. Bootstrap .env ────────────────────────────────────────────────
 step "Configuring environment"
@@ -171,7 +141,7 @@ else
 
   printf "\n  An OpenAI API key enables AI-powered scoring and summarization.\n"
   printf "  Without it, the app still works using built-in rules-based scoring.\n"
-  printf "  You can always add it later from the web console.\n\n"
+  printf "  You can always add it to .env later.\n\n"
   prompt_yn "Do you have an OpenAI API key?" "n"
   if [ "$REPLY" = "y" ]; then
     printf "  Paste your key (starts with sk-): "
@@ -210,11 +180,14 @@ YAML
   fi
 fi
 
-# ── 6. Launch ────────────────────────────────────────────────────────
-step "Starting AI Daily Digest"
+# ── 6. Done ──────────────────────────────────────────────────────────
+step "Setup complete"
 
-printf "\n  The app is launching — your browser will open shortly.\n"
-printf "  The setup wizard in the web console will guide you through the rest.\n"
-printf "  Press Ctrl+C to stop the app.\n\n"
+printf "
+  Run a digest now:        make live
+"
+printf "  Start the Telegram bot:  make bot
+"
+printf "  Daily schedule loop:     make schedule
 
-OPEN_BROWSER=1 exec "${ROOT_DIR}/scripts/start-app.sh"
+"

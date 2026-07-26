@@ -375,18 +375,6 @@ class TestTelegramCommands(unittest.TestCase):
 
     # ── Mini App button test ─────────────────────────────────────────
 
-    def test_web_public_url_adds_console_button(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            ctx, _, _ = self._ctx(tmp)
-            ctx.web_public_url = "https://digest.example.com"
-            resp = handle_update(_msg("/status"), ctx)
-            markup = resp.reply_markup or {}
-            rows = markup.get("inline_keyboard", [])
-            texts = [btn.get("text", "") for row in rows for btn in row]
-            self.assertTrue(
-                any("Console" in t for t in texts),
-                "Expected 'Open Console' button when web_public_url is set",
-            )
 
     # ── Run mode tests ─────────────────────────────────────────────
 
@@ -600,18 +588,78 @@ class TestTelegramCommands(unittest.TestCase):
             self.assertNotIn("<b>bold</b>", text.replace("<b>muted", ""))
             self.assertIn("&lt;b&gt;", text)
 
-    def test_no_console_button_without_url(self):
+    def test_source_add_url_detects_type_and_asks_confirm(self):
         with tempfile.TemporaryDirectory() as tmp:
-            ctx, _, _ = self._ctx(tmp)
-            ctx.web_public_url = ""
-            resp = handle_update(_msg("/status"), ctx)
-            markup = resp.reply_markup or {}
-            rows = markup.get("inline_keyboard", [])
-            texts = [btn.get("text", "") for row in rows for btn in row]
-            self.assertFalse(
-                any("Console" in t for t in texts),
-                "Should not have 'Open Console' button when web_public_url is empty",
+            ctx, sent, answered = self._ctx(tmp)
+            resp = handle_update(
+                _msg("/source add https://github.com/openai/codex"), ctx
             )
+            self.assertIn("github_repo", resp.text or "")
+            self.assertIn("openai/codex", resp.text or "")
+            keyboard = (resp.reply_markup or {}).get("inline_keyboard", [])
+            callbacks = [b.get("callback_data") for row in keyboard for b in row]
+            self.assertIn("sw:ok", callbacks)
+
+            confirm = handle_update(_callback("sw:ok"), ctx)
+            self.assertIn("Added github_repo: openai/codex", confirm.text or "")
+
+    def test_source_add_unknown_url_logs_ingest_suggestion(self):
+        from digest.ops.ingest_detect import IngestDetection
+        from digest.storage.sqlite_store import SQLiteStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, sent, answered = self._ctx(tmp)
+            detection = IngestDetection(
+                "", "https://pod.example.com/show", note="no feed found"
+            )
+            with patch(
+                "digest.ops.telegram_commands.detect_ingest",
+                return_value=detection,
+            ):
+                resp = handle_update(
+                    _msg("/source add https://pod.example.com/show"), ctx
+                )
+            self.assertIn("ingest suggestion", (resp.text or "").lower())
+
+            rows = SQLiteStore(ctx.db_path).list_feedback()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0][4], "ingest_suggestion")
+            self.assertEqual(rows[0][8], "https://pod.example.com/show")
+
+    def test_source_add_unreachable_url_is_not_logged_as_suggestion(self):
+        from digest.ops.ingest_detect import IngestDetection
+        from digest.storage.sqlite_store import SQLiteStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, sent, answered = self._ctx(tmp)
+            detection = IngestDetection(
+                "", "https://down.example.com/blog", note="unreachable"
+            )
+            with patch(
+                "digest.ops.telegram_commands.detect_ingest",
+                return_value=detection,
+            ):
+                resp = handle_update(
+                    _msg("/source add https://down.example.com/blog"), ctx
+                )
+            self.assertIn("Could not reach", resp.text or "")
+            self.assertEqual(SQLiteStore(ctx.db_path).list_feedback(), [])
+
+    def test_source_add_invalid_handle_is_not_logged_as_suggestion(self):
+        from digest.storage.sqlite_store import SQLiteStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, sent, answered = self._ctx(tmp)
+            resp = handle_update(_msg("/source add @not-a-handle!"), ctx)
+            self.assertIn("x_author", resp.text or "")
+            self.assertEqual(SQLiteStore(ctx.db_path).list_feedback(), [])
+
+    def test_source_add_plain_text_shows_usage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx, sent, answered = self._ctx(tmp)
+            resp = handle_update(_msg("/source add notaurl"), ctx)
+            self.assertIn("Usage", resp.text or "")
+
 
 
 def _msg(text: str) -> dict:

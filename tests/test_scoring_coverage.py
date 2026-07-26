@@ -83,7 +83,7 @@ class TestScoringCoverage(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             store = SQLiteStore(str(Path(tmp) / "digest.db"))
             sources = SourceConfig(
-                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+                rss_feeds=["fixture"], youtube_channels=[]
             )
             profile = ProfileConfig(
                 output=OutputSettings(
@@ -116,7 +116,7 @@ class TestScoringCoverage(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             store = SQLiteStore(str(Path(tmp) / "digest.db"))
             sources = SourceConfig(
-                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+                rss_feeds=["fixture"], youtube_channels=[]
             )
             profile = ProfileConfig(
                 output=OutputSettings(
@@ -152,7 +152,7 @@ class TestScoringCoverage(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             store = SQLiteStore(str(Path(tmp) / "digest.db"))
             sources = SourceConfig(
-                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+                rss_feeds=["fixture"], youtube_channels=[]
             )
             profile = ProfileConfig(
                 output=OutputSettings(
@@ -185,7 +185,7 @@ class TestScoringCoverage(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             store = SQLiteStore(str(Path(tmp) / "digest.db"))
             sources = SourceConfig(
-                rss_feeds=["fixture"], youtube_channels=[], youtube_queries=[]
+                rss_feeds=["fixture"], youtube_channels=[]
             )
             profile = ProfileConfig(
                 output=OutputSettings(

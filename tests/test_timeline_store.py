@@ -285,6 +285,36 @@ class TestTimelineStore(unittest.TestCase):
             self.assertEqual(summary[0], (1, 1))
             self.assertLess(bias[("technicality", "high")], 0.0)
 
+    def test_ingest_suggestion_rows_are_excluded_from_summary_and_bias(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = SQLiteStore(str(Path(tmp) / "digest.db"))
+            store.add_feedback(
+                run_id="",
+                item_id="",
+                rating=5,
+                label="rated",
+                comment="great",
+                target_kind="item",
+                target_key="item-1",
+                features=[("source", "example.com")],
+            )
+            store.add_feedback(
+                run_id="",
+                item_id="",
+                rating=0,
+                label="ingest_suggestion",
+                comment="no feed found",
+                target_kind="ingest",
+                target_key="https://pod.example.com/show",
+                features=[("source", "example.com")],
+            )
+
+            self.assertEqual(store.feedback_summary(), [(5, 1)])
+            self.assertGreater(
+                store.feedback_feature_bias()[("source", "example.com")], 0.0
+            )
+            self.assertEqual(len(store.list_feedback()), 2)
+
     def test_list_run_items_falls_back_for_legacy_score_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "digest.db"

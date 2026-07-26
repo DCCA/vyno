@@ -9,7 +9,7 @@ from digest.config import SourceConfig
 from digest.connectors.x_provider import XPostPayload, get_x_provider
 from digest.models import Item
 from digest.storage.sqlite_store import SQLiteStore
-from digest.web.link_preview import fetch_link_preview_metadata
+from digest.connectors.link_preview import fetch_link_preview_metadata
 
 SelectorItemLink = tuple[str, str, Item]
 

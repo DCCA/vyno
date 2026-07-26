@@ -23,7 +23,6 @@ class OnboardingSettings:
     profile_overlay_path: str
     db_path: str
     run_lock_path: str = ".runtime/run.lock"
-    history_dir: str = ".runtime/config-history"
     onboarding_state_path: str = ".runtime/onboarding-state.json"
 
 
@@ -220,11 +219,6 @@ def run_preflight(
             "run_lock_writable",
             "Run lock path writable",
             settings.run_lock_path,
-        ),
-        (
-            "history_writable",
-            "History path writable",
-            settings.history_dir,
         ),
         (
             "onboarding_state_writable",
@@ -426,7 +420,6 @@ def run_preflight(
     if sources_cfg is not None:
         source_count += len(sources_cfg.rss_feeds)
         source_count += len(sources_cfg.youtube_channels)
-        source_count += len(sources_cfg.youtube_queries)
         source_count += len(sources_cfg.x_authors)
         source_count += len(sources_cfg.x_themes)
         source_count += len(sources_cfg.github_repos)
@@ -483,8 +476,6 @@ def list_source_catalog(
             active_keys.add(f"rss:{url}")
         for ch in cfg.youtube_channels:
             active_keys.add(f"youtube_channel:{ch}")
-        for q in cfg.youtube_queries:
-            active_keys.add(f"youtube_query:{q}")
         for r in cfg.github_repos:
             active_keys.add(f"github_repo:{r}")
         for t in cfg.github_topics:

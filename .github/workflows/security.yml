@@ -38,4 +38,4 @@ jobs:
         run: ruff check src tests
 
       - name: Semgrep advisory scan
-        run: semgrep scan --config p/secrets --config p/python --exclude .venv --exclude web/node_modules src tests
+        run: semgrep scan --config p/secrets --config p/python --exclude .venv src tests

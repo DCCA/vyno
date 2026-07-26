@@ -11,7 +11,7 @@ class TestConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "sources.yaml"
             path.write_text(
-                "rss_feeds: []\nyoutube_channels: []\nyoutube_queries: []\ngithub_repos: []\ngithub_topics: []\ngithub_search_queries: []\ngithub_orgs: []\nx_inbox_path: ''\n",
+                "rss_feeds: []\nyoutube_channels: []\ngithub_repos: []\ngithub_topics: []\ngithub_search_queries: []\ngithub_orgs: []\nx_inbox_path: ''\n",
                 encoding="utf-8",
             )
             with self.assertRaises(ValueError):
@@ -46,26 +46,6 @@ class TestConfig(unittest.TestCase):
             )
             cfg = load_sources(path)
             self.assertEqual(cfg.github_orgs, ["vercel-labs", "openai"])
-
-    def test_profile_rejects_invalid_obsidian_naming(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "profile.yaml"
-            path.write_text(
-                "output:\n  obsidian_naming: invalid\n",
-                encoding="utf-8",
-            )
-            with self.assertRaises(ValueError):
-                load_profile(path)
-
-    def test_profile_rejects_invalid_render_mode(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "profile.yaml"
-            path.write_text(
-                "output:\n  render_mode: invalid\n",
-                encoding="utf-8",
-            )
-            with self.assertRaises(ValueError):
-                load_profile(path)
 
     def test_profile_uses_env_fallback_for_output(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -184,16 +164,6 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(profile.quality_learning_max_offset, 7.5)
             self.assertEqual(profile.quality_learning_half_life_days, 10)
             self.assertEqual(profile.must_read_max_per_source, 3)
-
-    def test_profile_loads_render_mode(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "profile.yaml"
-            path.write_text(
-                "output:\n  render_mode: source_segmented\n",
-                encoding="utf-8",
-            )
-            profile = load_profile(path)
-            self.assertEqual(profile.output.render_mode, "source_segmented")
 
     def test_profile_loads_content_depth_preference(self):
         with tempfile.TemporaryDirectory() as tmp:
