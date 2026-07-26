@@ -17,6 +17,7 @@ from digest.ops.profile_registry import (
     save_profile_overlay,
 )
 from digest.ops.run_lock import RunLock
+from digest.ops.ingest_detect import detect_ingest
 from digest.ops.source_registry import (
     add_source,
     canonicalize_source_value,
@@ -134,9 +135,12 @@ def handle_update(update: dict, ctx: CommandContext) -> BotResponse | None:
             text="Usage: /digest run [mode]\nModes: fresh_only, balanced, replay_recent, backfill",
         )
     if cmd == "/source":
+        result = _handle_source(args, ctx, chat_id, user_id)
+        if isinstance(result, BotResponse):
+            return result
         return BotResponse(
             chat_id=chat_id,
-            text=_handle_source(args, ctx, chat_id, user_id),
+            text=result,
             reply_markup=_wizard_action_keyboard()
             if args and args[0] == "wizard"
             else None,
@@ -1409,7 +1413,7 @@ def _handle_status_callback(
 
 def _handle_source(
     args: list[str], ctx: CommandContext, chat_id: str, user_id: str
-) -> str:
+) -> str | BotResponse:
     if not args:
         return "Usage: /source &lt;add|remove|list|wizard&gt; ..."
 
@@ -1428,6 +1432,9 @@ def _handle_source(
             vals = listing[st]
             return _render_source_list({st: vals})
         return _render_source_list(listing)
+
+    if action == "add" and len(args) == 2:
+        return _handle_paste_add(args[1].strip(), ctx, chat_id, user_id)
 
     if action in {"add", "remove"}:
         if len(args) < 3:
@@ -1452,6 +1459,52 @@ def _handle_source(
             return f"Source command failed: {_esc(exc)}"
 
     return "Usage: /source &lt;add|remove|list|wizard&gt; ..."
+
+
+def _handle_paste_add(
+    value: str, ctx: CommandContext, chat_id: str, user_id: str
+) -> str | BotResponse:
+    """`/source add <url-or-handle>`: detect the type, preflight, one confirm."""
+    detection = detect_ingest(value)
+    if detection is None:
+        return "Usage: /source add &lt;type&gt; &lt;value&gt; - or paste a URL / @handle"
+    if not detection.source_type:
+        try:
+            SQLiteStore(ctx.db_path).add_feedback(
+                run_id="",
+                item_id="",
+                rating=0,
+                label="ingest_suggestion",
+                comment=detection.note,
+                target_kind="ingest",
+                target_key=detection.value,
+                actor=user_id,
+            )
+        except Exception as exc:
+            return f"Source command failed: {_esc(exc)}"
+        return (
+            "No connector handles this yet - logged as an ingest suggestion: "
+            f"{_esc(detection.value)}"
+        )
+    state = _get_state(ctx, chat_id, user_id)
+    state.update(
+        {
+            "wizard": "source",
+            "action": "add",
+            "source_type": detection.source_type,
+            "draft_value": detection.value,
+            "awaiting_value": False,
+        }
+    )
+    note = f"\n{_esc(detection.note)}" if detection.note else ""
+    return BotResponse(
+        chat_id=chat_id,
+        text=(
+            f"Detected {_esc(detection.source_type)}:\n"
+            f"<code>{_esc(detection.value)}</code>{note}\nConfirm add?"
+        ),
+        reply_markup=_wizard_confirm_keyboard(),
+    )
 
 
 def _render_source_list(rows: dict[str, list[str]]) -> str:
