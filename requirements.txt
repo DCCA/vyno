@@ -1,7 +1,0 @@
-PyYAML>=6.0
-feedparser>=6.0.11
-beautifulsoup4>=4.12
-fastapi>=0.116
-uvicorn>=0.30
-langchain-openai>=1.0
-deepagents>=0.6

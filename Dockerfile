@@ -15,11 +15,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+COPY pyproject.toml /app/pyproject.toml
+COPY src /app/src
+RUN pip install --no-cache-dir ".[runtime,llm]"
 
 COPY bin /app/bin
-COPY src /app/src
 COPY config /app/config
 COPY data /app/data
 
