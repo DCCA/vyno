@@ -49,7 +49,7 @@ Ruff is the linter (config in `pyproject.toml`: `target-version = "py311"`, rule
 
 ### Docker targets
 
-Two compose services: `digest-bot` (Telegram bot) and `digest-scheduler` (schedule loop).
+Two compose services in `compose.yaml`: `digest-bot` (Telegram bot) and `digest-scheduler` (schedule loop, no ports/healthcheck).
 
 - `make docker-build`/`docker-up`/`docker-deploy` — operate on **both** services (`deploy` = build + up); `make docker-deploy` alone brings up the full stack
 - `make docker-logs`/`docker-restart` — `digest-bot` only
@@ -87,15 +87,11 @@ Pipeline flow: **Ingest → Normalize → Dedupe → Score → Select → Delive
 
 **Overlay semantics** (`ops/source_registry.py`, `ops/profile_registry.py`): the tracked base YAML is never mutated. Bot edits write a **delta-only** overlay to `data/*.local.yaml`; on load the overlay is deep-merged on top of the base (overlay wins); on save only values that differ from the base are persisted. When editing config behavior, change the registry merge logic — do not write back to the tracked base.
 
-### Docker
-
-Two services in `compose.yaml`: `digest-bot` (Telegram bot) and `digest-scheduler` (schedule loop, no ports/healthcheck). Build/deploy with `make docker-*` targets.
-
 ## FIREHOSE Methodology
 
 This project follows FIREHOSE principles (see `FIREHOSE.md`):
 
-- Use `.docs/` for long-lived specs and context (`.docs/doing/` for active, `.docs/done/` for completed)
+- Use `.docs/` for long-lived specs and context (`.docs/todo/` for planned, `.docs/doing/` for active, `.docs/done/` for completed); `.docs/PRD.md` holds the product requirements
 - Non-trivial changes start with `proposal.md` + `tasks.md` in `.docs/doing/<change-name>/`
 - Prefer small diffs, brownfield-first, one logical unit per change
 - Clarify scope before coding; ask when ambiguity affects outcomes
@@ -104,6 +100,8 @@ This project follows FIREHOSE principles (see `FIREHOSE.md`):
 - When moving a change to `.docs/done/`, keep only `completion-summary.md` and update the folder's `INDEX.md` (prune the rest)
 
 See `.docs/ARCHITECTURE.md` for the current system diagram, primary data flows, and deployment topologies before making structural changes.
+
+`AGENTS.md` mirrors this guidance for other agents; on process conflicts, `FIREHOSE.md` wins.
 
 ## Testing
 
