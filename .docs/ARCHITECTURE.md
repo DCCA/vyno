@@ -2,51 +2,72 @@
 
 ## Document Status
 - Status: Current architecture baseline
-- Updated: 2026-07-26
+- Updated: 2026-08-01
 - Source of truth alignment: `README.md`, `src/digest/*`, `compose.yaml`
 
 ## System Overview
 AI Daily Digest is a Python runtime operated through a Telegram bot and the CLI/Makefile - there is no web console and no network API. It ingests configured AI content sources, executes a scoring/summarization pipeline, delivers outputs to Telegram and Obsidian, and persists run data in SQLite for observability.
 
-```text
-                               +--------------------------------+
-                               |     Config + Environment       |
-                               | config/sources.yaml            |
-                               | config/profile.yaml            |
-                               | data/*.local.yaml overlays     |
-                               | .env / env vars                |
-                               +---------------+----------------+
-                                               |
-                                               v
-                                     +---------+----------+              +----------------------+
-                                     | CLI + Telegram Bot  | <----------> | SQLite Store         |
-                                     | src/digest/cli.py   |   read/write | runs, items, scores, |
-                                     | src/digest/ops/     |              | selected-items,      |
-                                     | telegram_commands.py|              | feedback, run        |
-                                     | run/schedule/doctor/|              | history data         |
-                                     | bot/bot-health-check|              |                      |
-                                     +---------+----------+              +----------+-----------+
-                                               |                                     ^
-                                               | invokes                              |
-                                               v                                     |
-                                     +---------+----------+                          |
-                                     | Runtime Orchestrator|--------------------------+
-                                     | src/digest/runtime.py
-                                     +---------+----------+
-                                               |
-                 +-----------------------------+-----------------------------+
-                 |                             |                             |
-                 v                             v                             v
-      +----------+-----------+       +---------+----------+       +----------+-----------+
-      | Connectors/Ingestion |       | Pipeline + Quality  |       | Delivery               |
-      | rss/youtube/x/github |       | normalize/dedupe    |       | telegram + obsidian    |
-      | src/digest/connectors|       | score/select/summarize      | src/digest/delivery    |
-      +----------------------+       | repair/fallback      |       +------------------------+
-                                     | src/digest/pipeline  |
-                                     | src/digest/scorers   |
-                                     | src/digest/summarizers|
-                                     +----------------------+
+```mermaid
+flowchart TB
+    subgraph OPS["Operate"]
+        BOT["Telegram bot<br/>digest bot — admin ids only"]
+        CLI["CLI / Makefile<br/>make live · doctor · setup"]
+        SCHED["Scheduler loop<br/>make schedule / Docker service"]
+    end
+
+    subgraph CFG["Config"]
+        BASE["Tracked base<br/>config/sources.yaml<br/>config/profile.yaml"]
+        OVR["Local overlays, delta-only<br/>data/*.local.yaml"]
+        BASE -->|deep-merge, overlay wins| EFF["Effective config"]
+        OVR --> EFF
+    end
+
+    BOT -->|"/source · /schedule edits"| OVR
+    BOT -->|"/digest run"| RT
+    CLI --> RT
+    SCHED -->|once per slot, catch-up| RT
+
+    RT["Runtime orchestrator<br/>src/digest/runtime.py"]
+    EFF --> RT
+
+    subgraph PIPE["Pipeline run"]
+        direction TB
+        ING["Ingest<br/>RSS · YouTube · X · GitHub"]
+        NORM["Normalize + clean"]
+        DEDUP["Dedupe"]
+        SCORE["Score<br/>profile heuristics + LLM agent"]
+        RANK["Rank adjustments<br/>quality-learning · feedback bias<br/>depth · source preference"]
+        SEL["Select<br/>Must-read · Skim · Videos"]
+        SUM["Summarize<br/>LLM, extractive fallback"]
+        ING --> NORM --> DEDUP --> SCORE --> RANK --> SEL --> SUM
+    end
+
+    RT --> ING
+
+    subgraph OUT["Deliver"]
+        TG["Telegram digest<br/>chunks + per-item thumbs"]
+        OBS["Obsidian note<br/>obsidian-vault/"]
+    end
+
+    SUM --> TG
+    SUM --> OBS
+
+    subgraph STORE["Persist"]
+        DB[("SQLite digest-live.db<br/>runs · items · scores · feedback")]
+        ART["Run artifacts<br/>.runtime/run-artifacts/run_id/<br/>exact delivered payloads"]
+    end
+
+    RT -->|run metadata, errors| DB
+    TG --> ART
+    OBS --> ART
+
+    TG -.->|thumbs tap writes feedback row| DB
+    BOT -.->|"/feedback mute · trust"| DB
+    DB -.->|ranking bias, next run| RANK
 ```
+
+Dashed lines are the learning loop: item thumbs taps and `/feedback` commands write feedback rows to SQLite, which feed ranking bias in the next run's rank-adjustment stage.
 
 ## Runtime Entry Points
 - `digest run`: manual execution, full pipeline.
