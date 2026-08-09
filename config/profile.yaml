@@ -49,8 +49,6 @@ x_cost_per_post_usd: 0.005
 x_max_spend_per_run_usd: 0.05
 run_policy:
   default_mode: fresh_only
-  allow_run_override: true
-  seen_reset_guard: confirm
 schedule:
   enabled: false
   cadence: hourly
