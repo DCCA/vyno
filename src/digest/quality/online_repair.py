@@ -9,6 +9,7 @@ from typing import Any
 from digest.constants import DEFAULT_OPENAI_MODEL, DIGEST_MUST_READ_LIMIT
 from digest.llm import structured_model
 from digest.models import DigestSections, ScoredItem
+from digest.timeutil import parse_dt
 from digest.pipeline.selection import respects_source_cap, select_skim_items
 
 FeatureKey = tuple[str, str]
@@ -351,7 +352,7 @@ def decayed_weight(
     half_life_days: int,
     now: datetime | None = None,
 ) -> float:
-    dt = _parse_dt(updated_at)
+    dt = parse_dt(updated_at)
     if dt is None:
         return weight
     ref = now or datetime.now(timezone.utc)
@@ -426,19 +427,6 @@ def _normalize_repaired_ids(raw: object) -> list[str]:
         if item_id:
             out.append(item_id)
     return out
-
-
-def _parse_dt(value: str) -> datetime | None:
-    raw = (value or "").strip()
-    if not raw:
-        return None
-    try:
-        dt = datetime.fromisoformat(raw)
-    except Exception:
-        return None
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
 
 
 def _clamp(value: float, lo: float, hi: float) -> float:

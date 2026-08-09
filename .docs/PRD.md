@@ -44,7 +44,7 @@ AI Daily Digest exists to reduce AI information overload by ingesting multi-sour
   - exact delivered Telegram and Obsidian artifact archiving for non-preview runs
 - Operations:
   - CLI run/schedule/doctor/bot modes
-  - onboarding preflight, source packs, preview, activate, and lifecycle-based navigation
+  - onboarding preflight (`make doctor` / `/doctor`) and paste-a-link source setup
   - run policy controls, seen-reset controls, and dedicated schedule controls for daily or hourly automation
   - item/source feedback, archived run artifacts, and source-health observability
 - Security and reliability:

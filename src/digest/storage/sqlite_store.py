@@ -9,6 +9,7 @@ from pathlib import Path
 from collections import Counter
 
 from digest.models import Item, Score
+from digest.timeutil import parse_dt
 from digest.quality.online_repair import decayed_weight, source_family
 from digest.storage.schema import SCHEMA_SQL
 
@@ -590,7 +591,7 @@ class SQLiteStore:
             ).fetchone()
         if not row:
             return None
-        cached_at = _parse_dt(str(row[0] or ""))
+        cached_at = parse_dt(str(row[0] or ""))
         if cached_at is None:
             return None
         age_seconds = (datetime.now(tz=timezone.utc) - cached_at).total_seconds()
@@ -867,19 +868,6 @@ class SQLiteStore:
                 "GROUP BY rating ORDER BY rating DESC"
             ).fetchall()
         return [(int(r[0]), int(r[1])) for r in rows]
-
-def _parse_dt(value: str) -> datetime | None:
-    raw = (value or "").strip()
-    if not raw:
-        return None
-    try:
-        dt = datetime.fromisoformat(raw)
-    except Exception:
-        return None
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
-
 
 def _json_list(raw: object) -> list[str]:
     if raw is None:
