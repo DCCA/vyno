@@ -1,6 +1,12 @@
+import argparse
+import json
+import tempfile
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
+from unittest.mock import patch
 
+from digest import cli
 from digest.config import ProfileConfig, ScheduleSettings
 from digest.ops.schedule_slots import evaluate_schedule_tick
 
@@ -81,6 +87,59 @@ class TestEvaluateScheduleTick(unittest.TestCase):
         # 23:30 local (02:30 UTC next day) is inside the wrapped window
         action, _ = evaluate_schedule_tick(profile, _utc(2026, 7, 27, 2, 30), "")
         self.assertEqual(action, "quiet")
+
+
+class _StopLoop(Exception):
+    """Breaks the scheduler's infinite loop after one tick."""
+
+
+class TestScheduleStateFile(unittest.TestCase):
+    def test_trigger_writes_only_the_keys_the_scheduler_owns(self):
+        # Keys left behind by the retired web console. The scheduler used to
+        # copy them forward on every trigger, so the file kept advertising a
+        # July next_run_at and a frozen copy of profile.schedule.
+        stale = {
+            "enabled": True,
+            "cadence": "daily",
+            "timezone": "America/Sao_Paulo",
+            "scheduler_status": "running",
+            "next_run_at": "2026-07-27T12:00:00+00:00",
+            "last_error": "",
+            "quiet_hours_active": False,
+            "last_triggered_slot": "2026-08-08T12:00:00+00:00",
+            "last_triggered_at": "2026-08-08T12:00:05+00:00",
+        }
+        slot = "2026-08-09T12:00:00+00:00"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "schedule-state.json"
+            state_path.write_text(json.dumps(stale), encoding="utf-8")
+            args = argparse.Namespace(
+                profile="config/profile.yaml",
+                profile_overlay="data/profile.local.yaml",
+                sources="config/sources.yaml",
+                sources_overlay="data/sources.local.yaml",
+                db=str(Path(tmp) / "digest.db"),
+            )
+
+            with (
+                patch.object(cli, "SCHEDULE_STATE_PATH", str(state_path)),
+                patch.object(cli, "load_effective_profile", return_value=_profile()),
+                patch.object(
+                    cli, "evaluate_schedule_tick", return_value=("run", slot)
+                ),
+                patch.object(cli, "_execute_run", return_value=0),
+                patch.object(cli.time, "sleep", side_effect=_StopLoop),
+            ):
+                with self.assertRaises(_StopLoop):
+                    cli._cmd_schedule(args)
+
+            written = json.loads(state_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            set(written), {"last_triggered_slot", "last_triggered_at"}
+        )
+        self.assertEqual(written["last_triggered_slot"], slot)
 
 
 if __name__ == "__main__":
