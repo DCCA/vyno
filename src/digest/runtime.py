@@ -56,6 +56,7 @@ from digest.quality.online_repair import (
 )
 from digest.ops.source_registry import source_key_for
 from digest.runtime_support import RunProgressEmitter, source_link_recorder
+from digest.llm import is_terminal_error
 from digest.storage.sqlite_store import SQLiteStore
 from digest.logging_utils import get_run_logger, log_event
 from digest.summarizers.extractive import ExtractiveSummarizer
@@ -656,6 +657,16 @@ def run_digest(
                     error=str(err),
                     fallback_reason=reason,
                 )
+                if is_terminal_error(err):
+                    agent_scorer = None
+                    log_event(
+                        run_logger,
+                        "error",
+                        "score_agent_disabled",
+                        "Agent scoring disabled for this run after a terminal error",
+                        error=str(err),
+                        fallback_reason=reason,
+                    )
 
         fallback_scored_count += 1
         scores.append(rules_score)
@@ -1164,6 +1175,15 @@ def run_digest(
                     item_id=scored.item.id,
                     error=err,
                 )
+                if is_terminal_error(err):
+                    llm_summarizer = None
+                    log_event(
+                        run_logger,
+                        "error",
+                        "summarize_disabled",
+                        "LLM summaries disabled for this run after a terminal error",
+                        error=err,
+                    )
         else:
             summary = extractive_summarizer.summarize(scored.item)
             extractive_summary_count += 1
@@ -1805,12 +1825,16 @@ def _score_with_retries(
             Exception
         ) as exc:  # pragma: no cover - behavior validated through runtime tests
             last_exc = exc
+            if is_terminal_error(exc):
+                break
             continue
     return None, last_exc
 
 
 def _classify_fallback_reason(error_text: str) -> str:
     text = (error_text or "").lower()
+    if is_terminal_error(text):
+        return "quota_exhausted"
     if "timeout" in text or "timed out" in text:
         return "timeout"
     if "429" in text or "rate" in text:

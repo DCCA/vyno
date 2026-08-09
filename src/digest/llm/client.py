@@ -15,6 +15,24 @@ from typing import Any
 
 DEFAULT_TIMEOUT = 30
 
+# Failures that a retry cannot fix: the account is out of credit or the key is
+# rejected. OpenAI returns credit exhaustion as HTTP 429, so matching on the
+# status alone reads it as a rate limit and burns the whole retry budget on a
+# call that can never succeed.
+_TERMINAL_ERROR_MARKERS = (
+    "insufficient_quota",
+    "credit_balance_exhausted",
+    "billing_hard_limit_reached",
+    "invalid_api_key",
+    "account_deactivated",
+)
+
+
+def is_terminal_error(error: object) -> bool:
+    """True when an LLM error will keep failing for the rest of this run."""
+    text = str(error or "").lower()
+    return any(marker in text for marker in _TERMINAL_ERROR_MARKERS)
+
 
 def structured_model(
     *,
