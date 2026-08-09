@@ -117,8 +117,6 @@ Notes:
 
 Notable fields:
 - `run_policy.default_mode`: `fresh_only`, `balanced`, `replay_recent`, or `backfill`
-- `run_policy.allow_run_override`
-- `run_policy.seen_reset_guard`: `confirm` or `disabled`
 - `content_depth_preference`: `practical`, `balanced`, or `deep_technical`
 - `trusted_sources`: soft preferred-source prior, not a raw quality boost
 - `x_cost_per_post_usd`

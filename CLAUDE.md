@@ -73,7 +73,7 @@ Pipeline flow: **Ingest → Normalize → Dedupe → Score → Select → Delive
 | `scorers/` | LLM agent scoring (`agent.py`, via `llm/client.py`) |
 | `summarizers/` | `responses_api.py` (LLM, via `llm/client.py`) + `extractive.py` (deterministic fallback) |
 | `delivery/` | `telegram.py`, `obsidian.py` |
-| `storage/` | `sqlite_store.py` — run history, seen-state, feedback, timeline |
+| `storage/` | `sqlite_store.py` — run history, seen-state, feedback, run artifacts |
 | `quality/` | Online quality learning and repair (`online_repair.py`) |
 | `ops/` | Onboarding, profile/source registries, Telegram commands, run locks, paste-a-link source detection (`ingest_detect.py`) |
 

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from digest.config import SourceConfig
-from digest.connectors.x_provider import XPostPayload, get_x_provider
+from digest.connectors.x_provider import INBOX_ONLY_REASON, XPostPayload, get_x_provider
 from digest.models import Item
 from digest.storage.sqlite_store import SQLiteStore
 from digest.connectors.link_preview import fetch_link_preview_metadata
@@ -32,6 +32,15 @@ def fetch_x_selector_items_linked(
         return linked_items, errors
 
     provider = get_x_provider(provider_mode)
+    if provider is None:
+        for kind, values, limits in (
+            ("x_author", sources.x_authors, author_limits),
+            ("x_theme", sources.x_themes, theme_limits),
+        ):
+            for value in values:
+                if _selector_limit_for(value, limits=limits, fallback=limit) > 0:
+                    errors.append(f"{kind}:{value}: {INBOX_ONLY_REASON}")
+        return linked_items, errors
 
     for author in sources.x_authors:
         limit_for_author = _selector_limit_for(

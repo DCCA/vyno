@@ -55,7 +55,7 @@ from digest.quality.online_repair import (
     validate_repaired_must_read,
 )
 from digest.ops.source_registry import source_key_for
-from digest.runtime_support import RunProgressEmitter, SourceLinkRecorder
+from digest.runtime_support import RunProgressEmitter, source_link_recorder
 from digest.storage.sqlite_store import SQLiteStore
 from digest.logging_utils import get_run_logger, log_event
 from digest.summarizers.extractive import ExtractiveSummarizer
@@ -126,9 +126,7 @@ def run_digest(
     github_fetched_items = 0
 
     raw_items = []
-    source_link_recorder = SourceLinkRecorder()
-    source_links = source_link_recorder.links
-    record_source_links = source_link_recorder.record
+    source_links, record_source_links = source_link_recorder()
 
     for feed_url in sources.rss_feeds:
         try:

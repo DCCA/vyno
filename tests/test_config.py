@@ -251,15 +251,11 @@ class TestConfig(unittest.TestCase):
                 (
                     "run_policy:\n"
                     "  default_mode: balanced\n"
-                    "  allow_run_override: false\n"
-                    "  seen_reset_guard: disabled\n"
                 ),
                 encoding="utf-8",
             )
             profile = load_profile(path)
             self.assertEqual(profile.run_policy.default_mode, "balanced")
-            self.assertFalse(profile.run_policy.allow_run_override)
-            self.assertEqual(profile.run_policy.seen_reset_guard, "disabled")
 
     def test_profile_loads_hourly_schedule_and_quiet_hours(self):
         with tempfile.TemporaryDirectory() as tmp:

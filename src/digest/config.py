@@ -41,8 +41,6 @@ class OutputSettings:
 @dataclass(slots=True)
 class RunPolicySettings:
     default_mode: str = "fresh_only"
-    allow_run_override: bool = True
-    seen_reset_guard: str = "confirm"
 
 
 @dataclass(slots=True)
@@ -239,16 +237,7 @@ def parse_profile_dict(data: dict) -> ProfileConfig:
         raise ValueError(
             "run_policy.default_mode must be one of: fresh_only, balanced, replay_recent, backfill"
         )
-    seen_reset_guard = (
-        str(policy_raw.get("seen_reset_guard", "confirm")).strip().lower()
-    )
-    if seen_reset_guard not in {"confirm", "disabled"}:
-        raise ValueError("run_policy.seen_reset_guard must be 'confirm' or 'disabled'")
-    run_policy = RunPolicySettings(
-        default_mode=default_mode,
-        allow_run_override=bool(policy_raw.get("allow_run_override", True)),
-        seen_reset_guard=seen_reset_guard,
-    )
+    run_policy = RunPolicySettings(default_mode=default_mode)
     schedule_raw = data.get("schedule", {})
     if schedule_raw is None:
         schedule_raw = {}

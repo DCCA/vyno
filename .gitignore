@@ -47,3 +47,6 @@ skills-lock.json
 .dmux/
 .dmux-hooks/
 .vscode
+
+# Claude Code worktrees (embedded repos)
+.claude/worktrees/

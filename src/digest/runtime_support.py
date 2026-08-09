@@ -40,20 +40,23 @@ class RunProgressEmitter:
             return
 
 
-class SourceLinkRecorder:
-    def __init__(self) -> None:
-        self.links: list[dict[str, str]] = []
+def source_link_recorder() -> tuple[
+    list[dict[str, str]],
+    Callable[[str, str, list[Item]], None],
+]:
+    """Return an append-only link list plus the recorder that fills it."""
+    links: list[dict[str, str]] = []
 
-    def record(self, source_type: str, source_value: str, items: list[Item]) -> None:
-        if not items:
-            return
+    def record(source_type: str, source_value: str, items: list[Item]) -> None:
         source_key = source_key_for(source_type, source_value)
-        for item in items:
-            self.links.append(
-                {
-                    "source_key": source_key,
-                    "source_type": source_type,
-                    "source_value": source_value,
-                    "item_id": item.id,
-                }
-            )
+        links.extend(
+            {
+                "source_key": source_key,
+                "source_type": source_type,
+                "source_value": source_value,
+                "item_id": item.id,
+            }
+            for item in items
+        )
+
+    return links, record
