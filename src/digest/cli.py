@@ -112,10 +112,13 @@ def _cmd_schedule(args: argparse.Namespace) -> int:
         if action == "run":
             # ponytail: marker precedes the run - a crash mid-run skips the
             # slot instead of double-delivering the digest on restart.
+            # Write only what the scheduler owns. Spreading `state` here used
+            # to carry the retired console's keys forward forever, so the file
+            # kept serving a stale next_run_at and a frozen copy of
+            # profile.schedule, which is the real source of truth.
             _write_json_state(
                 SCHEDULE_STATE_PATH,
                 {
-                    **state,
                     "last_triggered_slot": slot,
                     "last_triggered_at": now.isoformat(),
                 },
