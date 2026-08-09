@@ -19,52 +19,7 @@ class XPostPayload:
     outbound_urls: list[str]
 
 
-class XProvider:
-    def fetch_author_posts(
-        self,
-        *,
-        author: str,
-        cursor: str | None,
-        limit: int,
-    ) -> tuple[list[XPostPayload], str | None]:
-        raise NotImplementedError
-
-    def fetch_theme_posts(
-        self,
-        *,
-        query: str,
-        cursor: str | None,
-        limit: int,
-    ) -> tuple[list[XPostPayload], str | None]:
-        raise NotImplementedError
-
-
-class InboxOnlyXProvider(XProvider):
-    def _unsupported(self) -> Exception:
-        return RuntimeError(
-            "DIGEST_X_PROVIDER=inbox_only does not support x_author/x_theme selectors"
-        )
-
-    def fetch_author_posts(
-        self,
-        *,
-        author: str,
-        cursor: str | None,
-        limit: int,
-    ) -> tuple[list[XPostPayload], str | None]:
-        raise self._unsupported()
-
-    def fetch_theme_posts(
-        self,
-        *,
-        query: str,
-        cursor: str | None,
-        limit: int,
-    ) -> tuple[list[XPostPayload], str | None]:
-        raise self._unsupported()
-
-
-class XApiProvider(XProvider):
+class XApiProvider:
     def __init__(self, *, bearer_token: str, timeout: int = 20) -> None:
         self._bearer_token = (bearer_token or "").strip()
         if not self._bearer_token:
@@ -164,10 +119,16 @@ class XApiProvider(XProvider):
         return data
 
 
-def get_x_provider(mode: str = "") -> XProvider:
+INBOX_ONLY_REASON = (
+    "DIGEST_X_PROVIDER=inbox_only does not support x_author/x_theme selectors"
+)
+
+
+def get_x_provider(mode: str = "") -> XApiProvider | None:
+    """Return the configured provider, or None in inbox-only mode."""
     selected = (mode or os.getenv("DIGEST_X_PROVIDER", "inbox_only")).strip().lower()
     if selected in {"", "inbox_only"}:
-        return InboxOnlyXProvider()
+        return None
     if selected == "x_api":
         return XApiProvider(
             bearer_token=os.getenv("X_BEARER_TOKEN", ""),
