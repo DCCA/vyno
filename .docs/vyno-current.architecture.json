@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Vyno — AI Daily Digest runtime",
+    "subtitle": "Local-first Python pipeline: configured sources to a curated Telegram digest, with SQLite observability and a feedback loop",
+    "output": "vyno-current.architecture.html",
+    "quality_profile": "showcase",
+    "visual_preset": "signal-flow",
+    "repository": {
+      "url": "https://github.com/DCCA/vyno",
+      "revision": "f61e3cb56f37e9927ab09ec52db26fae85c1aa92"
+    },
+    "views": [
+      {
+        "id": "run-path",
+        "label": "Live run path",
+        "focus": ["control", "runtime", "connectors", "pipeline", "delivery", "telegram"],
+        "note": "Follow one digest run from an operator command to the delivered Telegram digest."
+      },
+      {
+        "id": "learning-loop",
+        "label": "Feedback loop",
+        "focus": ["telegram", "delivery", "store", "runtime", "pipeline"],
+        "note": "Thumbs taps and /feedback become ranking bias applied on the next run."
+      },
+      {
+        "id": "config-safety",
+        "label": "Config overlay safety",
+        "focus": ["operator", "config", "control", "runtime"],
+        "note": "Tracked base config is never mutated; bot edits land as delta-only local overlays."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "operator",
+      "type": "external",
+      "label": "Operator",
+      "sublabel": "Telegram admin · CLI · Makefile",
+      "pos": [40, 400],
+      "size": [160, 64]
+    },
+    {
+      "id": "config",
+      "type": "security",
+      "label": "Effective config",
+      "sublabel": "tracked base + delta-only local overlay",
+      "tag": "config/ + data/*.local.yaml",
+      "sources": [
+        { "path": "src/digest/ops/source_registry.py", "line": 46, "label": "load_effective_sources" }
+      ],
+      "pos": [40, 200],
+      "size": [180, 68]
+    },
+    {
+      "id": "extsources",
+      "type": "external",
+      "label": "Upstream sources",
+      "sublabel": "RSS · YouTube · X · GitHub",
+      "pos": [580, 40],
+      "size": [200, 64]
+    },
+    {
+      "id": "llm",
+      "type": "cloud",
+      "label": "OpenAI via LangChain",
+      "sublabel": "agent scoring + summaries",
+      "tag": "fail-open",
+      "sources": [
+        { "path": "src/digest/llm/client.py", "label": "structured-output client" }
+      ],
+      "pos": [905, 40],
+      "size": [190, 64]
+    },
+    {
+      "id": "control",
+      "type": "backend",
+      "label": "Control surfaces",
+      "sublabel": "run · schedule · bot · doctor",
+      "tag": "admin ids only",
+      "sources": [
+        { "path": "src/digest/cli.py", "line": 442, "label": "main" },
+        { "path": "src/digest/ops/telegram_commands.py", "line": 91, "label": "handle_update" }
+      ],
+      "pos": [300, 400],
+      "size": [180, 68]
+    },
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "Runtime orchestrator",
+      "sublabel": "window · run lock · stage progress",
+      "sources": [
+        { "path": "src/digest/runtime.py", "line": 69, "label": "run_digest" }
+      ],
+      "pos": [600, 400],
+      "size": [180, 68]
+    },
+    {
+      "id": "connectors",
+      "type": "cloud",
+      "label": "Source connectors",
+      "sublabel": "per-source fetch and parse",
+      "sources": [
+        { "path": "src/digest/connectors/rss.py", "label": "connectors/" }
+      ],
+      "pos": [600, 200],
+      "size": [180, 68]
+    },
+    {
+      "id": "pipeline",
+      "type": "backend",
+      "label": "Signal pipeline",
+      "sublabel": "normalize · dedupe · score · rank · select",
+      "sources": [
+        { "path": "src/digest/pipeline/selection.py", "line": 27, "label": "select_digest_sections" }
+      ],
+      "pos": [900, 400],
+      "size": [190, 68]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "SQLite + run artifacts",
+      "sublabel": "runs · scores · seen state · feedback",
+      "tag": "digest-live.db",
+      "sources": [
+        { "path": "src/digest/storage/sqlite_store.py", "line": 25, "label": "SQLiteStore" }
+      ],
+      "pos": [900, 600],
+      "size": [190, 68]
+    },
+    {
+      "id": "delivery",
+      "type": "backend",
+      "label": "Delivery",
+      "sublabel": "chunked render + archive",
+      "sources": [
+        { "path": "src/digest/delivery/telegram.py", "line": 46, "label": "render_telegram_messages" }
+      ],
+      "pos": [1210, 400],
+      "size": [180, 68]
+    },
+    {
+      "id": "telegram",
+      "type": "external",
+      "label": "Telegram",
+      "sublabel": "digest + thumbs buttons",
+      "pos": [1470, 300],
+      "size": [160, 64]
+    },
+    {
+      "id": "obsidian",
+      "type": "external",
+      "label": "Obsidian vault",
+      "sublabel": "Markdown note per run",
+      "pos": [1470, 480],
+      "size": [160, 64]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Local-first runtime — no network control plane",
+      "wraps": ["control", "runtime", "connectors", "pipeline", "delivery", "store"],
+      "pad": 34
+    }
+  ],
+  "connections": [
+    { "id": "operator-control", "from": "operator", "to": "control", "label": "commands", "variant": "emphasis" },
+    { "id": "config-control", "from": "config", "to": "control", "label": "config", "variant": "security" },
+    { "id": "control-runtime", "from": "control", "to": "runtime", "label": "run", "variant": "emphasis" },
+    { "id": "runtime-connectors", "from": "runtime", "to": "connectors", "label": "fetch window", "fromSide": "top", "toSide": "bottom" },
+    { "id": "connectors-extsources", "from": "connectors", "to": "extsources", "label": "HTTP fetch", "fromSide": "top", "toSide": "bottom" },
+    { "id": "runtime-pipeline", "from": "runtime", "to": "pipeline", "label": "items", "variant": "emphasis" },
+    { "id": "pipeline-llm", "from": "pipeline", "to": "llm", "label": "score · summarize", "variant": "dashed", "fromSide": "top", "toSide": "bottom" },
+    { "id": "pipeline-delivery", "from": "pipeline", "to": "delivery", "label": "sections", "variant": "emphasis" },
+    { "id": "pipeline-store", "from": "pipeline", "to": "store", "label": "runs · scores", "fromSide": "bottom", "toSide": "top", "labelDy": 24 },
+    { "id": "delivery-telegram", "from": "delivery", "to": "telegram", "label": "digest", "fromSide": "right", "toSide": "left" },
+    { "id": "delivery-obsidian", "from": "delivery", "to": "obsidian", "label": "note", "fromSide": "right", "toSide": "left" },
+    { "id": "delivery-store", "from": "delivery", "to": "store", "label": "archived payloads", "variant": "dashed", "fromSide": "bottom", "toSide": "right" },
+    { "id": "store-runtime", "from": "store", "to": "runtime", "label": "ranking bias", "variant": "dashed", "fromSide": "left", "toSide": "bottom" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Run path",
+      "items": [
+        "One orchestrator drives every entry point: run, schedule, bot, doctor",
+        "Connectors fetch a time window; the pipeline normalizes, dedupes, scores, ranks, and selects",
+        "Selection yields Must-read, Skim, and Videos; LLM paths fall back to deterministic ones"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "State and observability",
+      "items": [
+        "SQLite holds runs, raw and adjusted scores, seen state, and feedback rows",
+        "Delivered Telegram chunks and the Obsidian note are archived per run id",
+        "Thumbs taps and /feedback become ranking bias on the next run"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Boundaries",
+      "items": [
+        "No HTTP control plane; Telegram is the only remote surface, restricted to admin ids",
+        "Tracked config is never mutated - bot edits write delta-only local overlays",
+        "A run lock prevents overlapping runs across CLI, bot, and scheduler"
+      ]
+    }
+  ]
+}
