@@ -46,7 +46,7 @@ AI Daily Digest exists to reduce AI information overload by ingesting multi-sour
   - CLI run/schedule/doctor/bot modes
   - onboarding preflight, source packs, preview, activate, and lifecycle-based navigation
   - run policy controls, seen-reset controls, and dedicated schedule controls for daily or hourly automation
-  - timeline digest review, item/source feedback, config history, rollback, and source-health observability
+  - item/source feedback, archived run artifacts, and source-health observability
 - Security and reliability:
   - API token auth modes (`required|optional|off`)
   - secret redaction in API payloads

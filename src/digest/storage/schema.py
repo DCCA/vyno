@@ -63,18 +63,6 @@ SCHEMA_SQL = """
                     PRIMARY KEY (source_key, item_id)
                 );
 
-                CREATE TABLE IF NOT EXISTS link_previews (
-                    url TEXT PRIMARY KEY,
-                    resolved_url TEXT,
-                    host TEXT,
-                    title TEXT,
-                    description TEXT,
-                    image_url TEXT,
-                    status TEXT,
-                    error TEXT,
-                    fetched_at TEXT NOT NULL
-                );
-
                 CREATE TABLE IF NOT EXISTS feedback (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     run_id TEXT,
@@ -112,15 +100,6 @@ SCHEMA_SQL = """
                     chunk_count INTEGER NOT NULL,
                     created_at TEXT NOT NULL,
                     UNIQUE (run_id, channel, artifact_type)
-                );
-
-                CREATE TABLE IF NOT EXISTS admin_audit (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    actor TEXT,
-                    action TEXT,
-                    target TEXT,
-                    details TEXT,
-                    created_at TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS score_cache (
@@ -161,36 +140,6 @@ SCHEMA_SQL = """
                     PRIMARY KEY (feature_type, feature_key)
                 );
 
-                CREATE TABLE IF NOT EXISTS run_timeline_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    run_id TEXT NOT NULL,
-                    event_index INTEGER NOT NULL,
-                    ts_utc TEXT NOT NULL,
-                    stage TEXT NOT NULL,
-                    severity TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    elapsed_s REAL NOT NULL,
-                    details_json TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS run_timeline_notes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    run_id TEXT NOT NULL,
-                    created_at_utc TEXT NOT NULL,
-                    author TEXT,
-                    note TEXT NOT NULL,
-                    labels_json TEXT NOT NULL,
-                    actions_json TEXT NOT NULL
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_timeline_events_run_idx
-                    ON run_timeline_events(run_id, event_index);
-                CREATE INDEX IF NOT EXISTS idx_timeline_events_run_stage
-                    ON run_timeline_events(run_id, stage);
-                CREATE INDEX IF NOT EXISTS idx_timeline_events_run_severity
-                    ON run_timeline_events(run_id, severity);
-                CREATE INDEX IF NOT EXISTS idx_timeline_notes_run_created
-                    ON run_timeline_notes(run_id, created_at_utc DESC);
                 CREATE INDEX IF NOT EXISTS idx_x_selector_cursors_updated_at
                     ON x_selector_cursors(updated_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_source_item_links_source_key
