@@ -7,7 +7,7 @@ WORKDIR /app
 
 COPY pyproject.toml /app/pyproject.toml
 COPY src /app/src
-RUN pip install --no-cache-dir ".[runtime,llm]"
+RUN pip install --no-cache-dir ".[llm]"
 
 COPY bin /app/bin
 COPY config /app/config

@@ -120,7 +120,7 @@ else
   fi
   info "Installing Python packages (pip)..."
   . .venv/bin/activate
-  pip install -e '.[runtime,llm]' --quiet
+  pip install -e '.[llm]' --quiet
 fi
 
 
