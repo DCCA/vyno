@@ -43,7 +43,6 @@ class TestOnboarding(unittest.TestCase):
         base_profile = Path(tmp) / "profile.yaml"
         overlay_profile = Path(tmp) / "profile.local.yaml"
         db_path = Path(tmp) / "digest.db"
-        state_path = Path(tmp) / "onboarding-state.json"
 
         base_sources.write_text(
             yaml.safe_dump(sources, sort_keys=False), encoding="utf-8"
@@ -61,7 +60,6 @@ class TestOnboarding(unittest.TestCase):
             profile_overlay_path=str(overlay_profile),
             db_path=str(db_path),
             run_lock_path=str(Path(tmp) / "run.lock"),
-            onboarding_state_path=str(state_path),
         )
 
     def test_preflight_fails_when_openai_key_missing_for_enabled_profile(self):

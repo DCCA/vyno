@@ -21,19 +21,6 @@ class OnboardingSettings:
     profile_overlay_path: str
     db_path: str
     run_lock_path: str = ".runtime/run.lock"
-    onboarding_state_path: str = ".runtime/onboarding-state.json"
-
-
-ONBOARDING_STEPS: list[tuple[str, str]] = [
-    ("preflight", "Run preflight checks"),
-    ("outputs", "Connect outputs (Telegram or Obsidian)"),
-    ("sources", "Choose starter sources"),
-    ("profile", "Tune profile basics"),
-    ("schedule", "Enable scheduled automation"),
-    ("preview", "Run preview digest"),
-    ("activate", "Activate live run"),
-    ("health", "Confirm run health"),
-]
 
 
 def run_preflight(
@@ -122,11 +109,6 @@ def run_preflight(
             "run_lock_writable",
             "Run lock path writable",
             settings.run_lock_path,
-        ),
-        (
-            "onboarding_state_writable",
-            "Onboarding state path writable",
-            settings.onboarding_state_path,
         ),
     ]:
         ok, detail = _check_write_target(path_value)
